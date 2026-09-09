@@ -1,0 +1,8 @@
+# Godot-generated files
+.godot/
+.import/
+
+# Export credentials and temporary files
+export.cfg
+export_credentials.cfg
+*.tmp
