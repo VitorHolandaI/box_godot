@@ -10,6 +10,7 @@ const CLOSE_HOLD_TIME := 0.75
 @onready var detection_area: Area3D = $DetectionArea
 
 var open_requested := false
+var manual_override := false
 var close_elapsed := 0.0
 var panel_height := CLOSED_PANEL_Y
 
@@ -27,9 +28,26 @@ func _physics_process(delta: float) -> void:
 	update_for_actor_presence(_has_nearby_living_actor(), delta)
 
 
+## Toggles the safehouse entrance between open and closed.
+## Usage: door.interact()
+func interact() -> void:
+	manual_override = true
+	open_requested = not open_requested
+	close_elapsed = 0.0
+
+
+## Safehouse doors cannot be damaged by zombies or weapons.
+## Usage: door.take_damage(10, Vector3.FORWARD)
+func take_damage(_amount: int, _attack_direction: Vector3 = Vector3.ZERO) -> void:
+	return
+
+
 ## Updates the authoritative door target from current entrance occupancy.
 ## Usage: door.update_for_actor_presence(has_living_actor, delta)
 func update_for_actor_presence(has_actor: bool, delta: float) -> void:
+	if manual_override:
+		_animate_panel(delta)
+		return
 	if has_actor:
 		open_requested = true
 		close_elapsed = 0.0
@@ -45,6 +63,7 @@ func update_for_actor_presence(has_actor: bool, delta: float) -> void:
 ## Usage: door.apply_network_open_state(snapshot_door_open)
 func apply_network_open_state(should_open: bool) -> void:
 	open_requested = should_open
+	manual_override = false
 	close_elapsed = 0.0
 	_update_panel_collision()
 
@@ -62,8 +81,6 @@ func _has_nearby_living_actor() -> bool:
 		if body.is_in_group("player"):
 			if not bool(body.get("is_eliminated")) and int(body.get("health")) > 0:
 				return true
-		elif body.is_in_group("zombies") and not bool(body.get("is_dead")):
-			return true
 	return false
 
 
@@ -76,4 +93,4 @@ func _animate_panel(delta: float) -> void:
 
 func _update_panel_collision() -> void:
 	var fully_closed := not open_requested and is_equal_approx(panel_height, CLOSED_PANEL_Y)
-	panel.collision_layer = 1 if fully_closed and not NetworkSession.is_client() else 0
+	panel.collision_layer = 1 if fully_closed else 0
