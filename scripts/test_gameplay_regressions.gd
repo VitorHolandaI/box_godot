@@ -9,6 +9,9 @@ const ZOMBIE_SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator
 const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const PERFORMANCE_HUD_SCRIPT := preload("res://scripts/performance_hud.gd")
+const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/generators/city_generator.gd")
+const PROCEDURAL_BUILDING_GENERATOR: GDScript = preload("res://scripts/procedural/generators/building_generator.gd")
+const PROCEDURAL_BUILDING_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/building_assembler.gd")
 
 
 ## Runs focused regressions for bot tactics, spawning, HUDs and horde physics.
@@ -19,6 +22,7 @@ func run(test_root: Node) -> void:
 	_test_careful_melee_approach(test_root)
 	_test_public_server_port(test_root)
 	_test_server_port_validation(test_root)
+	_test_procedural_city_seed(test_root)
 	_test_latency_hud(test_root)
 	_test_hud_alive_zombie_count(test_root)
 	_test_enterable_building_spawn_marker(test_root)
@@ -51,6 +55,40 @@ func _test_server_port_validation(test_root: Node) -> void:
 		_fail(test_root, "Parser de porta deve aceitar 32000 e rejeitar valores fora do formato/faixa.")
 		return
 	print("PASS: Validacao de porta UDP configuravel validada.")
+
+
+func _test_procedural_city_seed(test_root: Node) -> void:
+	print("Testando cidade procedural deterministica e conectividade dos interiores...")
+	var first_city = PROCEDURAL_CITY_GENERATOR.generate_world(18273)
+	var same_city = PROCEDURAL_CITY_GENERATOR.generate_world(18273)
+	var other_city = PROCEDURAL_CITY_GENERATOR.generate_world(67890)
+	if first_city.signature() != same_city.signature():
+		_fail(test_root, "A mesma seed deveria produzir o mesmo blueprint de cidade.")
+		return
+	if first_city.signature() == other_city.signature():
+		_fail(test_root, "Seeds diferentes deveriam produzir blueprints diferentes.")
+		return
+	if first_city.roads.size() != 8 or first_city.blocks.size() != 9 or first_city.building_count() != 36:
+		_fail(test_root, "A cidade procedural deveria conter 8 ruas, 9 quarteiroes e 36 lotes.")
+		return
+	for block in first_city.blocks:
+		for lot in block.lots:
+			for floor_blueprint in lot.building.floor_blueprints:
+				for placement in floor_blueprint.units:
+					var unit = placement["blueprint"]
+					if not unit.is_graph_connected():
+						_fail(test_root, "Unidade %s possui comodos desconectados." % unit.archetype)
+						return
+	var visual_root := Node3D.new()
+	var apartment = PROCEDURAL_BUILDING_GENERATOR.generate(18273, "apartment")
+	var apartment_node: StaticBody3D = PROCEDURAL_BUILDING_ASSEMBLER.assemble(apartment)
+	visual_root.add_child(apartment_node)
+	if apartment_node.get_child_count() < 20:
+		_fail(test_root, "Assembler deveria criar geometria e colisoes para um predio.")
+		visual_root.free()
+		return
+	visual_root.free()
+	print("PASS: Cidade procedural deterministica e interiores conectados validados.")
 
 
 func _test_latency_hud(test_root: Node) -> void:

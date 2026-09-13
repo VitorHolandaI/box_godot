@@ -3,6 +3,8 @@ extends Node3D
 const SOLID_VENUE_SCENE := preload("res://scenes/solid_venue.tscn")
 const BuildingAssembler: GDScript = preload("res://scripts/building_assembler_3d.gd")
 const SafehouseBuilder: GDScript = preload("res://scripts/safehouse_builder.gd")
+const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/generators/city_generator.gd")
+const PROCEDURAL_CITY_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/city_assembler.gd")
 const TREE_SCENES := [
 	preload("res://scenes/tree.tscn"),
 	preload("res://scenes/tree_pine.tscn"),
@@ -51,6 +53,11 @@ var sidewalk_material: StandardMaterial3D
 
 
 func _ready() -> void:
+	if "--procedural-city" in OS.get_cmdline_user_args():
+		var generated_seed := _get_procedural_seed()
+		var city_blueprint = PROCEDURAL_CITY_GENERATOR.generate_world(generated_seed)
+		PROCEDURAL_CITY_ASSEMBLER.assemble(city_blueprint, self)
+		return
 	_create_materials()
 	_create_roads()
 	_create_outer_buildings()
@@ -75,6 +82,17 @@ func _create_materials() -> void:
 	sidewalk_material = StandardMaterial3D.new()
 	sidewalk_material.albedo_color = Color(0.68, 0.68, 0.66)
 	sidewalk_material.roughness = 0.88
+
+
+func _get_procedural_seed() -> int:
+	for argument in OS.get_cmdline_user_args():
+		if not argument.begins_with("--world-seed="):
+			continue
+		var raw_seed := argument.trim_prefix("--world-seed=")
+		if raw_seed.is_valid_int():
+			return int(raw_seed)
+		push_error("Seed procedural invalida '%s'; esperado inteiro decimal." % raw_seed)
+	return city_seed
 
 
 func _create_roads() -> void:
