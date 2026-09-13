@@ -179,6 +179,9 @@ func _test_hud_alive_zombie_count(test_root: Node) -> void:
 	test_root.add_child(split_screen)
 	var players: Array[Node] = [player]
 	split_screen.configure(players)
+	if split_screen.viewports.is_empty() or not split_screen.viewports[0].audio_listener_enable_3d:
+		_fail(test_root, "Viewport local deveria habilitar o listener de audio 3D.")
+		return
 	split_screen._process(0.0)
 	var expected_text := "Zumbis: %d" % (alive_before + 2)
 	var hud_text: String = split_screen.hud_labels[0].text

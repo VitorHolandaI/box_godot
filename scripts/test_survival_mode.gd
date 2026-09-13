@@ -6,6 +6,8 @@ const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const CITY_GENERATOR_SCRIPT := preload("res://scripts/procedural/generators/city_generator.gd")
+const BUILDING_GENERATOR_SCRIPT := preload("res://scripts/procedural/generators/building_generator.gd")
+const BUILDING_ASSEMBLER_SCRIPT := preload("res://scripts/procedural/assemblers/building_assembler.gd")
 const DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
 
 
@@ -17,6 +19,7 @@ func run(test_root: Node) -> void:
 	_test_ragdoll_appearance(test_root)
 	_test_nearest_target_and_melee(test_root)
 	_test_survival_city_layout(test_root)
+	_test_house_gable_roof(test_root)
 	_test_building_door_states(test_root)
 
 
@@ -187,6 +190,22 @@ func _test_building_door_states(test_root: Node) -> void:
 		return
 	door.free()
 	print("PASS: Estados e resistencia das portas validados.")
+
+
+func _test_house_gable_roof(test_root: Node) -> void:
+	print("Testando telhado inclinado das casas...")
+	var house_blueprint = BUILDING_GENERATOR_SCRIPT.generate(240912, "house")
+	var house: StaticBody3D = BUILDING_ASSEMBLER_SCRIPT.assemble(house_blueprint)
+	if not house.has_node("RoofLeftSlope") or not house.has_node("RoofRightSlope"):
+		_fail(test_root, "Casa procedural deveria possuir telhado de duas aguas.")
+		house.free()
+		return
+	if is_zero_approx((house.get_node("RoofLeftSlope") as MeshInstance3D).rotation.z):
+		_fail(test_root, "Telhado da casa deveria possuir inclinacao visivel.")
+		house.free()
+		return
+	house.free()
+	print("PASS: Telhado de duas aguas validado.")
 
 
 func _fail(test_root: Node, message: String) -> void:
