@@ -3,14 +3,16 @@ extends RefCounted
 
 const WALL_HEIGHT := 2.6
 const WALL_THICKNESS := 0.12
+const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
 
 
 static func assemble(building) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = building.archetype
-	var wall_material := _material(Color(0.55, 0.38, 0.28))
-	var floor_material := _material(Color(0.27, 0.29, 0.31))
-	var trim_material := _material(Color(0.16, 0.18, 0.20))
+	var facade_color := _facade_color(building.seed)
+	var wall_material := _cutout_material(facade_color)
+	var floor_material := _cutout_material(Color(0.27, 0.29, 0.31))
+	var trim_material := _cutout_material(facade_color.darkened(0.45))
 	for floor_blueprint in building.floor_blueprints:
 		var floor_y: float = float(floor_blueprint.floor_index) * building.floor_height
 		_add_box(body, "Floor_%d" % floor_blueprint.floor_index, Vector3(building.width, 0.12, building.depth), Vector3(building.width * 0.5, floor_y, building.depth * 0.5), floor_material, true)
@@ -19,6 +21,8 @@ static func assemble(building) -> StaticBody3D:
 	if building.floors > 1:
 		_add_stairs(body, building)
 	_add_box(body, "Roof", Vector3(building.width, 0.18, building.depth), Vector3(building.width * 0.5, building.floors * building.floor_height, building.depth * 0.5), trim_material, true)
+	if building.archetype == "Shop_A" or building.archetype == "Grocery_A":
+		_add_commercial_front(body, building)
 	return body
 
 
@@ -84,6 +88,30 @@ static func _add_stairs(body: StaticBody3D, building) -> void:
 	for step in step_count:
 		var height: float = building.floor_height / float(step_count) * float(step + 1)
 		_add_box(body, "Stair_%d" % step, Vector3(2.0, height, 3.0 / step_count), Vector3(building.width * 0.5, height * 0.5, -1.5 + float(step) * 3.0 / step_count), _material(Color(0.35, 0.35, 0.37)), true)
+
+
+static func _add_commercial_front(body: StaticBody3D, building) -> void:
+	var accent := Color(0.26, 0.58, 0.32) if building.archetype == "Grocery_A" else Color(0.84, 0.36, 0.14)
+	_add_box(body, "StoreAwning", Vector3(building.width * 0.72, 0.22, 0.9), Vector3(building.width * 0.5, 2.2, -0.38), _material(accent), false)
+	_add_box(body, "StoreSign", Vector3(building.width * 0.48, 0.55, 0.08), Vector3(building.width * 0.5, 2.52, -0.08), _material(accent.lightened(0.2)), false)
+
+
+static func _facade_color(seed: int) -> Color:
+	var palette: Array[Color] = [
+		Color(0.58, 0.37, 0.26), Color(0.30, 0.43, 0.53),
+		Color(0.60, 0.48, 0.27), Color(0.35, 0.48, 0.31),
+		Color(0.52, 0.34, 0.47), Color(0.46, 0.46, 0.48),
+	]
+	return palette[absi(seed) % palette.size()]
+
+
+static func _cutout_material(color: Color) -> ShaderMaterial:
+	var material := ShaderMaterial.new()
+	material.shader = CUTOUT_SHADER
+	material.set_shader_parameter("base_color", color)
+	material.set_shader_parameter("material_roughness", 0.86)
+	material.set_shader_parameter("cutout_radius", 8.5)
+	return material
 
 
 static func _material(color: Color) -> StandardMaterial3D:
