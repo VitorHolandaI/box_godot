@@ -111,6 +111,21 @@ O menu do jogo oferece `Conectar ao servidor`; informe o IP ou dominio da VPS.
 Cada computador pode solicitar de um a quatro jogadores locais, respeitando o
 limite de quatro avatares na partida inteira.
 
+## Cidade procedural experimental
+
+A branch `feature/procedural-city-mvp` inclui um modo experimental que preserva
+a cidade estavel por padrao. Para abrir a cena atual usando blueprints
+procedurais, execute:
+
+```bash
+./dist/box-godot-linux.x86_64 -- --procedural-city --world-seed=18273
+```
+
+Inicie uma partida local no menu. A mesma seed reconstrui a mesma cidade; troque
+`18273` por outra seed para obter outro parcelamento deterministico. O modo
+experimental ainda usa materiais geometricos simples e nao altera a release
+estavel ate ser promovido para `main`.
+
 Para construir e iniciar o container isolado:
 
 ```bash
