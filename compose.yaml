@@ -1,0 +1,19 @@
+services:
+  game-server:
+    build:
+      context: .
+    image: box-godot-server:local
+    restart: unless-stopped
+    ports:
+      - "7000:7000/udp"
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+      - /home/godot/.local/share/godot:size=64m,uid=10001,gid=10001,mode=0700
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    pids_limit: 128
+    mem_limit: 512m
+    cpus: 1.0
