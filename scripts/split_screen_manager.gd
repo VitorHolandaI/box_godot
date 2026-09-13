@@ -22,11 +22,12 @@ func configure(local_players: Array[Node]) -> void:
 
 
 func _process(_delta: float) -> void:
+	var alive_zombies := get_tree().get_nodes_in_group("zombies").size()
 	for index in players.size():
 		var player := players[index]
 		if not is_instance_valid(player):
 			continue
-		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s" % [
+		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\nZumbis: %d" % [
 			index + 1,
 			player.input_device_name,
 			player.get_lives_text(),
@@ -35,6 +36,7 @@ func _process(_delta: float) -> void:
 			player.get_stamina_text(),
 			player.get_weapon_name(),
 			player.get_ammo_text(),
+			alive_zombies,
 		]
 
 

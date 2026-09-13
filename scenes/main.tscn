@@ -1,8 +1,7 @@
-[gd_scene load_steps=25 format=3]
+[gd_scene load_steps=24 format=3]
 
 [ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
 [ext_resource type="Script" path="res://scripts/split_screen_manager.gd" id="2_split"]
-[ext_resource type="PackedScene" path="res://scenes/zombie.tscn" id="3_zombie"]
 [ext_resource type="PackedScene" path="res://scenes/building.tscn" id="4_building"]
 [ext_resource type="PackedScene" path="res://scenes/car.tscn" id="5_car"]
 [ext_resource type="PackedScene" path="res://scenes/streetlight.tscn" id="6_streetlight"]
@@ -125,18 +124,6 @@ script = ExtResource("7_city_generator")
 [node name="Players" type="Node3D" parent="."]
 
 [node name="Zombies" type="Node3D" parent="."]
-
-[node name="ZombieNorth" parent="Zombies" instance=ExtResource("3_zombie")]
-position = Vector3(-12, 1, -2)
-
-[node name="ZombieWest" parent="Zombies" instance=ExtResource("3_zombie")]
-position = Vector3(-6, 1, 0)
-
-[node name="ZombieEast" parent="Zombies" instance=ExtResource("3_zombie")]
-position = Vector3(6, 1, 0)
-
-[node name="ZombieSouth" parent="Zombies" instance=ExtResource("3_zombie")]
-position = Vector3(0, 1, 14)
 
 [node name="Interface" type="CanvasLayer" parent="."]
 

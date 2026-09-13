@@ -10,6 +10,9 @@ const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
+const GAMEPLAY_REGRESSION_TESTS_SCRIPT := preload("res://scripts/test_gameplay_regressions.gd")
+
+var failure_count := 0
 
 
 func _ready() -> void:
@@ -17,6 +20,9 @@ func _ready() -> void:
 	_test_friendly_fire_knife()
 	_test_friendly_fire_bullet()
 	_test_pistol_fixed_trajectory()
+	GAMEPLAY_REGRESSION_TESTS_SCRIPT.new().run(self)
+	if bool(get_meta("unit_test_failed", false)):
+		failure_count += 1
 	_test_hit_reaction_flinch()
 	_test_zombie_mutilation_variants()
 	_test_ragdoll_mutilation_variants()
@@ -26,8 +32,16 @@ func _ready() -> void:
 	_test_zombie_flock_coordinator()
 	_test_global_zombie_spawn_schedule()
 
+	if failure_count > 0:
+		push_error("UNIT_TEST_FAIL: %d grupo(s) de teste falharam." % failure_count)
+		get_tree().quit(1)
+		return
 	print("UNIT_TEST_PASS: Todos os testes de combate, trajetoria, vidas, safehouse, som, hordas e populacao passaram!")
 	get_tree().quit(0)
+
+
+func _mark_failure() -> void:
+	failure_count += 1
 
 
 func _test_friendly_fire_knife() -> void:
@@ -48,12 +62,12 @@ func _test_friendly_fire_knife() -> void:
 	p1.call("_attack_with_knife")
 	if p2.health >= initial_health:
 		push_error("FALHA: Faca de P1 nao causou dano em P2 (fogo amigo desativado).")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	if p2.hit_reaction_time <= 0.0:
 		push_error("FALHA: P2 nao iniciou hit_reaction_time ao sofrer dano de faca.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	p1.queue_free()
@@ -87,12 +101,12 @@ func _test_friendly_fire_bullet() -> void:
 
 	if p2.health >= 100:
 		push_error("FALHA: Bala de P1 nao atingiu P2 (fogo amigo com projetil desativado).")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	if p2.hit_reaction_time <= 0.0 and p2.velocity.z >= 0.0:
 		push_error("FALHA: Bala nao aplicou forca de knockback ou reacao em P2.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	p1.queue_free()
@@ -113,20 +127,20 @@ func _test_pistol_fixed_trajectory() -> void:
 	var fired_bullet: Variant = player.call("_fire_pistol")
 	if fired_bullet == null or not fired_bullet is Node3D:
 		push_error("FALHA: Disparo deve retornar o projetil criado para validar sua trajetoria.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 	var bullet := fired_bullet as Node3D
 	var launch_direction: Vector3 = bullet.get("direction")
 	if launch_direction.distance_to(Vector3.RIGHT) > 0.001:
 		push_error("FALHA: Bala saiu em %s, mas deveria preservar a mira %s." % [launch_direction, Vector3.RIGHT])
-		get_tree().quit(1)
+		_mark_failure()
 		return
 	player.rotation.y = PI
 	off_axis_target.position = Vector3(-8.0, 1.0, 9.0)
 	bullet.call("_physics_process", 0.01)
 	if (bullet.get("direction") as Vector3).distance_to(launch_direction) > 0.001:
 		push_error("FALHA: Bala alterou a direcao depois do disparo.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 	bullet.queue_free()
 	player.queue_free()
@@ -149,12 +163,12 @@ func _test_hit_reaction_flinch() -> void:
 
 	if model.rotation.x >= -0.01:
 		push_error("FALHA: Modelo do jogador nao inclinou para tras no flinch.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	if head.rotation.x >= -0.01:
 		push_error("FALHA: Cabeca do jogador nao chicoteou para tras no impacto.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
@@ -168,7 +182,7 @@ func _test_hit_reaction_flinch() -> void:
 
 	if z_model.rotation.x >= -0.01:
 		push_error("FALHA: Modelo do zumbi nao reagiu ao tiro no flinch.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	player.queue_free()
@@ -201,36 +215,36 @@ func _test_zombie_mutilation_variants() -> void:
 				var mesh := zombie.get_node("Model/LeftArm/Mesh") as MeshInstance3D
 				if mesh.visible:
 					push_error("FALHA: Variante ONE_ARM deve ocultar braco esquerdo.")
-					get_tree().quit(1)
+					_mark_failure()
 					return
 			ZombieMutator.Type.HALF_ARM:
 				var mesh := zombie.get_node("Model/LeftArm/Mesh") as MeshInstance3D
 				if mesh.scale.y > 0.6:
 					push_error("FALHA: Variante HALF_ARM deve ter braco esquerdo amputado/encurtado.")
-					get_tree().quit(1)
+					_mark_failure()
 					return
 			ZombieMutator.Type.ONE_LEG:
 				var mesh := zombie.get_node("Model/LeftLeg/Mesh") as MeshInstance3D
 				if mesh.visible:
 					push_error("FALHA: Variante ONE_LEG deve ocultar perna esquerda.")
-					get_tree().quit(1)
+					_mark_failure()
 					return
 			ZombieMutator.Type.HALF_LEG:
 				var mesh := zombie.get_node("Model/RightLeg/Mesh") as MeshInstance3D
 				if mesh.scale.y > 0.6:
 					push_error("FALHA: Variante HALF_LEG deve ter perna direita encurtada/amputada.")
-					get_tree().quit(1)
+					_mark_failure()
 					return
 			ZombieMutator.Type.HALF_HEAD:
 				var eye := zombie.get_node("Model/Head/RightEye") as Node3D
 				if eye.visible:
 					push_error("FALHA: Variante HALF_HEAD deve ocultar o olho da metade rompida.")
-					get_tree().quit(1)
+					_mark_failure()
 					return
 			ZombieMutator.Type.CRAWLER:
 				if zombie.speed > 1.5:
 					push_error("FALHA: CRAWLER deve ter velocidade reduzida.")
-					get_tree().quit(1)
+					_mark_failure()
 					return
 
 		# Executa passo de animacao para garantir que pose funciona sem crash
@@ -260,40 +274,40 @@ func _test_player_three_lives_and_elimination() -> void:
 
 	if player.lives != 3 or player.is_eliminated:
 		push_error("FALHA: Jogador deve iniciar com 3 vidas e nao eliminado.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	# 1a morte: vidas caem de 3 para 2 e respawna
 	player.take_damage(100, Vector3.FORWARD, "bullet")
 	if player.lives != 2 or player.health != 100 or player.is_eliminated:
 		push_error("FALHA: Apos 1a morte, jogador deve ter 2 vidas e renascer com 100 de vida.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	# 2a morte: vidas caem de 2 para 1 e respawna
 	player.take_damage(100, Vector3.FORWARD, "bullet")
 	if player.lives != 1 or player.health != 100 or player.is_eliminated:
 		push_error("FALHA: Apos 2a morte, jogador deve ter 1 vida e renascer com 100 de vida.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	# 3a morte: vidas caem para 0 e e eliminado
 	player.take_damage(100, Vector3.FORWARD, "bullet")
 	if player.lives != 0 or not player.is_eliminated or player.visible or player.collision_layer != 0:
 		push_error("FALHA: Apos perder 3 vidas, jogador deve ser eliminado e invisivel.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	if not player.get_lives_text().contains("ELIMINADO"):
 		push_error("FALHA: get_lives_text() deve indicar [ELIMINADO].")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	# Dano adicional nao deve afetar jogador eliminado
 	player.take_damage(50, Vector3.FORWARD, "bullet")
 	if player.health != 0:
 		push_error("FALHA: Jogador eliminado nao deve receber dano adicional.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	player.queue_free()
@@ -305,51 +319,51 @@ func _test_safehouse_structure_and_spawns() -> void:
 	var safehouse := SafehouseBuilder.build_safehouse()
 	if safehouse == null or not (safehouse is StaticBody3D):
 		push_error("FALHA: SafehouseBuilder deve retornar uma instancia valida de StaticBody3D.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 	add_child(safehouse)
 
 	if not safehouse.has_node("GroundFloorMesh") or not safehouse.has_node("Floor2EastMesh"):
 		push_error("FALHA: Safehouse deve possuir malhas de terreo e 2o andar.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	if not safehouse.has_node("SanctuaryGroundLight") or not safehouse.has_node("SanctuaryUpperLight"):
 		push_error("FALHA: Safehouse deve possuir iluminacao de refugio no terreo e 2o andar.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	if not safehouse.has_node("ExteriorDefensiveSpotlight"):
 		push_error("FALHA: Safehouse deve possuir holofote defensivo frontal.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 	for child in safehouse.get_children():
 		if child is CollisionShape3D and child.position.z < -6.0 and absf(child.position.x) < 2.1 and child.position.y < 3.1:
 			push_error("FALHA: Portal da Safehouse possui um lintel baixo que bloqueia a saida.")
-			get_tree().quit(1)
+			_mark_failure()
 			return
 	for spawn_index in 4:
 		var marker := safehouse.get_node_or_null("PlayerSpawn%d" % (spawn_index + 1)) as Marker3D
 		if marker == null or marker.position.y < 1.0:
 			push_error("FALHA: Spawn %d deve existir acima do piso da Safehouse." % (spawn_index + 1))
-			get_tree().quit(1)
+			_mark_failure()
 			return
 	var door := safehouse.get_node_or_null("SafehouseDoor")
 	if door == null:
 		push_error("FALHA: Safehouse deve possuir porta automatica no portal.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 	door.call("update_for_actor_presence", true, 0.1)
 	if not bool(door.call("is_open_requested")) or int(door.get_node("Panel").collision_layer) != 0:
 		push_error("FALHA: Porta deve abrir e liberar colisao ao detectar jogador ou zumbi.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 	door.call("update_for_actor_presence", false, 1.0)
 	var door_still_open := bool(door.call("is_open_requested"))
 	var closed_collision_layer := int(door.get_node("Panel").collision_layer)
 	if door_still_open or closed_collision_layer != 1:
 		push_error("FALHA: Porta vazia esperava aberta=false/camada=1, recebeu aberta=%s/camada=%d." % [door_still_open, closed_collision_layer])
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	safehouse.queue_free()
@@ -373,19 +387,19 @@ func _test_gunshot_sound_echolocation() -> void:
 
 	if not bool(zombie_near.get("is_investigating_sound")):
 		push_error("FALHA: Zumbi a 20m deveria ecolocalizar o som do tiro.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	if bool(zombie_far.get("is_investigating_sound")):
 		push_error("FALHA: Zumbi a 100m nao deveria ouvir tiro fora do raio de 65m.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	# Executa passo de fisica para verificar que o zumbi se move na direcao do som
 	zombie_near.call("_physics_process", 0.1)
 	if zombie_near.velocity.z >= 0.0:
 		push_error("FALHA: Zumbi deve se locomover devagar em direcao ao som (-Z).")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	zombie_near.queue_free()
@@ -417,35 +431,33 @@ func _test_zombie_flock_coordinator() -> void:
 	add_child(z_far)
 
 	# Executa atualizacao do coordenador
-	coordinator._physics_process(0.1)
+	coordinator._physics_process(0.2)
 
-	if not bool(z1.get("is_cluster_leader")):
-		push_error("FALHA: Primeiro zumbi do cluster deveria ser o lider.")
-		get_tree().quit(1)
+	var leaders := int(bool(z1.get("is_cluster_leader"))) + int(bool(z2.get("is_cluster_leader")))
+	if leaders != 1:
+		push_error("FALHA: Cluster deveria possuir exatamente um lider; lideres=%d." % leaders)
+		_mark_failure()
 		return
-
-	if bool(z2.get("is_cluster_leader")):
-		push_error("FALHA: Segundo zumbi do cluster deveria ser o seguidor.")
-		get_tree().quit(1)
-		return
+	var leader := z1 if bool(z1.get("is_cluster_leader")) else z2
+	var follower := z2 if leader == z1 else z1
 
 	if int(z1.get("lod_level")) != 0 or int(z_far.get("lod_level")) != 2:
 		push_error("FALHA: LOD de distancia incorreto: z1=%s, z_far=%s" % [z1.get("lod_level"), z_far.get("lod_level")])
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	# Alerta o lider e valida replicacao para seguidor
-	z1.set("alert_target", p)
-	coordinator._physics_process(0.1)
-	if z2.get("alert_target") != p:
+	leader.set("alert_target", p)
+	coordinator._physics_process(0.2)
+	if follower.get("alert_target") != p:
 		push_error("FALHA: Seguidor do cluster deveria receber o alvo do lider.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
-	var sep: Vector3 = z1.get("flock_separation_vector") as Vector3
+	var sep: Vector3 = leader.get("flock_separation_vector") as Vector3
 	if sep.length_squared() < 0.0001:
 		push_error("FALHA: Vetor de separacao suave deveria ser diferente de zero entre z1 e z2.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	coordinator.queue_free()
@@ -461,11 +473,11 @@ func _test_global_zombie_spawn_schedule() -> void:
 	var schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(600, 1.0)
 	if schedule.is_spawn_due(0.99) or not schedule.is_spawn_due(0.01):
 		push_error("FALHA: Spawn inicial deve aguardar um intervalo completo de 1 segundo.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 	if not schedule.has_capacity(599) or schedule.has_capacity(600):
 		push_error("FALHA: Limite global deve permitir 599 e bloquear 600 zumbis ativos.")
-		get_tree().quit(1)
+		_mark_failure()
 		return
 
 	var active_zombies := 598
@@ -474,6 +486,6 @@ func _test_global_zombie_spawn_schedule() -> void:
 			active_zombies += 1
 	if active_zombies != 600:
 		push_error("FALHA: Duas mortes devem ser repostas em dois ticks globais; ativos=%d." % active_zombies)
-		get_tree().quit(1)
+		_mark_failure()
 		return
 	print("PASS: Limite global e reposicao gradual de zumbis validados.")
