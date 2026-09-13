@@ -3,9 +3,10 @@ services:
     build:
       context: .
     image: box-godot-server:local
+    command: ["--server", "--server-port=${GAME_SERVER_PORT:-27015}", "${GAME_SERVER_TEST_MODE:---production}"]
     restart: unless-stopped
     ports:
-      - "7000:7000/udp"
+      - "${GAME_SERVER_PORT:-27015}:${GAME_SERVER_PORT:-27015}/udp"
     read_only: true
     tmpfs:
       - /tmp:size=64m,mode=1777

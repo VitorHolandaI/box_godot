@@ -10,7 +10,7 @@ Cenas reutilizaveis e composicao principal do jogo.
 - `car.tscn`: carro voxel decorativo.
 - `grass_tuft.tscn`: tufo de grama decorativo.
 - `in_game_menu.tscn`: menu sobreposto durante a partida.
-- `main.tscn`: mundo, cidade central, entidades e interface da partida.
+- `main.tscn`: mundo sem zumbis autorados nas ruas; entidades surgem pela politica da partida.
 - `menu.tscn`: menu inicial, multiplayer e configuracoes.
 - `player.tscn`: personagem militar jogavel.
 - `rock.tscn`: rocha/entulho para floresta e ruinas.
@@ -24,4 +24,4 @@ Cenas reutilizaveis e composicao principal do jogo.
 - `tree_pine.tscn`: pinheiro alto com tres niveis de copa.
 - `tree_sequoia.tscn`: sequoia alta com copa conica em camadas.
 - `zombie.tscn`: inimigo voxel com vida e membros animados.
-- `zombie_ragdoll.tscn`: ragdoll com fisica articulada e juntas rigidas para cadaveres.
+- `zombie_ragdoll.tscn`: ragdoll articulado com pescoco fisicamente limitado.

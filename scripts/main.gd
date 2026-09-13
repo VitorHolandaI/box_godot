@@ -7,6 +7,7 @@ const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const AMMO_PICKUP_SCENE := preload("res://scenes/ammo_pickup.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
+const ZOMBIE_SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator.gd")
 const MAX_LOCAL_PLAYERS := 4
 const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
 const MAX_CORPSES := 20
@@ -15,9 +16,6 @@ const INPUT_INTERVAL := 1.0 / 30.0
 const SNAPSHOT_INTERVAL := 1.0 / 10.0
 const MAX_ZOMBIES_PER_SNAPSHOT_PACKET := 4
 const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 2
-const MIN_ZOMBIE_SPAWN_DISTANCE := 45.0
-const FOREST_SPAWN_INNER := 100.0
-const FOREST_SPAWN_OUTER := 112.0
 const PLAYER_SPAWN_POINTS := [
 	Vector3(-13.0, 1.18, 9.5),
 	Vector3(-11.0, 1.18, 9.5),
@@ -43,8 +41,10 @@ var zombie_snapshot_sequence := 0
 var received_zombie_snapshot_sequence := -1
 var received_zombie_snapshot_chunks: Dictionary = {}
 var received_zombie_names: Dictionary = {}
+var smoke_test_mode := false
 var bot_ai := PlayerBotAI.new()
 var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
+var zombie_spawn_locator = ZOMBIE_SPAWN_LOCATOR_SCRIPT.new()
 
 
 func _ready() -> void:
@@ -66,6 +66,12 @@ func _ready() -> void:
 	NetworkSession.server_lost.connect(_on_server_lost)
 	_configure_network_zombies()
 	_reconcile_network_players()
+	smoke_test_mode = NetworkSession.is_server() and "--smoke-test-zombie" in OS.get_cmdline_user_args()
+	if smoke_test_mode:
+		_spawn_zombie(Vector3(-11.5, 1.0, 9.5))
+		var smoke_zombie := zombies.get_child(-1) as CharacterBody3D
+		smoke_zombie.set("health", 35)
+		smoke_zombie.set("speed", 0.0)
 	_notify_scene_loaded.call_deferred()
 
 
@@ -76,13 +82,13 @@ func _notify_scene_loaded() -> void:
 
 
 func _process(delta: float) -> void:
-	if NetworkSession.is_client():
+	if NetworkSession.is_client() or smoke_test_mode:
 		return
 	if not zombie_spawn_schedule.is_spawn_due(delta):
 		return
 	var alive_count := get_tree().get_nodes_in_group("zombies").size()
-	if zombie_spawn_schedule.has_capacity(alive_count):
-		_spawn_zombie()
+	if zombie_spawn_schedule.has_capacity(alive_count) and not _spawn_zombie():
+		push_warning("Spawn de zumbi adiado: nenhum ponto autorizado esta livre.")
 
 
 func _physics_process(delta: float) -> void:
@@ -392,6 +398,9 @@ func _apply_zombie_states(states: Array) -> void:
 			zombie.name = zombie_name
 			zombie.simulation_enabled = false
 			zombies.add_child(zombie, true)
+			var initial_position: Variant = state.get("position")
+			if initial_position is Vector3:
+				zombie.global_position = initial_position
 		zombie.apply_network_state(state)
 
 
@@ -408,29 +417,15 @@ func _configure_network_zombies() -> void:
 		zombie.simulation_enabled = false
 
 
-func _spawn_zombie() -> void:
+func _spawn_zombie(position_override: Variant = null) -> bool:
+	var spawn_position: Vector3 = position_override as Vector3 if position_override is Vector3 else zombie_spawn_locator.pick_spawn_position(get_tree())
+	if spawn_position == ZOMBIE_SPAWN_LOCATOR_SCRIPT.INVALID_SPAWN_POSITION:
+		return false
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	zombie.name = "ZombieSpawn%d" % spawn_index
 	zombies.add_child(zombie, true)
-	zombie.global_position = _pick_forest_spawn_position()
+	zombie.global_position = spawn_position
 	spawn_index += 1
-
-
-func _pick_forest_spawn_position() -> Vector3:
-	for _attempt in 24:
-		var angle := randf() * TAU
-		var radius := randf_range(FOREST_SPAWN_INNER, FOREST_SPAWN_OUTER)
-		var candidate := Vector3(cos(angle) * radius, 1.0, sin(angle) * radius)
-		if _is_far_from_players(candidate):
-			return candidate
-	return Vector3(FOREST_SPAWN_OUTER, 1.0, 0.0)
-
-
-func _is_far_from_players(candidate: Vector3) -> bool:
-	for player in get_tree().get_nodes_in_group("player"):
-		var player_body := player as CharacterBody3D
-		if player_body != null and candidate.distance_to(player_body.global_position) < MIN_ZOMBIE_SPAWN_DISTANCE:
-			return false
 	return true
 
 

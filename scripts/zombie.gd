@@ -46,6 +46,7 @@ var health := 100
 var zombie_type := ZombieType.WALKER
 var lod_level: LodLevel = LodLevel.NEAR
 var is_cluster_leader := true
+var horde_id := -1
 var flock_separation_vector := Vector3.ZERO
 var lod_tick_skip_counter := 0
 var alert_target: CharacterBody3D = null
@@ -101,7 +102,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	if lod_level == LodLevel.FAR and alert_target == null and not is_investigating_sound:
-		lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 3
+		lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
 		if lod_tick_skip_counter != 0:
 			global_position.x += velocity.x * delta
 			global_position.z += velocity.z * delta
@@ -160,7 +161,8 @@ func _physics_process(delta: float) -> void:
 				is_investigating_sound = false
 	else:
 		is_investigating_sound = false
-		_update_wander(delta)
+		if is_cluster_leader:
+			_update_wander(delta)
 		velocity.x = move_toward(velocity.x, wander_direction.x * speed * WANDER_SPEED_FACTOR, 8.0 * delta)
 		velocity.z = move_toward(velocity.z, wander_direction.z * speed * WANDER_SPEED_FACTOR, 8.0 * delta)
 		if wander_direction.length_squared() > 0.01:
@@ -176,7 +178,7 @@ func _physics_process(delta: float) -> void:
 
 
 func _update_senses(delta: float) -> void:
-	if not is_cluster_leader and lod_level != LodLevel.NEAR:
+	if not is_cluster_leader:
 		return
 	sense_check_cooldown -= delta
 	if sense_check_cooldown > 0.0:
@@ -326,7 +328,7 @@ func _find_closest_living_player() -> CharacterBody3D:
 ## Uso:
 ##   zombie.hear_gunshot(origin, 65.0)
 func hear_gunshot(origin: Vector3, max_radius: float = 65.0) -> void:
-	if is_dead:
+	if is_dead or not is_cluster_leader:
 		return
 	var distance := global_position.distance_to(origin)
 	if distance > max_radius:
