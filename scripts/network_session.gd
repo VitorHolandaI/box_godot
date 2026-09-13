@@ -5,6 +5,7 @@ signal join_accepted
 signal join_failed(message: String)
 signal server_lost
 signal latency_changed(latency_ms: int)
+signal server_list_changed
 
 const DEFAULT_PORT := 27015
 const MIN_PORT := 1024
@@ -13,6 +14,8 @@ const MAX_PLAYERS := 4
 const SERVER_ID := 1
 const PING_INTERVAL := 1.0
 const DEFAULT_WORLD_SEED := 240912
+const DISCOVERY_PROTOCOL := "box_godot_server_discovery_v1"
+const DISCOVERY_BROADCAST_ADDRESS := "255.255.255.255"
 
 enum Mode { OFFLINE, SERVER, CLIENT }
 
@@ -28,14 +31,18 @@ var latency_ms := -1
 var procedural_city_enabled := false
 var survival_mode := false
 var world_seed := DEFAULT_WORLD_SEED
+var server_name := "Box Godot"
+var discovered_servers: Array[Dictionary] = []
 var _intentional_disconnect := false
 var _connected_to_server := false
 var _ping_elapsed := PING_INTERVAL
+var _discovery_socket: PacketPeerUDP
 
 
 func _ready() -> void:
 	server_port = _get_command_line_port()
 	_reset_world_config_from_arguments()
+	server_name = _get_command_line_server_name()
 	if server_port < 0:
 		get_tree().quit(1)
 		return
@@ -90,6 +97,7 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	_poll_server_discovery()
 	if not is_client() or not _connected_to_server:
 		return
 	_ping_elapsed += delta
@@ -108,6 +116,10 @@ func start_server(port: int = DEFAULT_PORT) -> Error:
 	mode = Mode.SERVER
 	server_port = port
 	multiplayer.multiplayer_peer = peer
+	var discovery_error := _open_discovery_socket(_discovery_port_for(port))
+	if discovery_error != OK:
+		push_error("Nao foi possivel abrir descoberta do servidor na porta %d: %s" % [_discovery_port_for(port), error_string(discovery_error)])
+		return discovery_error
 	print("Servidor dedicado ouvindo em UDP %d" % port)
 	return OK
 
@@ -128,6 +140,29 @@ func join_server(address: String, local_slots: int, port: int = DEFAULT_PORT) ->
 	return OK
 
 
+func refresh_server_list() -> Error:
+	if is_server():
+		return ERR_UNAVAILABLE
+	var open_error := _open_discovery_socket(0)
+	if open_error != OK:
+		return open_error
+	discovered_servers.clear()
+	for saved_server in GameConfig.get_saved_servers():
+		_discovered_servers_add_offline(saved_server)
+	_send_discovery_request(DISCOVERY_BROADCAST_ADDRESS, DEFAULT_PORT)
+	for saved_server in GameConfig.get_saved_servers():
+		_send_discovery_request(String(saved_server["address"]), int(saved_server["port"]))
+	server_list_changed.emit()
+	return OK
+
+
+func get_server_list() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for server in discovered_servers:
+		result.append(server.duplicate(true))
+	return result
+
+
 func leave_session() -> void:
 	_intentional_disconnect = true
 	_connected_to_server = false
@@ -138,6 +173,7 @@ func leave_session() -> void:
 	mode = Mode.OFFLINE
 	peer_slots.clear()
 	loaded_peers.clear()
+	_close_discovery_socket()
 	_reset_world_config_from_arguments()
 	_intentional_disconnect = false
 
@@ -239,6 +275,132 @@ func _total_player_count() -> int:
 	return total
 
 
+func _open_discovery_socket(listen_port: int) -> Error:
+	_close_discovery_socket()
+	_discovery_socket = PacketPeerUDP.new()
+	var error := _discovery_socket.bind(listen_port)
+	if error != OK:
+		_discovery_socket = null
+		return error
+	_discovery_socket.set_broadcast_enabled(true)
+	return OK
+
+
+func _close_discovery_socket() -> void:
+	if _discovery_socket == null:
+		return
+	_discovery_socket.close()
+	_discovery_socket = null
+
+
+func _send_discovery_request(address: String, game_port: int) -> void:
+	if _discovery_socket == null:
+		return
+	var discovery_port := _discovery_port_for(game_port)
+	var error := _discovery_socket.set_dest_address(address, discovery_port)
+	if error != OK:
+		push_error("Nao foi possivel consultar servidor '%s:%d': %s" % [address, game_port, error_string(error)])
+		return
+	var request := JSON.stringify({
+		"protocol": DISCOVERY_PROTOCOL,
+		"kind": "discover",
+		"sent_usec": Time.get_ticks_usec(),
+	})
+	var send_error := _discovery_socket.put_packet(request.to_utf8_buffer())
+	if send_error != OK:
+		push_error("Nao foi possivel enviar consulta de servidores para '%s:%d': %s" % [address, game_port, error_string(send_error)])
+
+
+func _poll_server_discovery() -> void:
+	if _discovery_socket == null:
+		return
+	while _discovery_socket.get_available_packet_count() > 0:
+		var packet := _discovery_socket.get_packet().get_string_from_utf8()
+		var payload: Variant = JSON.parse_string(packet)
+		if not payload is Dictionary or payload.get("protocol", "") != DISCOVERY_PROTOCOL:
+			continue
+		if payload.get("kind", "") == "discover" and is_server():
+			_respond_to_discovery(payload)
+		elif payload.get("kind", "") == "status" and not is_server():
+			_register_discovered_server(payload, _discovery_socket.get_packet_ip())
+
+
+func _respond_to_discovery(request: Dictionary) -> void:
+	var response := {
+		"protocol": DISCOVERY_PROTOCOL,
+		"kind": "status",
+		"request_usec": int(request.get("sent_usec", 0)),
+		"name": server_name,
+		"port": server_port,
+		"mission": _server_mission_name(),
+		"active_players": _total_player_count(),
+		"max_players": MAX_PLAYERS,
+	}
+	var send_error := _discovery_socket.set_dest_address(_discovery_socket.get_packet_ip(), _discovery_socket.get_packet_port())
+	if send_error != OK:
+		push_error("Nao foi possivel responder descoberta de servidor: %s" % error_string(send_error))
+		return
+	send_error = _discovery_socket.put_packet(JSON.stringify(response).to_utf8_buffer())
+	if send_error != OK:
+		push_error("Nao foi possivel enviar status de servidor: %s" % error_string(send_error))
+
+
+func _register_discovered_server(payload: Dictionary, source_address: String) -> void:
+	var port := int(payload.get("port", 0))
+	if source_address.is_empty() or port < GameConfig.MIN_SERVER_PORT or port > GameConfig.MAX_SERVER_PORT:
+		return
+	var key := "%s:%d" % [source_address, port]
+	var entry := {
+		"key": key,
+		"address": source_address,
+		"port": port,
+		"name": String(payload.get("name", source_address)),
+		"mission": String(payload.get("mission", "Desconhecida")),
+		"active_players": clampi(int(payload.get("active_players", 0)), 0, MAX_PLAYERS),
+		"max_players": MAX_PLAYERS,
+		"ping_ms": maxi(roundi(float(Time.get_ticks_usec() - int(payload.get("request_usec", 0))) / 1000.0), 0),
+		"online": true,
+	}
+	for index in discovered_servers.size():
+		if discovered_servers[index].get("key", "") == key:
+			discovered_servers[index] = entry
+			server_list_changed.emit()
+			return
+	discovered_servers.append(entry)
+	server_list_changed.emit()
+
+
+func _discovered_servers_add_offline(saved_server: Dictionary) -> void:
+	var address := String(saved_server.get("address", ""))
+	var port := int(saved_server.get("port", 0))
+	var display_name := String(saved_server.get("label", ""))
+	if display_name.is_empty():
+		display_name = address
+	discovered_servers.append({
+		"key": "%s:%d" % [address, port],
+		"address": address,
+		"port": port,
+		"name": display_name,
+		"mission": "Sem resposta",
+		"active_players": 0,
+		"max_players": MAX_PLAYERS,
+		"ping_ms": -1,
+		"online": false,
+	})
+
+
+func _server_mission_name() -> String:
+	if survival_mode:
+		return "Sobrevivencia"
+	if procedural_city_enabled:
+		return "Cidade procedural"
+	return "Operacao Quarentena"
+
+
+func _discovery_port_for(game_port: int) -> int:
+	return game_port - 1 if game_port >= GameConfig.MAX_SERVER_PORT else game_port + 1
+
+
 func _get_command_line_port() -> int:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--server-port="):
@@ -248,6 +410,15 @@ func _get_command_line_port() -> int:
 				push_error("Valor de porta invalido '%s'; esperada porta decimal entre %d e %d." % [raw_port, MIN_PORT, MAX_PORT])
 			return parsed_port
 	return DEFAULT_PORT
+
+
+func _get_command_line_server_name() -> String:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--server-name="):
+			var configured_name := argument.trim_prefix("--server-name=").strip_edges()
+			if not configured_name.is_empty():
+				return configured_name
+	return "Box Godot"
 
 
 func _reset_world_config_from_arguments() -> void:

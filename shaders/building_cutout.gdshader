@@ -5,8 +5,10 @@ uniform sampler2D albedo_texture : source_color, filter_linear_mipmap;
 uniform bool use_texture = false;
 uniform float material_roughness : hint_range(0.0, 1.0) = 0.9;
 uniform float material_metallic : hint_range(0.0, 1.0) = 0.0;
-uniform float cutout_radius : hint_range(0.5, 20.0) = 8.5;
+uniform float cutout_radius : hint_range(0.3, 3.0) = 0.9;
 uniform float occlusion_epsilon : hint_range(0.1, 2.0) = 0.5;
+uniform float floor_height : hint_range(1.0, 6.0) = 2.8;
+uniform bool ceiling_cutout = false;
 uniform vec3 camera_offset = vec3(0.0, 15.0, 13.5);
 
 varying vec3 world_position;
@@ -17,6 +19,7 @@ void vertex() {
 
 void fragment() {
 	vec3 camera_to_player = -camera_offset;
+	vec3 player_position = CAMERA_POSITION_WORLD - camera_offset;
 	float player_distance = length(camera_to_player);
 	vec3 camera_direction = camera_to_player / player_distance;
 
@@ -29,7 +32,10 @@ void fragment() {
 	bool within_tube = dist_to_segment < cutout_radius;
 	bool occluding = fragment_depth > 0.0 && fragment_depth < player_distance - occlusion_epsilon;
 
-	if (within_tube && occluding) {
+	float player_floor_base = floor(player_position.y / floor_height) * floor_height;
+	bool player_floor = world_position.y >= player_floor_base - 0.12 && world_position.y <= player_floor_base + floor_height + 0.12;
+	bool can_cutout = player_floor || (ceiling_cutout && world_position.y > player_floor_base + floor_height);
+	if (within_tube && occluding && can_cutout) {
 		discard;
 	}
 

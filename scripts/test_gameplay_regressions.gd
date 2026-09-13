@@ -74,11 +74,17 @@ func _test_procedural_city_seed(test_root: Node) -> void:
 		_fail(test_root, "A cidade procedural deveria conter 35 edificios e um lote reservado para a Safehouse.")
 		return
 	var archetypes: Dictionary = {}
+	var house_count := 0
+	var apartment_count := 0
 	for block in first_city.blocks:
 		for lot in block.lots:
 			if lot.building == null:
 				continue
 			archetypes[lot.building.archetype] = true
+			if lot.building.archetype.begins_with("House"):
+				house_count += 1
+			elif lot.building.archetype.begins_with("ApartmentBuilding"):
+				apartment_count += 1
 			for floor_blueprint in lot.building.floor_blueprints:
 				for placement in floor_blueprint.units:
 					var unit = placement["blueprint"]
@@ -87,6 +93,9 @@ func _test_procedural_city_seed(test_root: Node) -> void:
 						return
 	if not archetypes.has("Shop_A") or not archetypes.has("Grocery_A"):
 		_fail(test_root, "A zona urbana deveria misturar apartamentos, lojas e mercados.")
+		return
+	if house_count <= apartment_count:
+		_fail(test_root, "A cidade deveria ter mais casas normais do que apartamentos.")
 		return
 	var visual_root := Node3D.new()
 	var apartment = PROCEDURAL_BUILDING_GENERATOR.generate(18273, "apartment")
@@ -105,7 +114,7 @@ func _test_procedural_city_seed(test_root: Node) -> void:
 		_fail(test_root, "Predios procedurais deveriam usar o shader da aura de visibilidade.")
 		visual_root.free()
 		return
-	if not apartment_node.has_node("Stair_0_0") or not apartment_node.has_node("Stair_1_0") or not apartment_node.has_node("Floor_1_Left"):
+	if not apartment_node.has_node("Stair_0_0") or not apartment_node.has_node("StairRamp_0") or not apartment_node.has_node("Stair_1_0") or not apartment_node.has_node("StairRamp_1") or not apartment_node.has_node("Floor_1_Left"):
 		_fail(test_root, "Predio de varios andares deveria possuir escadas por transicao e vao de laje.")
 		visual_root.free()
 		return

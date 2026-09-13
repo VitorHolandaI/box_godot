@@ -135,6 +135,66 @@ layout_mode = 2
 text = "127.0.0.1"
 placeholder_text = "IP ou dominio da VPS"
 
+[node name="ServerBrowser" type="VBoxContainer" parent="MenuPanel/Selection"]
+visible = false
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Header" type="HBoxContainer" parent="MenuPanel/Selection/ServerBrowser"]
+layout_mode = 2
+alignment = 1
+
+[node name="Title" type="Label" parent="MenuPanel/Selection/ServerBrowser/Header"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "SALAS MULTIPLAYER"
+vertical_alignment = 1
+
+[node name="Refresh" type="Button" parent="MenuPanel/Selection/ServerBrowser/Header"]
+custom_minimum_size = Vector2(150, 34)
+layout_mode = 2
+text = "ATUALIZAR"
+
+[node name="ServerScroll" type="ScrollContainer" parent="MenuPanel/Selection/ServerBrowser"]
+custom_minimum_size = Vector2(0, 150)
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+
+[node name="ServerList" type="VBoxContainer" parent="MenuPanel/Selection/ServerBrowser/ServerScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 4
+
+[node name="AddServer" type="HBoxContainer" parent="MenuPanel/Selection/ServerBrowser"]
+layout_mode = 2
+theme_override_constants/separation = 6
+
+[node name="Address" type="LineEdit" parent="MenuPanel/Selection/ServerBrowser/AddServer"]
+custom_minimum_size = Vector2(0, 34)
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "IP ou dominio"
+
+[node name="Port" type="LineEdit" parent="MenuPanel/Selection/ServerBrowser/AddServer"]
+custom_minimum_size = Vector2(90, 34)
+layout_mode = 2
+text = "27015"
+placeholder_text = "Porta"
+
+[node name="Add" type="Button" parent="MenuPanel/Selection/ServerBrowser/AddServer"]
+custom_minimum_size = Vector2(120, 34)
+layout_mode = 2
+text = "SALVAR"
+
+[node name="Message" type="Label" parent="MenuPanel/Selection/ServerBrowser"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.86, 0.76, 0.46, 1)
+text = "Descobrindo servidores na rede local..."
+horizontal_alignment = 1
+autowrap_mode = 2
+
 [node name="OnePlayer" type="Button" parent="MenuPanel/Selection"]
 custom_minimum_size = Vector2(0, 48)
 layout_mode = 2
