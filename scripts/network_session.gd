@@ -4,12 +4,14 @@ signal roster_changed
 signal join_accepted
 signal join_failed(message: String)
 signal server_lost
+signal latency_changed(latency_ms: int)
 
 const DEFAULT_PORT := 27015
 const MIN_PORT := 1024
 const MAX_PORT := 65535
 const MAX_PLAYERS := 4
 const SERVER_ID := 1
+const PING_INTERVAL := 1.0
 
 enum Mode { OFFLINE, SERVER, CLIENT }
 
@@ -21,7 +23,10 @@ var bot_mode := false
 var autoplay_bot := false
 var bot_name := ""
 var loaded_peers: Dictionary = {}
+var latency_ms := -1
 var _intentional_disconnect := false
+var _connected_to_server := false
+var _ping_elapsed := PING_INTERVAL
 
 
 func _ready() -> void:
@@ -79,6 +84,16 @@ func _ready() -> void:
 			return
 
 
+func _process(delta: float) -> void:
+	if not is_client() or not _connected_to_server:
+		return
+	_ping_elapsed += delta
+	if _ping_elapsed < PING_INTERVAL:
+		return
+	_ping_elapsed = 0.0
+	_ping_request.rpc_id(SERVER_ID, Time.get_ticks_usec())
+
+
 func start_server(port: int = DEFAULT_PORT) -> Error:
 	leave_session()
 	var peer := ENetMultiplayerPeer.new()
@@ -110,6 +125,9 @@ func join_server(address: String, local_slots: int, port: int = DEFAULT_PORT) ->
 
 func leave_session() -> void:
 	_intentional_disconnect = true
+	_connected_to_server = false
+	_ping_elapsed = PING_INTERVAL
+	latency_ms = -1
 	if multiplayer.multiplayer_peer != null:
 		multiplayer.multiplayer_peer = OfflineMultiplayerPeer.new()
 	mode = Mode.OFFLINE
@@ -140,6 +158,8 @@ func notify_scene_loaded() -> void:
 
 
 func _on_connected_to_server() -> void:
+	_connected_to_server = true
+	_ping_elapsed = PING_INTERVAL
 	_request_slots.rpc_id(SERVER_ID, requested_slots)
 
 
@@ -221,11 +241,31 @@ func _get_command_line_port() -> int:
 	return DEFAULT_PORT
 
 
+func get_latency_text() -> String:
+	return "--" if latency_ms < 0 else "%d ms" % latency_ms
+
+
 static func parse_server_port_value(raw_port: String) -> int:
 	if raw_port.is_empty() or not raw_port.is_valid_int():
 		return -1
 	var parsed_port := int(raw_port)
 	return parsed_port if parsed_port >= MIN_PORT and parsed_port <= MAX_PORT else -1
+
+
+@rpc("any_peer", "call_remote", "unreliable")
+func _ping_request(sent_at_usec: int) -> void:
+	if not is_server() or sent_at_usec <= 0:
+		return
+	_ping_response.rpc_id(multiplayer.get_remote_sender_id(), sent_at_usec)
+
+
+@rpc("authority", "call_remote", "unreliable")
+func _ping_response(sent_at_usec: int) -> void:
+	if not is_client() or sent_at_usec <= 0:
+		return
+	var elapsed_usec := maxi(Time.get_ticks_usec() - sent_at_usec, 0)
+	latency_ms = roundi(float(elapsed_usec) / 1000.0)
+	latency_changed.emit(latency_ms)
 
 
 @rpc("any_peer", "call_remote", "reliable")
