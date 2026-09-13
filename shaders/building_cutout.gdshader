@@ -9,7 +9,7 @@ uniform float cutout_radius : hint_range(0.3, 3.0) = 0.9;
 uniform float occlusion_epsilon : hint_range(0.1, 2.0) = 0.5;
 uniform float floor_height : hint_range(1.0, 6.0) = 2.8;
 uniform bool ceiling_cutout = false;
-uniform vec3 camera_offset = vec3(0.0, 15.0, 13.5);
+uniform vec3 camera_offset = vec3(0.0, 19.0, 17.1);
 
 varying vec3 world_position;
 

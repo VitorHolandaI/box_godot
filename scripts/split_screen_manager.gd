@@ -63,6 +63,7 @@ func _create_player_view(index: int) -> void:
 	var viewport := SubViewport.new()
 	viewport.world_3d = get_viewport().world_3d
 	viewport.render_target_update_mode = SubViewport.UPDATE_ALWAYS
+	viewport.audio_listener_enable_3d = true
 	viewport.msaa_3d = GameConfig.get_msaa_3d()
 	viewport.gui_disable_input = true
 	container.add_child(viewport)
