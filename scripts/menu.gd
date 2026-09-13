@@ -21,6 +21,14 @@ const ACTIONS := [
 @onready var network_mode: OptionButton = $MenuPanel/Selection/NetworkMode/Mode
 @onready var server_address_row: HBoxContainer = $MenuPanel/Selection/ServerAddress
 @onready var server_address: LineEdit = $MenuPanel/Selection/ServerAddress/Address
+@onready var server_browser: VBoxContainer = $MenuPanel/Selection/ServerBrowser
+@onready var server_list: VBoxContainer = $MenuPanel/Selection/ServerBrowser/ServerScroll/ServerList
+@onready var server_address_input: LineEdit = $MenuPanel/Selection/ServerBrowser/AddServer/Address
+@onready var server_port_input: LineEdit = $MenuPanel/Selection/ServerBrowser/AddServer/Port
+@onready var server_browser_message: Label = $MenuPanel/Selection/ServerBrowser/Message
+@onready var refresh_servers_button: Button = $MenuPanel/Selection/ServerBrowser/Header/Refresh
+@onready var add_server_button: Button = $MenuPanel/Selection/ServerBrowser/AddServer/Add
+@onready var local_player_buttons: Array[Button] = [$MenuPanel/Selection/TwoPlayers, $MenuPanel/Selection/ThreePlayers, $MenuPanel/Selection/FourPlayers]
 @onready var setup_title: Label = $MenuPanel/Setup/SetupTitle
 @onready var players_scroll: ScrollContainer = $MenuPanel/Setup/PlayersScroll
 @onready var players_grid: GridContainer = $MenuPanel/Setup/PlayersScroll/PlayersGrid
@@ -37,6 +45,7 @@ var capture_player := -1
 var capture_action := ""
 var capture_button: Button
 var selected_mode := "local"
+var server_refresh_elapsed := 0.0
 
 
 func _ready() -> void:
@@ -45,9 +54,12 @@ func _ready() -> void:
 		return
 	NetworkSession.join_accepted.connect(_on_join_accepted)
 	NetworkSession.join_failed.connect(_on_join_failed)
+	NetworkSession.server_list_changed.connect(_render_server_list)
 	network_mode.add_item("Jogar local")
-	network_mode.add_item("Conectar ao servidor")
+	network_mode.add_item("Multiplayer")
 	network_mode.item_selected.connect(_on_network_mode_selected)
+	refresh_servers_button.pressed.connect(_refresh_servers)
+	add_server_button.pressed.connect(_save_server)
 	quality_select.item_selected.connect(_on_quality_selected)
 	get_viewport().size_changed.connect(_layout_menu)
 	server_address_row.visible = false
@@ -55,6 +67,8 @@ func _ready() -> void:
 	setup.visible = false
 	settings.visible = false
 	_configure_settings()
+	_update_network_mode_ui()
+	_refresh_servers()
 	_update_controller_status()
 	_layout_menu.call_deferred()
 
@@ -62,6 +76,11 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	if selection.visible:
 		_update_controller_status()
+		if selected_mode == "server":
+			server_refresh_elapsed += _delta
+			if server_refresh_elapsed >= 5.0:
+				_refresh_servers()
+				server_refresh_elapsed = 0.0
 
 
 func _input(event: InputEvent) -> void:
@@ -104,7 +123,7 @@ func _show_setup(player_count: int) -> void:
 	selection.visible = false
 	setup.visible = true
 	settings.visible = false
-	setup_title.text = "CONFIGURAR %d JOGADOR%s" % [player_count, "" if player_count == 1 else "ES"]
+	setup_title.text = "CONFIGURAR JOGADOR" if selected_mode == "server" else "CONFIGURAR %d JOGADOR%s" % [player_count, "" if player_count == 1 else "ES"]
 	player_configs.clear()
 	var joypads := Input.get_connected_joypads()
 	for slot in player_count:
@@ -114,7 +133,7 @@ func _show_setup(player_count: int) -> void:
 			player_configs.append(GameConfig.create_keyboard_config(slot))
 	_rebuild_player_cards()
 	message.text = "Clique em uma acao e pressione a tecla ou botao desejado."
-	start_button.text = "INICIAR PARTIDA" if selected_mode == "local" else "CONECTAR"
+	start_button.text = "INICIAR PARTIDA" if selected_mode == "local" else "ENTRAR NA SALA"
 	start_button.disabled = false
 	_layout_menu()
 
@@ -251,10 +270,20 @@ func _start_game() -> void:
 
 	start_button.disabled = true
 	message.text = "Conectando ao servidor..."
+	var port := NetworkSession.parse_server_port_value(server_port_input.text.strip_edges())
+	if port < 0:
+		start_button.disabled = false
+		message.text = "Porta invalida; use um numero entre 1024 e 65535."
+		return
+	var save_error := GameConfig.save_server(server_address.text, port)
+	if save_error != OK:
+		start_button.disabled = false
+		message.text = "Nao foi possivel salvar o servidor: %s" % error_string(save_error)
+		return
 	var error: Error = NetworkSession.join_server(
 		server_address.text.strip_edges(),
 		player_configs.size(),
-		NetworkSession.server_port
+		port
 	)
 	if error != OK:
 		start_button.disabled = false
@@ -268,7 +297,78 @@ func _update_controller_status() -> void:
 
 func _on_network_mode_selected(index: int) -> void:
 	selected_mode = "local" if index == 0 else "server"
-	server_address_row.visible = selected_mode == "server"
+	_update_network_mode_ui()
+	if selected_mode == "server":
+		_refresh_servers()
+
+
+func _update_network_mode_ui() -> void:
+	var multiplayer_selected := selected_mode == "server"
+	server_address_row.visible = false
+	server_browser.visible = multiplayer_selected
+	for button in local_player_buttons:
+		button.visible = not multiplayer_selected
+	$MenuPanel/Selection/OnePlayer.text = "ENTRAR NA SALA" if multiplayer_selected else "1 JOGADOR"
+
+
+func _refresh_servers() -> void:
+	if selected_mode != "server":
+		return
+	server_browser_message.text = "Descobrindo servidores na rede local..."
+	var error := NetworkSession.refresh_server_list()
+	if error != OK:
+		server_browser_message.text = "Falha ao consultar servidores: %s" % error_string(error)
+
+
+func _save_server() -> void:
+	var port := NetworkSession.parse_server_port_value(server_port_input.text.strip_edges())
+	var error := GameConfig.save_server(server_address_input.text, port)
+	if error != OK:
+		server_browser_message.text = "Servidor invalido. Informe IP e porta entre 1024 e 65535."
+		return
+	server_address.text = server_address_input.text.strip_edges()
+	server_browser_message.text = "Servidor salvo. Consultando status..."
+	_refresh_servers()
+
+
+func _render_server_list() -> void:
+	for child in server_list.get_children():
+		child.free()
+	var servers := NetworkSession.get_server_list()
+	if servers.is_empty():
+		var empty_label := Label.new()
+		empty_label.text = "Nenhuma sala encontrada. Adicione um IP abaixo."
+		empty_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+		server_list.add_child(empty_label)
+		return
+	for server in servers:
+		var row := HBoxContainer.new()
+		row.custom_minimum_size.y = 38
+		var status := "ONLINE" if bool(server.get("online", false)) else "SEM RESPOSTA"
+		var ping := "%d ms" % int(server.get("ping_ms", -1)) if int(server.get("ping_ms", -1)) >= 0 else "--"
+		var label := Label.new()
+		label.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		label.text = "%s | %s | %d/%d jogadores | ping %s\n%s" % [
+			String(server.get("name", server.get("address", "Servidor"))),
+			status,
+			int(server.get("active_players", 0)),
+			int(server.get("max_players", 4)),
+			ping,
+			String(server.get("mission", "Desconhecida")),
+		]
+		row.add_child(label)
+		var join_button := Button.new()
+		join_button.text = "ENTRAR"
+		join_button.disabled = not bool(server.get("online", false)) or int(server.get("active_players", 0)) >= int(server.get("max_players", 4))
+		join_button.pressed.connect(_select_server.bind(server))
+		row.add_child(join_button)
+		server_list.add_child(row)
+
+
+func _select_server(server: Dictionary) -> void:
+	server_address.text = String(server.get("address", ""))
+	server_port_input.text = str(int(server.get("port", NetworkSession.DEFAULT_PORT)))
+	_show_setup(1)
 
 
 func _on_settings_pressed() -> void:
