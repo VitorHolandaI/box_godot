@@ -3,7 +3,7 @@ services:
     build:
       context: .
     image: box-godot-server:local
-    command: ["--server", "--server-port=${GAME_SERVER_PORT:-27015}", "${GAME_SERVER_TEST_MODE:---production}"]
+    command: ["--server", "--server-port=${GAME_SERVER_PORT:-27015}", "${GAME_SERVER_TEST_MODE:---production}", "${GAME_SERVER_CITY_MODE:-}", "--world-seed=${GAME_SERVER_WORLD_SEED:-240912}"]
     restart: unless-stopped
     ports:
       - "${GAME_SERVER_PORT:-27015}:${GAME_SERVER_PORT:-27015}/udp"
