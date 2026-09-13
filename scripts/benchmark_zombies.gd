@@ -33,6 +33,7 @@ func _ready() -> void:
 	print("================================================================================")
 	rng.seed = 98765
 	main_world = MAIN_SCENE.instantiate() as Node3D
+	main_world.set_process(false)
 	add_child(main_world)
 
 	zombies_container = main_world.get_node_or_null("Zombies") as Node3D

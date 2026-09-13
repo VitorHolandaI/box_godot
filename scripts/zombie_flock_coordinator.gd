@@ -9,12 +9,14 @@ const CELL_SIZE := 16.0
 const LOD_NEAR_DIST_SQ := 484.0 # 22.0 * 22.0
 const LOD_MID_DIST_SQ := 2500.0 # 50.0 * 50.0
 const PLAYER_SCAN_INTERVAL := 0.25
+const FLOCK_UPDATE_INTERVAL := 0.1
 
 static var instance: ZombieFlockCoordinator = null
 
 var _spatial_cells: Dictionary = {}
 var _cached_players: Array[CharacterBody3D] = []
 var _player_scan_timer := 0.0
+var _flock_update_elapsed := 0.0
 
 
 func _enter_tree() -> void:
@@ -27,7 +29,12 @@ func _exit_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
-	_update_cached_players(delta)
+	_flock_update_elapsed += delta
+	if _flock_update_elapsed < FLOCK_UPDATE_INTERVAL:
+		return
+	var update_delta := _flock_update_elapsed
+	_flock_update_elapsed = 0.0
+	_update_cached_players(update_delta)
 	_update_flock_clusters()
 
 
@@ -52,7 +59,11 @@ func _update_flock_clusters() -> void:
 	# Agrupamento espacial em celulas de 16m
 	for node in zombie_nodes:
 		var z := node as CharacterBody3D
-		if z == null or not is_instance_valid(z) or z.is_queued_for_deletion() or bool(z.get("is_dead")) or not bool(z.get("simulation_enabled")):
+		if z == null or not is_instance_valid(z) or z.is_queued_for_deletion() or bool(z.get("is_dead")):
+			continue
+		# Client proxies still need visual LOD even though they do not run AI or Boids.
+		_apply_distance_lod(z)
+		if not bool(z.get("simulation_enabled")):
 			continue
 		var cell_x := int(floor(z.global_position.x / CELL_SIZE))
 		var cell_z := int(floor(z.global_position.z / CELL_SIZE))
@@ -62,9 +73,6 @@ func _update_flock_clusters() -> void:
 			_spatial_cells[key] = list
 		var list_ref: Array[CharacterBody3D] = _spatial_cells[key]
 		list_ref.append(z)
-
-		# Atualizacao de LOD de distancia em relacao ao jogador mais proximo
-		_apply_distance_lod(z)
 
 	# Processa cada celula da horda (Lider vs Seguidores + Repulsao suave)
 	for key in _spatial_cells:
@@ -130,7 +138,7 @@ func _process_cluster(cluster: Array[CharacterBody3D]) -> void:
 			follower.set("wander_direction", leader_wander_dir)
 			follower.set("wander_time", leader_wander_t)
 
-	_apply_boids_flocking(cluster)
+	_apply_boids_flocking(valid_cluster)
 
 
 ## Aplica os tres principios classicos de Boids de Craig Reynolds:
