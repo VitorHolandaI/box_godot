@@ -13,6 +13,7 @@ static func assemble(building) -> StaticBody3D:
 	var wall_material := _cutout_material(facade_color)
 	var floor_material := _cutout_material(Color(0.27, 0.29, 0.31))
 	var trim_material := _cutout_material(facade_color.darkened(0.45))
+	var ceiling_material := _cutout_material(facade_color.darkened(0.45), true)
 	for floor_blueprint in building.floor_blueprints:
 		var floor_y: float = float(floor_blueprint.floor_index) * building.floor_height
 		_add_floor_slab(body, building, floor_blueprint.floor_index, floor_y, floor_material)
@@ -20,7 +21,7 @@ static func assemble(building) -> StaticBody3D:
 			_draw_unit(body, placement["blueprint"], placement["position"], floor_y + 0.08, wall_material, trim_material)
 	if building.floors > 1:
 		_add_stairs(body, building)
-	_add_box(body, "Roof", Vector3(building.width, 0.18, building.depth), Vector3(building.width * 0.5, building.floors * building.floor_height, building.depth * 0.5), trim_material, true)
+	_add_box(body, "Roof", Vector3(building.width, 0.18, building.depth), Vector3(building.width * 0.5, building.floors * building.floor_height, building.depth * 0.5), ceiling_material, true)
 	if building.archetype == "Shop_A" or building.archetype == "Grocery_A":
 		_add_commercial_front(body, building)
 	return body
@@ -133,7 +134,20 @@ static func _add_stairs(body: StaticBody3D, building) -> void:
 		for step in step_count:
 			var height: float = building.floor_height / float(step_count) * float(step + 1)
 			var z: float = start_z - float(step) * (start_z - end_z) / float(step_count)
-			_add_box(body, "Stair_%d_%d" % [floor_index, step], Vector3(2.0, height, (start_z - end_z) / step_count), Vector3(stair_x, base_y + height * 0.5, z), _material(Color(0.35, 0.35, 0.37)), true)
+			_add_box(body, "Stair_%d_%d" % [floor_index, step], Vector3(2.0, height, (start_z - end_z) / step_count), Vector3(stair_x, base_y + height * 0.5, z), _material(Color(0.35, 0.35, 0.37)), false)
+		_add_stair_ramp(body, floor_index, base_y, stair_x, start_z, end_z, building.floor_height)
+
+
+static func _add_stair_ramp(body: StaticBody3D, floor_index: int, base_y: float, stair_x: float, start_z: float, end_z: float, height: float) -> void:
+	var run := start_z - end_z
+	var ramp := CollisionShape3D.new()
+	ramp.name = "StairRamp_%d" % floor_index
+	var shape := BoxShape3D.new()
+	shape.size = Vector3(2.0, 0.14, run)
+	ramp.shape = shape
+	ramp.position = Vector3(stair_x, base_y + height * 0.5, (start_z + end_z) * 0.5)
+	ramp.rotation.x = atan2(height, run)
+	body.add_child(ramp)
 
 
 static func _add_commercial_front(body: StaticBody3D, building) -> void:
@@ -151,12 +165,14 @@ static func _facade_color(seed: int) -> Color:
 	return palette[absi(seed) % palette.size()]
 
 
-static func _cutout_material(color: Color) -> ShaderMaterial:
+static func _cutout_material(color: Color, ceiling_cutout: bool = false) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = CUTOUT_SHADER
 	material.set_shader_parameter("base_color", color)
 	material.set_shader_parameter("material_roughness", 0.86)
-	material.set_shader_parameter("cutout_radius", 8.5)
+	material.set_shader_parameter("cutout_radius", 0.9)
+	material.set_shader_parameter("floor_height", 2.8)
+	material.set_shader_parameter("ceiling_cutout", ceiling_cutout)
 	return material
 
 

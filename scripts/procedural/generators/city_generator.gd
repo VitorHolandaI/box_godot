@@ -50,8 +50,8 @@ static func _generate_lots(block, block_seed: int) -> void:
 			var lot_seed := block_seed + lot_index * 31
 			var archetype := "house"
 			if block.district == "urban":
-				var urban_variant := absi(block_seed + lot_index) % 6
-				archetype = "store" if urban_variant == 0 else "grocery" if urban_variant == 1 else "apartment"
+				var urban_variant := absi(block_seed + lot_index) % 8
+				archetype = "store" if urban_variant == 0 else "grocery" if urban_variant == 1 else "apartment" if urban_variant == 2 else "house"
 			var lot = LOT_BLUEPRINT.new("%s_Lot_%d" % [block.id, lot_index], lot_seed, block.district, lot_position, LOT_SIZE)
 			if not is_safehouse_lot:
 				lot.building = BUILDING_GENERATOR.generate(lot_seed, archetype)

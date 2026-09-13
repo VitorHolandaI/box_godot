@@ -2,6 +2,9 @@ extends Node
 
 const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload"]
 const SETTINGS_PATH := "user://settings.cfg"
+const MAX_SAVED_SERVERS := 12
+const MIN_SERVER_PORT := 1024
+const MAX_SERVER_PORT := 65535
 const SUPPORTED_RESOLUTIONS: Array[Vector2i] = [
 	Vector2i(800, 600),
 	Vector2i(1280, 720),
@@ -16,6 +19,7 @@ var player_input_configs: Array[Dictionary] = []
 var graphics_resolution := Vector2i(1280, 720)
 var graphics_quality := GraphicsQuality.HIGH
 var graphics_fullscreen := false
+var saved_servers: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -48,6 +52,37 @@ func apply_graphics_settings(resolution: Vector2i, quality: int, fullscreen: boo
 	graphics_fullscreen = fullscreen
 	_apply_window_settings()
 	return _save_graphics_settings()
+
+
+func get_saved_servers() -> Array[Dictionary]:
+	var result: Array[Dictionary] = []
+	for server in saved_servers:
+		result.append(server.duplicate(true))
+	return result
+
+
+func save_server(address: String, port: int, label: String = "") -> Error:
+	var normalized_address := address.strip_edges()
+	if normalized_address.is_empty() or port < MIN_SERVER_PORT or port > MAX_SERVER_PORT:
+		push_error("Servidor invalido '%s:%d'; esperado endereco e porta entre %d e %d." % [normalized_address, port, MIN_SERVER_PORT, MAX_SERVER_PORT])
+		return ERR_INVALID_PARAMETER
+	var entry := {"address": normalized_address, "port": port, "label": label.strip_edges()}
+	for index in saved_servers.size():
+		if saved_servers[index]["address"] == normalized_address and int(saved_servers[index]["port"]) == port:
+			saved_servers[index] = entry
+			return _save_network_settings()
+	saved_servers.push_front(entry)
+	if saved_servers.size() > MAX_SAVED_SERVERS:
+		saved_servers.pop_back()
+	return _save_network_settings()
+
+
+func remove_saved_server(address: String, port: int) -> Error:
+	for index in range(saved_servers.size() - 1, -1, -1):
+		var entry: Dictionary = saved_servers[index]
+		if entry["address"] == address and int(entry["port"]) == port:
+			saved_servers.remove_at(index)
+	return _save_network_settings()
 
 
 func get_msaa_3d() -> int:
@@ -90,17 +125,42 @@ func _load_graphics_settings() -> bool:
 		GraphicsQuality.HIGH
 	) as GraphicsQuality
 	graphics_fullscreen = bool(config.get_value("graphics", "fullscreen", graphics_fullscreen))
+	var configured_servers: Variant = config.get_value("network", "saved_servers", [])
+	if configured_servers is Array:
+		for configured_server in configured_servers:
+			if configured_server is Dictionary:
+				var address := String(configured_server.get("address", "")).strip_edges()
+				var port := int(configured_server.get("port", 0))
+				if not address.is_empty() and port >= MIN_SERVER_PORT and port <= MAX_SERVER_PORT:
+					saved_servers.append({"address": address, "port": port, "label": String(configured_server.get("label", ""))})
 	return true
 
 
 func _save_graphics_settings() -> Error:
 	var config := ConfigFile.new()
+	var load_error := config.load(SETTINGS_PATH)
+	if load_error != OK and load_error != ERR_FILE_NOT_FOUND:
+		push_error("Nao foi possivel atualizar %s: %s." % [SETTINGS_PATH, error_string(load_error)])
+		return load_error
 	config.set_value("graphics", "resolution", graphics_resolution)
 	config.set_value("graphics", "quality", int(graphics_quality))
 	config.set_value("graphics", "fullscreen", graphics_fullscreen)
 	var error := config.save(SETTINGS_PATH)
 	if error != OK:
 		push_error("Nao foi possivel salvar %s: %s." % [SETTINGS_PATH, error_string(error)])
+	return error
+
+
+func _save_network_settings() -> Error:
+	var config := ConfigFile.new()
+	var load_error := config.load(SETTINGS_PATH)
+	if load_error != OK and load_error != ERR_FILE_NOT_FOUND:
+		push_error("Nao foi possivel atualizar %s: %s." % [SETTINGS_PATH, error_string(load_error)])
+		return load_error
+	config.set_value("network", "saved_servers", saved_servers)
+	var error := config.save(SETTINGS_PATH)
+	if error != OK:
+		push_error("Nao foi possivel salvar servidores em %s: %s." % [SETTINGS_PATH, error_string(error)])
 	return error
 
 

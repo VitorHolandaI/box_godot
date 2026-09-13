@@ -51,7 +51,8 @@ static func _create_cutout_material(color: Color, roughness: float) -> ShaderMat
 	mat.shader = CUTOUT_SHADER
 	mat.set_shader_parameter("base_color", color)
 	mat.set_shader_parameter("material_roughness", roughness)
-	mat.set_shader_parameter("cutout_radius", 8.5)
+	mat.set_shader_parameter("cutout_radius", 0.9)
+	mat.set_shader_parameter("floor_height", FLOOR_HEIGHT)
 	return mat
 
 
