@@ -10,6 +10,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `build_exports.sh`: gera clientes release autocontidos para Linux e Windows e seus checksums.
 - `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis com mascara para fogo amigo e exclusao do atirador.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto (sem terra marrom sob predios), veiculos oxidados/queimados e muralhas.
+- `destructible_door.gd`: porta comum com estados aberta/fechada, interacao do jogador e destruicao por ataques de zumbis.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local e navegacao durante a partida.
 - `local_camera.gd`: acompanhamento de um jogador pela camera local.
@@ -29,12 +30,12 @@ Logica de jogo, rede, interface e testes automatizados.
 - `survival_wave_schedule.gd`: define a progressao ate a onda final de 600 zumbis.
 - `safehouse_builder.gd`: gerador procedural da Safehouse fortificada de 2 andares com spawns seguros, porta automatica, escadaria, municao, sacada e iluminacao.
 - `server_ping_probe.gd`: mede RTT usando o ping nativo do ENet na porta do jogo.
-- `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores ou zumbis e replicada aos clientes.
+- `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores, indestrutivel e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
 - `split_screen_manager.gd`: viewports, cameras e HUDs locais com vidas e contador global de zumbis vivos.
 - `test_combat_and_variants.gd`: testes de combate, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
-- `test_survival_mode.gd`: regressoes de ondas, abates, audio real, alvos e skin do ragdoll.
+- `test_survival_mode.gd`: regressoes de ondas, mapa com predominio de casas, portas, abates, audio real, alvos e skin do ragdoll.
 - `test_container.sh`: smoke test do servidor Docker.
 - `test_dedicated.sh`: smoke test do servidor Godot nativo executando testes unitarios e teste com bot.
 - `zombie.gd`: IA de zumbi com ecolocalizacao de tiros com atenuacao por distancia, investigacao em marcha lenta, sentidos, combate, knockback por dano e variantes anatomicas.

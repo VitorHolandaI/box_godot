@@ -5,6 +5,8 @@ const SURVIVAL_WAVE_CONTROLLER_SCRIPT := preload("res://scripts/survival_wave_co
 const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
+const CITY_GENERATOR_SCRIPT := preload("res://scripts/procedural/generators/city_generator.gd")
+const DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
 
 
 func run(test_root: Node) -> void:
@@ -14,6 +16,8 @@ func run(test_root: Node) -> void:
 	_test_audio_streams(test_root)
 	_test_ragdoll_appearance(test_root)
 	_test_nearest_target_and_melee(test_root)
+	_test_survival_city_layout(test_root)
+	_test_building_door_states(test_root)
 
 
 func _test_wave_schedule(test_root: Node) -> void:
@@ -94,6 +98,8 @@ func _test_nearest_target_and_melee(test_root: Node) -> void:
 	test_root.add_child(far_player)
 	test_root.add_child(near_player)
 	zombie.position = Vector3.ZERO
+	zombie.gravity = 0.0
+	zombie.collision_mask = 0
 	far_player.position = Vector3(0.0, 1.0, 8.0)
 	near_player.position = Vector3(0.0, 1.0, 3.0)
 	zombie.call("_update_senses", 0.25)
@@ -114,10 +120,73 @@ func _test_nearest_target_and_melee(test_root: Node) -> void:
 		far_player.free()
 		near_player.free()
 		return
+	var upper_floor_health: int = near_player.health
+	near_player.position = Vector3(0.0, 3.8, 0.8)
+	zombie.set("alert_target", near_player)
+	zombie.set("sense_check_cooldown", 1.0)
+	zombie.set("attack_cooldown", 0.0)
+	zombie.call("_physics_process", 0.01)
+	if near_player.health != upper_floor_health:
+		_fail(test_root, "Zumbi nao deveria atingir jogador em outro andar fora do alcance vertical: vida=%d/%d, zumbi_y=%.2f, jogador_y=%.2f." % [near_player.health, upper_floor_health, zombie.global_position.y, near_player.global_position.y])
+		zombie.free()
+		far_player.free()
+		near_player.free()
+		return
+	print("PASS: Alcance melee respeita a separacao entre andares.")
 	zombie.free()
 	far_player.free()
 	near_player.free()
 	print("PASS: Alvo estavel e ataque oportunista validados.")
+
+
+func _test_survival_city_layout(test_root: Node) -> void:
+	print("Testando proporcao de casas, predios altos e escadas do mapa...")
+	var city = CITY_GENERATOR_SCRIPT.generate_world(240912, true)
+	var house_count := 0
+	var tall_building_count := 0
+	for block in city.blocks:
+		for lot in block.lots:
+			if lot.building == null:
+				continue
+			if lot.building.archetype.begins_with("House"):
+				house_count += 1
+				if lot.building.floors != 1:
+					_fail(test_root, "Casa de sobrevivencia deveria ter apenas um piso.")
+			elif lot.building.archetype.begins_with("ApartmentBuilding"):
+				tall_building_count += 1
+				if lot.building.floors < 2:
+					_fail(test_root, "Predio alto deveria possuir ao menos dois pisos.")
+	if house_count <= 20 or tall_building_count > 3:
+		_fail(test_root, "Mapa deveria priorizar casas e limitar predios altos: casas=%d, altos=%d." % [house_count, tall_building_count])
+		return
+	print("PASS: Mapa prioriza casas e limita predios altos com escadas coerentes.")
+
+
+func _test_building_door_states(test_root: Node) -> void:
+	print("Testando estados aberto/fechado e resistencia das portas...")
+	var door = DOOR_SCRIPT.new()
+	door.configure(Vector3(1.4, 2.6, 0.12), null)
+	if door.is_open:
+		_fail(test_root, "Porta comum deveria iniciar fechada.")
+		return
+	door.interact()
+	if not door.is_open:
+		_fail(test_root, "Interacao deveria abrir a porta comum.")
+		return
+	door.interact()
+	if door.is_open:
+		_fail(test_root, "Segunda interacao deveria fechar a porta comum.")
+		return
+	door.take_damage(door.max_health)
+	if not door.is_open or not door.is_destroyed:
+		_fail(test_root, "Dano de zumbi deveria destruir e abrir a porta comum.")
+		return
+	door.interact()
+	if not door.is_open:
+		_fail(test_root, "Porta destruida deveria permanecer aberta.")
+		return
+	door.free()
+	print("PASS: Estados e resistencia das portas validados.")
 
 
 func _fail(test_root: Node, message: String) -> void:
