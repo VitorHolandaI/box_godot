@@ -43,6 +43,14 @@ static func apply_appearance(zombie: CharacterBody3D, z_type: int, hash_val: int
 	_apply_anatomy(zombie, z_type)
 
 
+static func appearance_colors(hash_val: int) -> Array[Color]:
+	return [
+		SKIN_PALETTE[(hash_val / 5) % SKIN_PALETTE.size()],
+		SHIRT_PALETTE[(hash_val / 20) % SHIRT_PALETTE.size()],
+		PANTS_PALETTE[(hash_val / 80) % PANTS_PALETTE.size()],
+	]
+
+
 static func _apply_materials(zombie: CharacterBody3D, hash_val: int) -> void:
 	var skin_mat := _quick_mat(SKIN_PALETTE[(hash_val / 5) % SKIN_PALETTE.size()], 0.9)
 	var shirt_mat := _quick_mat(SHIRT_PALETTE[(hash_val / 20) % SHIRT_PALETTE.size()], 0.95)

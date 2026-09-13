@@ -105,6 +105,10 @@ func _test_procedural_city_seed(test_root: Node) -> void:
 		_fail(test_root, "Predios procedurais deveriam usar o shader da aura de visibilidade.")
 		visual_root.free()
 		return
+	if not apartment_node.has_node("Stair_0_0") or not apartment_node.has_node("Stair_1_0") or not apartment_node.has_node("Floor_1_Left"):
+		_fail(test_root, "Predio de varios andares deveria possuir escadas por transicao e vao de laje.")
+		visual_root.free()
+		return
 	visual_root.free()
 	print("PASS: Cidade procedural deterministica e interiores conectados validados.")
 

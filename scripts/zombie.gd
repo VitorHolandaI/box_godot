@@ -1,5 +1,7 @@
 extends CharacterBody3D
 
+signal died(killer: Node)
+
 const FlockCoordinatorClass = preload("res://scripts/zombie_flock_coordinator.gd")
 const HIT_REACTION_DURATION := 0.24
 const ATTACK_ANIMATION_DURATION := 0.5
@@ -10,6 +12,9 @@ const ALERT_RADIUS := 16.0
 const ALERT_FORGET_TIME := 6.0
 const SENSE_CHECK_INTERVAL := 0.25
 const WANDER_SPEED_FACTOR := 0.4
+const TARGET_SWITCH_COOLDOWN := 1.0
+const TARGET_SWITCH_DISTANCE_MARGIN := 2.0
+const MELEE_RANGE := 1.25
 
 @export var speed := 2.2
 @export var gravity := 22.0
@@ -44,6 +49,7 @@ enum LodLevel {
 
 var health := 100
 var zombie_type := ZombieType.WALKER
+var appearance_hash := 0
 var lod_level: LodLevel = LodLevel.NEAR
 var is_cluster_leader := true
 var horde_id := -1
@@ -51,6 +57,7 @@ var flock_separation_vector := Vector3.ZERO
 var lod_tick_skip_counter := 0
 var alert_target: CharacterBody3D = null
 var alert_forget_timer := 0.0
+var target_switch_cooldown := 0.0
 var sense_check_cooldown := 0.0
 var wander_direction := Vector3.ZERO
 var wander_time := 0.0
@@ -70,6 +77,7 @@ var network_target_rotation := 0.0
 var sound_investigate_position := Vector3.ZERO
 var sound_investigate_timer := 0.0
 var is_investigating_sound := false
+var groan_audio_cooldown := 2.0
 
 
 func _ready() -> void:
@@ -97,6 +105,7 @@ func _physics_process(delta: float) -> void:
 		hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
 		if not is_dead:
 			_animate_pose(delta, previous_position.distance_squared_to(global_position) > 0.0001)
+			_update_groan_audio(delta)
 		return
 	if is_dead:
 		return
@@ -109,6 +118,7 @@ func _physics_process(delta: float) -> void:
 			return
 
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
+	target_switch_cooldown = maxf(target_switch_cooldown - delta, 0.0)
 	attack_animation_time = maxf(attack_animation_time - delta, 0.0)
 	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
 	if not is_on_floor():
@@ -117,9 +127,12 @@ func _physics_process(delta: float) -> void:
 	_update_senses(delta)
 	var target := alert_target
 	var is_walking := false
+	var melee_target := _find_nearest_melee_player() if attack_cooldown <= 0.0 else null
 	if hit_reaction_time > 0.0:
 		velocity.x = move_toward(velocity.x, hit_direction.x * 3.5, 18.0 * delta)
 		velocity.z = move_toward(velocity.z, hit_direction.z * 3.5, 18.0 * delta)
+	elif melee_target != null:
+		_perform_melee_attack(melee_target)
 	elif is_instance_valid(target):
 		var offset := target.global_position - global_position
 		offset.y = 0.0
@@ -175,6 +188,7 @@ func _physics_process(delta: float) -> void:
 
 	move_and_slide()
 	_animate_pose(delta, is_walking and is_on_floor())
+	_update_groan_audio(delta)
 
 
 func _update_senses(delta: float) -> void:
@@ -184,15 +198,16 @@ func _update_senses(delta: float) -> void:
 	if sense_check_cooldown > 0.0:
 		return
 	sense_check_cooldown = SENSE_CHECK_INTERVAL
-	var detected := _find_visible_player()
-	if detected == null:
-		detected = _find_heard_player()
-	if detected == null:
-		detected = _find_smelled_player()
-	if detected != null:
+	if not _is_living_player(alert_target):
+		alert_target = null
+	var detected := _find_nearest_detectable_player()
+	if detected == alert_target:
+		alert_forget_timer = ALERT_FORGET_TIME
+	elif detected != null and _should_switch_target(detected):
 		if alert_target == null:
 			_alert_nearby_zombies(detected)
 		alert_target = detected
+		target_switch_cooldown = TARGET_SWITCH_COOLDOWN
 		alert_forget_timer = ALERT_FORGET_TIME
 	elif alert_target != null:
 		alert_forget_timer -= SENSE_CHECK_INTERVAL
@@ -217,6 +232,71 @@ func _find_visible_player() -> CharacterBody3D:
 			continue
 		return player
 	return null
+
+
+func _find_nearest_detectable_player() -> CharacterBody3D:
+	var nearest: CharacterBody3D = null
+	var nearest_distance := INF
+	for player_node in get_tree().get_nodes_in_group("player"):
+		var player := player_node as CharacterBody3D
+		if not _is_living_player(player) or not _can_detect_player(player):
+			continue
+		var distance := global_position.distance_to(player.global_position)
+		if distance < nearest_distance:
+			nearest = player
+			nearest_distance = distance
+	return nearest
+
+
+func _can_detect_player(player: CharacterBody3D) -> bool:
+	var distance := global_position.distance_to(player.global_position)
+	if distance <= SMELL_RANGE:
+		return true
+	var noise_radius := float(player.get("noise_radius"))
+	if noise_radius > 0.0 and distance <= noise_radius:
+		return true
+	var offset := player.global_position - global_position
+	offset.y = 0.0
+	if offset.length() > VISION_RANGE:
+		return false
+	var forward := -global_transform.basis.z
+	return forward.angle_to(offset.normalized()) <= VISION_HALF_ANGLE and _has_line_of_sight(player)
+
+
+func _is_living_player(player: CharacterBody3D) -> bool:
+	return player != null and is_instance_valid(player) and not player.is_queued_for_deletion() and int(player.get("health")) > 0 and not bool(player.get("is_eliminated"))
+
+
+func _should_switch_target(candidate: CharacterBody3D) -> bool:
+	if candidate == null or candidate == alert_target:
+		return false
+	if not _is_living_player(alert_target):
+		return true
+	if target_switch_cooldown > 0.0:
+		return false
+	return global_position.distance_to(candidate.global_position) + TARGET_SWITCH_DISTANCE_MARGIN <= global_position.distance_to(alert_target.global_position)
+
+
+func _find_nearest_melee_player() -> CharacterBody3D:
+	var nearest: CharacterBody3D = null
+	var nearest_distance := MELEE_RANGE
+	for player_node in get_tree().get_nodes_in_group("player"):
+		var player := player_node as CharacterBody3D
+		if not _is_living_player(player):
+			continue
+		var distance := global_position.distance_to(player.global_position)
+		if distance <= nearest_distance:
+			nearest = player
+			nearest_distance = distance
+	return nearest
+
+
+func _perform_melee_attack(target: CharacterBody3D) -> void:
+	var offset := target.global_position - global_position
+	target.take_damage(attack_damage, offset.normalized(), "melee")
+	attack_cooldown = 0.9
+	attack_animation_time = ATTACK_ANIMATION_DURATION
+	attack_sequence += 1
 
 
 func _find_heard_player() -> CharacterBody3D:
@@ -287,7 +367,7 @@ func _update_wander(delta: float) -> void:
 ## Applies incoming damage, triggers flinch reaction, and alerts the zombie to attacker.
 ## Usage:
 ##   zombie.take_damage(35, Vector3.FORWARD, "bullet")
-func take_damage(amount: int, attack_direction: Vector3, damage_kind: String) -> void:
+func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "bullet", source: Node = null) -> void:
 	if is_dead or not simulation_enabled:
 		return
 
@@ -298,7 +378,7 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String) ->
 	hit_reaction_time = HIT_REACTION_DURATION
 	velocity += hit_direction * (4.2 if damage_kind == "bullet" else 3.2) + Vector3.UP * 1.0
 	if health == 0:
-		_die()
+		_die(source)
 		return
 	if alert_target == null:
 		var attacker := _find_closest_living_player()
@@ -346,7 +426,7 @@ func hear_gunshot(origin: Vector3, max_radius: float = 65.0) -> void:
 	is_investigating_sound = true
 
 
-func _die() -> void:
+func _die(killer: Node = null) -> void:
 	is_dead = true
 	death_velocity = velocity
 	velocity = Vector3.ZERO
@@ -354,6 +434,9 @@ func _die() -> void:
 	health_label.visible = false
 	collision_shape.set_deferred("disabled", true)
 	model.visible = false
+	if killer != null and killer.has_method("register_zombie_kill"):
+		killer.register_zombie_kill()
+	died.emit(killer)
 	var scene := get_tree().current_scene
 	if scene.has_method("register_corpse"):
 		scene.register_corpse(self)
@@ -364,13 +447,29 @@ func _die() -> void:
 func _spawn_ragdoll() -> void:
 	var scene := get_tree().current_scene
 	if scene.has_method("spawn_zombie_ragdoll"):
-		scene.spawn_zombie_ragdoll(global_position, rotation.y, death_velocity, int(zombie_type))
+		scene.spawn_zombie_ragdoll(global_position, rotation.y, death_velocity, int(zombie_type), appearance_hash)
 
 
 func _configure_variant() -> void:
-	var hash_val := absi(name.hash())
-	zombie_type = (hash_val % 9) as ZombieType
-	ZombieMutator.apply_appearance(self, int(zombie_type), hash_val)
+	appearance_hash = absi(name.hash())
+	zombie_type = (appearance_hash % 9) as ZombieType
+	ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
+
+
+func _update_groan_audio(delta: float) -> void:
+	groan_audio_cooldown = maxf(groan_audio_cooldown - delta, 0.0)
+	if groan_audio_cooldown > 0.0 or not _has_nearby_player(18.0):
+		return
+	AudioFeedback.play_zombie_groan(global_position)
+	groan_audio_cooldown = randf_range(3.0, 7.0)
+
+
+func _has_nearby_player(max_distance: float) -> bool:
+	for player_node in get_tree().get_nodes_in_group("player"):
+		var player := player_node as Node3D
+		if player != null and global_position.distance_to(player.global_position) <= max_distance:
+			return true
+	return false
 
 
 func _animate_pose(delta: float, is_walking: bool) -> void:
@@ -409,6 +508,7 @@ func get_network_state() -> Dictionary:
 		"attack_animation_time": attack_animation_time,
 		"attack_sequence": attack_sequence,
 		"zombie_type": int(zombie_type),
+		"appearance_hash": appearance_hash,
 	}
 
 
@@ -421,9 +521,10 @@ func apply_network_state(state: Dictionary) -> void:
 	health_label.text = "%d/%d" % [health, max_health]
 	if state.has("zombie_type"):
 		var net_type := int(state.get("zombie_type"))
+		appearance_hash = int(state.get("appearance_hash", appearance_hash))
 		if net_type != int(zombie_type):
 			zombie_type = net_type as ZombieType
-			ZombieMutator.apply_appearance(self, int(zombie_type), absi(name.hash()))
+			ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
 	var received_attack_sequence := int(state.get("attack_sequence", last_applied_attack_sequence))
 	if last_applied_attack_sequence < 0:
 		last_applied_attack_sequence = received_attack_sequence
