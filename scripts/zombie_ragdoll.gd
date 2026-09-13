@@ -16,7 +16,7 @@ func _ready() -> void:
 	var left_leg := _create_limb("LeftLeg", Vector3(0.34, 0.84, 0.36), Vector3(-0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
 	var right_leg := _create_limb("RightLeg", Vector3(0.34, 0.84, 0.36), Vector3(0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
 
-	_create_joint("NeckJoint", NodePath("../Torso"), NodePath("../Head"), Vector3(0.0, 0.86, 0.0))
+	_create_neck_joint()
 	_create_joint("LeftShoulderJoint", NodePath("../Torso"), NodePath("../LeftArm"), Vector3(-0.56, 0.84, 0.0))
 	_create_joint("RightShoulderJoint", NodePath("../Torso"), NodePath("../RightArm"), Vector3(0.56, 0.84, 0.0))
 	_create_joint("LeftHipJoint", NodePath("../Torso"), NodePath("../LeftLeg"), Vector3(-0.2, 0.02, 0.0))
@@ -148,6 +148,21 @@ func _add_eye(parent_body: RigidBody3D, eye_position: Vector3) -> void:
 	mesh_instance.mesh = mesh
 	mesh_instance.position = eye_position
 	parent_body.add_child(mesh_instance)
+
+
+func _create_neck_joint() -> void:
+	var joint := ConeTwistJoint3D.new()
+	joint.name = "NeckJoint"
+	joint.node_a = NodePath("../Torso")
+	joint.node_b = NodePath("../Head")
+	joint.position = Vector3(0.0, 0.86, 0.0)
+	joint.rotation.z = PI * 0.5
+	joint.swing_span = deg_to_rad(28.0)
+	joint.twist_span = deg_to_rad(35.0)
+	joint.softness = 0.6
+	joint.relaxation = 1.2
+	joint.exclude_nodes_from_collision = true
+	add_child(joint)
 
 
 func _create_joint(joint_name: String, path_a: NodePath, path_b: NodePath, anchor: Vector3) -> void:

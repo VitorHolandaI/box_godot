@@ -251,7 +251,11 @@ func _start_game() -> void:
 
 	start_button.disabled = true
 	message.text = "Conectando ao servidor..."
-	var error: Error = NetworkSession.join_server(server_address.text.strip_edges(), player_configs.size())
+	var error: Error = NetworkSession.join_server(
+		server_address.text.strip_edges(),
+		player_configs.size(),
+		NetworkSession.server_port
+	)
 	if error != OK:
 		start_button.disabled = false
 		message.text = "Endereco invalido ou falha ao iniciar conexao: %s" % error_string(error)

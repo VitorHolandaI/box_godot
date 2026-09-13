@@ -18,7 +18,7 @@ trap cleanup EXIT
 # Executa suite de testes unitarios de combate, fogo amigo e variantes anatomicas
 godot --headless --path "$project_dir" -- --unit-test
 
-godot --headless --path "$project_dir" -- --server "--server-port=$port" >"$server_log" 2>&1 &
+godot --headless --path "$project_dir" -- --server "--server-port=$port" --smoke-test-zombie >"$server_log" 2>&1 &
 server_pid=$!
 sleep 1
 
