@@ -17,7 +17,7 @@ static func generate(building_seed: int, archetype: String):
 
 
 static func _generate_house(building_seed: int, rng: RandomNumberGenerator):
-	var floors := 1 + int(rng.randi() % 2)
+	var floors := 1
 	var house_variant := String.chr(65 + rng.randi_range(0, 2))
 	var building = BUILDING_BLUEPRINT.new("House_%s" % house_variant, building_seed, 10.0, 8.0, floors)
 	for floor_index in floors:

@@ -72,6 +72,7 @@ var attack_pressed := false
 var knife_pressed := false
 var pistol_pressed := false
 var reload_pressed := false
+var interact_pressed := false
 var network_target_position := Vector3.ZERO
 var network_target_rotation := 0.0
 var remote_buttons: Dictionary = {}
@@ -123,6 +124,7 @@ func _physics_process(delta: float) -> void:
 		if remote_input_age > 0.3:
 			move_input = Vector2.ZERO
 			aim_input = Vector2.ZERO
+	_handle_interaction_input()
 	_handle_weapon_input()
 
 	if not is_on_floor():
@@ -160,6 +162,7 @@ func get_local_input_state() -> Dictionary:
 		"knife": Input.is_action_pressed(input_action_prefix + "knife"),
 		"pistol": Input.is_action_pressed(input_action_prefix + "pistol"),
 		"reload": Input.is_action_pressed(input_action_prefix + "reload"),
+		"interact": Input.is_action_pressed(input_action_prefix + "interact"),
 		"aim": aim_input,
 	}
 
@@ -175,6 +178,7 @@ func apply_network_input(state: Dictionary) -> void:
 	knife_pressed = _network_button_just_pressed("knife", bool(state.get("knife", false)))
 	pistol_pressed = _network_button_just_pressed("pistol", bool(state.get("pistol", false)))
 	reload_pressed = _network_button_just_pressed("reload", bool(state.get("reload", false)))
+	interact_pressed = _network_button_just_pressed("interact", bool(state.get("interact", false)))
 	remote_input_age = 0.0
 
 
@@ -247,6 +251,21 @@ func _handle_weapon_input() -> void:
 			_attack_with_knife()
 		else:
 			_fire_pistol()
+
+
+func _handle_interaction_input() -> void:
+	if not interact_pressed:
+		return
+	var ray_start := head.global_position
+	var ray_end := ray_start - global_transform.basis.z * 2.5
+	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [self])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var collider: Node = hit.get("collider")
+	while collider != null:
+		if collider.has_method("interact"):
+			collider.interact()
+			return
+		collider = collider.get_parent()
 
 
 func _attack_with_knife() -> void:
@@ -442,6 +461,7 @@ func _poll_input() -> void:
 	knife_pressed = Input.is_action_just_pressed(input_action_prefix + "knife")
 	pistol_pressed = Input.is_action_just_pressed(input_action_prefix + "pistol")
 	reload_pressed = Input.is_action_just_pressed(input_action_prefix + "reload")
+	interact_pressed = Input.is_action_just_pressed(input_action_prefix + "interact")
 
 
 func _network_button_just_pressed(action: String, pressed: bool) -> bool:
@@ -456,6 +476,7 @@ func _clear_transient_input() -> void:
 	knife_pressed = false
 	pistol_pressed = false
 	reload_pressed = false
+	interact_pressed = false
 
 
 ## Define o indice de cor do uniforme do jogador.
