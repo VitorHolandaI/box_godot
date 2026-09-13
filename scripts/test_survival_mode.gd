@@ -10,6 +10,7 @@ const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 func run(test_root: Node) -> void:
 	_test_wave_schedule(test_root)
 	_test_wave_controller(test_root)
+	_test_survival_hud(test_root)
 	_test_audio_streams(test_root)
 	_test_ragdoll_appearance(test_root)
 	_test_nearest_target_and_melee(test_root)
@@ -46,6 +47,18 @@ func _test_wave_controller(test_root: Node) -> void:
 		_fail(test_root, "Controle deveria avançar para a segunda onda apos limpar a primeira.")
 		return
 	print("PASS: Controle de ondas e abates validado.")
+
+
+func _test_survival_hud(test_root: Node) -> void:
+	print("Testando contador de horas e objetivo da sobrevivencia...")
+	var controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(func() -> bool:
+		return true
+	)
+	var hud_text := controller.get_hud_text()
+	if not hud_text.contains("Hora 1/31") or not hud_text.contains("Onda 1/31"):
+		_fail(test_root, "HUD de sobrevivencia deveria mostrar a hora e a onda atuais.")
+		return
+	print("PASS: Contador de horas e objetivo de sobrevivencia validados.")
 
 
 func _test_audio_streams(test_root: Node) -> void:

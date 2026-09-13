@@ -16,6 +16,7 @@ const PING_INTERVAL := 1.0
 const DEFAULT_WORLD_SEED := 240912
 const DISCOVERY_PROTOCOL := "box_godot_server_discovery_v1"
 const DISCOVERY_BROADCAST_ADDRESS := "255.255.255.255"
+const SERVER_PING_PROBE_SCRIPT := preload("res://scripts/server_ping_probe.gd")
 
 enum Mode { OFFLINE, SERVER, CLIENT }
 
@@ -304,7 +305,6 @@ func _send_discovery_request(address: String, game_port: int) -> void:
 	var request := JSON.stringify({
 		"protocol": DISCOVERY_PROTOCOL,
 		"kind": "discover",
-		"sent_usec": Time.get_ticks_usec(),
 	})
 	var send_error := _discovery_socket.put_packet(request.to_utf8_buffer())
 	if send_error != OK:
@@ -329,7 +329,6 @@ func _respond_to_discovery(request: Dictionary) -> void:
 	var response := {
 		"protocol": DISCOVERY_PROTOCOL,
 		"kind": "status",
-		"request_usec": int(request.get("sent_usec", 0)),
 		"name": server_name,
 		"port": server_port,
 		"mission": _server_mission_name(),
@@ -350,6 +349,7 @@ func _register_discovered_server(payload: Dictionary, source_address: String) ->
 	if source_address.is_empty() or port < GameConfig.MIN_SERVER_PORT or port > GameConfig.MAX_SERVER_PORT:
 		return
 	var key := "%s:%d" % [source_address, port]
+	var ping_ms := SERVER_PING_PROBE_SCRIPT.new().measure(source_address, port)
 	var entry := {
 		"key": key,
 		"address": source_address,
@@ -358,7 +358,7 @@ func _register_discovered_server(payload: Dictionary, source_address: String) ->
 		"mission": String(payload.get("mission", "Desconhecida")),
 		"active_players": clampi(int(payload.get("active_players", 0)), 0, MAX_PLAYERS),
 		"max_players": MAX_PLAYERS,
-		"ping_ms": maxi(roundi(float(Time.get_ticks_usec() - int(payload.get("request_usec", 0))) / 1000.0), 0),
+		"ping_ms": ping_ms,
 		"online": true,
 	}
 	for index in discovered_servers.size():
