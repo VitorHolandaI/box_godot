@@ -34,7 +34,7 @@ func _physics_process(delta: float) -> void:
 			lifetime -= delta
 			return
 		if causes_damage and collider.has_method("take_damage"):
-			collider.take_damage(damage, direction, "bullet")
+			collider.take_damage(damage, direction, "bullet", shooter)
 		queue_free()
 		return
 

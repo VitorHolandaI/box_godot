@@ -26,7 +26,8 @@ func _ready() -> void:
 ## Sets initial velocity and angular momentum to make the corpse fall realistically.
 ## Usage:
 ##   ragdoll.setup(Vector3(0.0, 1.0, -2.5), 0)
-func setup(initial_velocity: Vector3, z_type: int = 0) -> void:
+func setup(initial_velocity: Vector3, z_type: int = 0, appearance_hash: int = 0) -> void:
+	_apply_appearance_colors(appearance_hash)
 	match z_type:
 		1: # ONE_ARM
 			_remove_limb_and_joint("LeftArm", "LeftShoulderJoint")
@@ -68,6 +69,28 @@ func setup(initial_velocity: Vector3, z_type: int = 0) -> void:
 			randf_range(0.3, 0.8),
 			randf_range(-0.25, 0.25)
 		)
+
+
+func _apply_appearance_colors(appearance_hash: int) -> void:
+	var colors := ZombieMutator.appearance_colors(appearance_hash)
+	_set_body_color(torso_body, colors[1])
+	_set_body_color(get_node_or_null("Head") as RigidBody3D, colors[0])
+	_set_body_color(get_node_or_null("LeftArm") as RigidBody3D, colors[0])
+	_set_body_color(get_node_or_null("RightArm") as RigidBody3D, colors[0])
+	_set_body_color(get_node_or_null("LeftLeg") as RigidBody3D, colors[2])
+	_set_body_color(get_node_or_null("RightLeg") as RigidBody3D, colors[2])
+
+
+func _set_body_color(body: RigidBody3D, color: Color) -> void:
+	if body == null:
+		return
+	var mesh := body.get_node_or_null("Mesh") as MeshInstance3D
+	if mesh == null:
+		return
+	var material := mesh.mesh.material as StandardMaterial3D
+	if material == null:
+		return
+	material.albedo_color = color
 
 
 func _remove_limb_and_joint(limb_name: String, joint_name: String) -> void:
