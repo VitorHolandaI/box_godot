@@ -2,14 +2,17 @@ class_name ZombieFlockCoordinator
 extends Node
 
 ## Coordenador de enxame/horda inspirado na arquitetura de Days Gone.
-## Agrupa zumbis em celulas espaciais, elege lideres (ponta de lanca),
-## sincroniza alvos e aplica LOD de processamento sensorial e separacao suave.
+## Agrupa celulas vizinhas em hordas persistentes, mantem um unico cerebro,
+## sincroniza os drones e aplica LOD e separacao suave.
 
 const CELL_SIZE := 16.0
+const SEPARATION_CELL_SIZE := 2.0
+const MAX_SEPARATION_NEIGHBORS := 24
+const HORDE_LINK_RADIUS_SQ := 12.0 * 12.0
 const LOD_NEAR_DIST_SQ := 484.0 # 22.0 * 22.0
 const LOD_MID_DIST_SQ := 2500.0 # 50.0 * 50.0
 const PLAYER_SCAN_INTERVAL := 0.25
-const FLOCK_UPDATE_INTERVAL := 0.1
+const FLOCK_UPDATE_INTERVAL := 0.2
 
 static var instance: ZombieFlockCoordinator = null
 
@@ -17,10 +20,14 @@ var _spatial_cells: Dictionary = {}
 var _cached_players: Array[CharacterBody3D] = []
 var _player_scan_timer := 0.0
 var _flock_update_elapsed := 0.0
+var _horde_members: Dictionary = {}
+var _next_horde_id := 1
+var _random_source := RandomNumberGenerator.new()
 
 
 func _enter_tree() -> void:
 	instance = self
+	_random_source.randomize()
 
 
 func _exit_tree() -> void:
@@ -74,10 +81,47 @@ func _update_flock_clusters() -> void:
 		var list_ref: Array[CharacterBody3D] = _spatial_cells[key]
 		list_ref.append(z)
 
-	# Processa cada celula da horda (Lider vs Seguidores + Repulsao suave)
-	for key in _spatial_cells:
-		var cluster: Array[CharacterBody3D] = _spatial_cells[key]
-		_process_cluster(cluster)
+	_horde_members.clear()
+	_process_connected_hordes()
+
+
+func _process_connected_hordes() -> void:
+	var visited_cells: Dictionary = {}
+	for key_value in _spatial_cells:
+		var start_cell: Vector2i = key_value
+		if visited_cells.has(start_cell):
+			continue
+		var pending_cells: Array[Vector2i] = [start_cell]
+		var horde: Array[CharacterBody3D] = []
+		while not pending_cells.is_empty():
+			var current_cell: Vector2i = pending_cells.pop_back()
+			if visited_cells.has(current_cell):
+				continue
+			visited_cells[current_cell] = true
+			var cell_members: Array[CharacterBody3D] = _spatial_cells[current_cell]
+			horde.append_array(cell_members)
+			for offset_x in range(-1, 2):
+				for offset_z in range(-1, 2):
+					var neighbor := current_cell + Vector2i(offset_x, offset_z)
+					if visited_cells.has(neighbor) or not _spatial_cells.has(neighbor):
+						continue
+					if _cells_are_linked(current_cell, neighbor):
+						pending_cells.append(neighbor)
+		_process_cluster(horde)
+
+
+func _cells_are_linked(first_cell: Vector2i, second_cell: Vector2i) -> bool:
+	var first_members: Array[CharacterBody3D] = _spatial_cells[first_cell]
+	var second_members: Array[CharacterBody3D] = _spatial_cells[second_cell]
+	for first in first_members:
+		if not is_instance_valid(first) or bool(first.get("is_dead")):
+			continue
+		for second in second_members:
+			if not is_instance_valid(second) or bool(second.get("is_dead")):
+				continue
+			if first.global_position.distance_squared_to(second.global_position) <= HORDE_LINK_RADIUS_SQ:
+				return true
+	return false
 
 
 func _apply_distance_lod(zombie: CharacterBody3D) -> void:
@@ -111,8 +155,24 @@ func _process_cluster(cluster: Array[CharacterBody3D]) -> void:
 	if valid_cluster.is_empty():
 		return
 
-	var leader: CharacterBody3D = valid_cluster[0]
-	leader.set("is_cluster_leader", true)
+	var previous_leaders: Array[CharacterBody3D] = []
+	for zombie in valid_cluster:
+		if bool(zombie.get("is_cluster_leader")) and int(zombie.get("horde_id")) > 0:
+			previous_leaders.append(zombie)
+	var leader: CharacterBody3D
+	var assigned_horde_id := -1
+	if previous_leaders.is_empty():
+		leader = valid_cluster[_random_source.randi_range(0, valid_cluster.size() - 1)]
+	else:
+		leader = previous_leaders[_random_source.randi_range(0, previous_leaders.size() - 1)]
+		assigned_horde_id = int(leader.get("horde_id"))
+	if assigned_horde_id <= 0:
+		assigned_horde_id = _next_horde_id
+		_next_horde_id += 1
+	for zombie in valid_cluster:
+		zombie.set("horde_id", assigned_horde_id)
+		zombie.set("is_cluster_leader", zombie == leader)
+	_horde_members[assigned_horde_id] = valid_cluster
 
 	var raw_target: Variant = leader.get("alert_target")
 	var leader_target: CharacterBody3D = raw_target if (is_instance_valid(raw_target) and raw_target is CharacterBody3D) else null
@@ -124,9 +184,9 @@ func _process_cluster(cluster: Array[CharacterBody3D]) -> void:
 	var leader_wander_dir: Vector3 = leader.get("wander_direction") as Vector3
 	var leader_wander_t: float = float(leader.get("wander_time"))
 
-	for i in range(1, valid_cluster.size()):
-		var follower: CharacterBody3D = valid_cluster[i]
-		follower.set("is_cluster_leader", false)
+	for follower in valid_cluster:
+		if follower == leader:
+			continue
 		if has_alert and is_instance_valid(leader_target):
 			follower.set("alert_target", leader_target)
 			follower.set("alert_forget_timer", leader_forget)
@@ -134,7 +194,10 @@ func _process_cluster(cluster: Array[CharacterBody3D]) -> void:
 			follower.set("sound_investigate_position", leader_sound)
 			follower.set("sound_investigate_timer", leader_sound_timer)
 			follower.set("is_investigating_sound", true)
-		elif follower.get("alert_target") == null:
+		else:
+			follower.set("alert_target", null)
+			follower.set("alert_forget_timer", 0.0)
+			follower.set("is_investigating_sound", false)
 			follower.set("wander_direction", leader_wander_dir)
 			follower.set("wander_time", leader_wander_t)
 
@@ -164,6 +227,17 @@ func _apply_boids_flocking(cluster: Array[CharacterBody3D]) -> void:
 		center_of_mass /= active_count
 		avg_velocity /= active_count
 
+	var separation_cells: Dictionary = {}
+	for z in cluster:
+		if z == null or z.is_queued_for_deletion() or bool(z.get("is_dead")):
+			continue
+		var separation_key := _get_separation_cell(z.global_position)
+		if not separation_cells.has(separation_key):
+			var members: Array[CharacterBody3D] = []
+			separation_cells[separation_key] = members
+		var members_ref: Array[CharacterBody3D] = separation_cells[separation_key]
+		members_ref.append(z)
+
 	for a in cluster:
 		if a == null or a.is_queued_for_deletion() or bool(a.get("is_dead")):
 			continue
@@ -172,15 +246,30 @@ func _apply_boids_flocking(cluster: Array[CharacterBody3D]) -> void:
 
 		# 1. Separacao (Repulsao por distancia)
 		var separation := Vector3.ZERO
-		for b in cluster:
-			if a == b or b == null or b.is_queued_for_deletion() or bool(b.get("is_dead")):
-				continue
-			var diff := a_pos - b.global_position
-			diff.y = 0.0
-			var dist_sq := diff.length_squared()
-			if dist_sq > 0.0001 and dist_sq < 2.56: # Raio de 1.6m
-				var dist := sqrt(dist_sq)
-				separation += (diff / dist) * (1.6 - dist)
+		var neighbor_count := 0
+		var separation_cell := _get_separation_cell(a_pos)
+		for offset_x in range(-1, 2):
+			for offset_z in range(-1, 2):
+				var neighbor_key := separation_cell + Vector2i(offset_x, offset_z)
+				if not separation_cells.has(neighbor_key):
+					continue
+				var neighbors: Array[CharacterBody3D] = separation_cells[neighbor_key]
+				for b in neighbors:
+					if a == b or b == null or b.is_queued_for_deletion() or bool(b.get("is_dead")):
+						continue
+					var diff := a_pos - b.global_position
+					diff.y = 0.0
+					var dist_sq := diff.length_squared()
+					if dist_sq > 0.0001 and dist_sq < 2.56: # Raio de 1.6m
+						var dist := sqrt(dist_sq)
+						separation += (diff / dist) * (1.6 - dist)
+					neighbor_count += 1
+					if neighbor_count >= MAX_SEPARATION_NEIGHBORS:
+						break
+				if neighbor_count >= MAX_SEPARATION_NEIGHBORS:
+					break
+			if neighbor_count >= MAX_SEPARATION_NEIGHBORS:
+				break
 
 		# 2. Alinhamento (Igualar velocidade e fluxo com o bando)
 		var alignment := (avg_velocity - a.velocity) * 0.2
@@ -195,18 +284,23 @@ func _apply_boids_flocking(cluster: Array[CharacterBody3D]) -> void:
 		a.set("flock_separation_vector", boids_force)
 
 
-## Notifica em O(1) todos os zumbis da mesma celula espacial sobre um alvo detectado.
+func _get_separation_cell(position: Vector3) -> Vector2i:
+	return Vector2i(
+		int(floor(position.x / SEPARATION_CELL_SIZE)),
+		int(floor(position.z / SEPARATION_CELL_SIZE))
+	)
+
+
+## Notifica todos os drones da horda persistente sobre um alvo detectado.
 ## Uso:
 ##   ZombieFlockCoordinator.instance.alert_cluster(zombie, player)
 func alert_cluster(source_zombie: CharacterBody3D, target: CharacterBody3D) -> void:
 	if source_zombie == null or target == null:
 		return
-	var cell_x := int(floor(source_zombie.global_position.x / CELL_SIZE))
-	var cell_z := int(floor(source_zombie.global_position.z / CELL_SIZE))
-	var key := Vector2i(cell_x, cell_z)
-	if not _spatial_cells.has(key):
+	var source_horde_id := int(source_zombie.get("horde_id"))
+	if not _horde_members.has(source_horde_id):
 		return
-	var cluster: Array[CharacterBody3D] = _spatial_cells[key]
+	var cluster: Array[CharacterBody3D] = _horde_members[source_horde_id]
 	for z in cluster:
 		if is_instance_valid(z) and not bool(z.get("is_dead")):
 			z.set("alert_target", target)

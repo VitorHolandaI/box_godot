@@ -5,7 +5,9 @@ signal join_accepted
 signal join_failed(message: String)
 signal server_lost
 
-const DEFAULT_PORT := 7000
+const DEFAULT_PORT := 27015
+const MIN_PORT := 1024
+const MAX_PORT := 65535
 const MAX_PLAYERS := 4
 const SERVER_ID := 1
 
@@ -23,6 +25,10 @@ var _intentional_disconnect := false
 
 
 func _ready() -> void:
+	server_port = _get_command_line_port()
+	if server_port < 0:
+		get_tree().quit(1)
+		return
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
@@ -37,7 +43,7 @@ func _ready() -> void:
 		return
 
 	if OS.has_feature("dedicated_server") or "--server" in OS.get_cmdline_user_args():
-		var error := start_server(_get_command_line_port())
+		var error := start_server(server_port)
 		if error != OK:
 			push_error("Nao foi possivel iniciar o servidor: %s" % error_string(error))
 			get_tree().quit(1)
@@ -55,7 +61,7 @@ func _ready() -> void:
 			var config: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
 			GameConfig.configure_local_players(config)
 			join_failed.connect(_on_bot_join_failed, CONNECT_ONE_SHOT)
-			var error := join_server(argument.trim_prefix("--bot="), 1, _get_command_line_port())
+			var error := join_server(argument.trim_prefix("--bot="), 1, server_port)
 			if error != OK:
 				push_error("BOT_TEST_FAIL: %s" % error_string(error))
 				get_tree().quit(2)
@@ -66,7 +72,7 @@ func _ready() -> void:
 			var config: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
 			GameConfig.configure_local_players(config)
 			join_failed.connect(_on_autoplay_bot_join_failed, CONNECT_ONE_SHOT)
-			var error := join_server(target_ip, 1, _get_command_line_port())
+			var error := join_server(target_ip, 1, server_port)
 			if error != OK:
 				push_error("Falha ao conectar bot player: %s" % error_string(error))
 				get_tree().quit(2)
@@ -207,8 +213,19 @@ func _total_player_count() -> int:
 func _get_command_line_port() -> int:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--server-port="):
-			return clampi(int(argument.trim_prefix("--server-port=")), 1024, 65535)
+			var raw_port := argument.trim_prefix("--server-port=")
+			var parsed_port := parse_server_port_value(raw_port)
+			if parsed_port < 0:
+				push_error("Valor de porta invalido '%s'; esperada porta decimal entre %d e %d." % [raw_port, MIN_PORT, MAX_PORT])
+			return parsed_port
 	return DEFAULT_PORT
+
+
+static func parse_server_port_value(raw_port: String) -> int:
+	if raw_port.is_empty() or not raw_port.is_valid_int():
+		return -1
+	var parsed_port := int(raw_port)
+	return parsed_port if parsed_port >= MIN_PORT and parsed_port <= MAX_PORT else -1
 
 
 @rpc("any_peer", "call_remote", "reliable")
