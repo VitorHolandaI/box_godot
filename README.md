@@ -18,9 +18,10 @@ Abra `project.godot` no editor do Godot para iniciar o projeto.
 
 ## Cidade
 
-O mapa procedural usa seed fixa para manter ruas e lotes iguais no servidor e
-nos clientes. A grade inclui apartamentos, casas, lojas, mercados e shoppings
-solidos, com cores e orientacoes variadas. O solo e terra texturizada procedural
+O mapa procedural usa a seed definida pelo servidor para manter ruas e lotes
+iguais em todos os clientes. A grade inclui apartamentos, casas, lojas,
+mercados e shoppings solidos, com cores e orientacoes variadas. O solo e terra
+texturizada procedural
 e os arredores tem cara de apocalipse: uma muralha danificada cerca a area
 jogavel, e um anel de ruinas, entulho e arvores secas separa a cidade da
 floresta externa.
@@ -113,18 +114,18 @@ limite de quatro avatares na partida inteira.
 
 ## Cidade procedural experimental
 
-A branch `feature/procedural-city-mvp` inclui um modo experimental que preserva
-a cidade estavel por padrao. Para abrir a cena atual usando blueprints
-procedurais, execute:
+A branch `feature/procedural-city-mvp` inclui o modo experimental. Para abrir
+uma partida local usando blueprints procedurais, execute:
 
 ```bash
 ./dist/box-godot-linux.x86_64 -- --procedural-city --world-seed=18273
 ```
 
 Inicie uma partida local no menu. A mesma seed reconstrui a mesma cidade; troque
-`18273` por outra seed para obter outro parcelamento deterministico. O modo
-experimental ainda usa materiais geometricos simples e nao altera a release
-estavel ate ser promovido para `main`.
+`18273` por outra seed para obter outro parcelamento deterministico. Em rede, o
+servidor envia o modo e a seed no handshake antes de carregar o mapa, portanto
+o cliente nao precisa desses argumentos. O modo experimental nao altera a
+release estavel ate ser promovido para `main`.
 
 Para construir e iniciar o container isolado:
 
@@ -172,17 +173,20 @@ docker compose up --build -d
 ```
 
 Para testar a cidade procedural experimental na VPS, use a branch
-`feature/procedural-city-mvp` no servidor e no cliente, mantendo a mesma seed:
+`feature/procedural-city-mvp` no servidor e no cliente:
 
 ```bash
 git fetch origin
 git switch feature/procedural-city-mvp
 git pull --ff-only
-GAME_SERVER_CITY_MODE=--procedural-city GAME_SERVER_WORLD_SEED=18273 docker compose up --build -d
+docker compose up --build -d
 ```
 
-O cliente deve ser executado com `--procedural-city --world-seed=18273`. Sem
-`GAME_SERVER_CITY_MODE`, o compose continua iniciando o servidor estavel.
+O compose inicia a cidade procedural por padrao e cria uma seed a partir do ID
+do container. Para forcar uma seed especifica, defina
+`GAME_SERVER_WORLD_SEED=18273`. O cliente deve ser aberto normalmente: escolha
+`Conectar ao servidor` e informe somente o IP ou dominio e a porta. O servidor
+envia a seed e o modo procedural durante a conexao.
 
 ## Release 0.1 na VPS
 

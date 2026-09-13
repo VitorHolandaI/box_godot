@@ -53,10 +53,15 @@ var sidewalk_material: StandardMaterial3D
 
 
 func _ready() -> void:
-	if "--procedural-city" in OS.get_cmdline_user_args():
-		var generated_seed := _get_procedural_seed()
-		var city_blueprint = PROCEDURAL_CITY_GENERATOR.generate_world(generated_seed)
+	if NetworkSession.procedural_city_enabled:
+		_create_materials()
+		_hide_legacy_center_roads()
+		var city_blueprint = PROCEDURAL_CITY_GENERATOR.generate_world(NetworkSession.world_seed)
 		PROCEDURAL_CITY_ASSEMBLER.assemble(city_blueprint, self)
+		_create_procedural_safehouse()
+		_create_street_props()
+		_create_boundaries()
+		_create_forest()
 		return
 	_create_materials()
 	_create_roads()
@@ -84,15 +89,18 @@ func _create_materials() -> void:
 	sidewalk_material.roughness = 0.88
 
 
-func _get_procedural_seed() -> int:
-	for argument in OS.get_cmdline_user_args():
-		if not argument.begins_with("--world-seed="):
-			continue
-		var raw_seed := argument.trim_prefix("--world-seed=")
-		if raw_seed.is_valid_int():
-			return int(raw_seed)
-		push_error("Seed procedural invalida '%s'; esperado inteiro decimal." % raw_seed)
-	return city_seed
+func _hide_legacy_center_roads() -> void:
+	for node_name in ["RoadVertical", "RoadHorizontal", "RoadLineVertical", "RoadLineHorizontal", "Crosswalks"]:
+		var legacy_node := get_parent().get_node_or_null(node_name) as Node3D
+		if legacy_node != null:
+			legacy_node.visible = false
+
+
+func _create_procedural_safehouse() -> void:
+	var safehouse: StaticBody3D = SafehouseBuilder.build_safehouse()
+	safehouse.name = "CentralSafehouse"
+	safehouse.position = Vector3(-10.5, 0.12, 10.5)
+	add_child(safehouse)
 
 
 func _create_roads() -> void:

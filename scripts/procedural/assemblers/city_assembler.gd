@@ -36,6 +36,8 @@ static func _add_lot(parent: Node3D, lot, sidewalk_material: Material) -> void:
 	sidewalk.position = Vector3(lot.position.x, 0.15, lot.position.y)
 	sidewalk.mesh = sidewalk_mesh
 	parent.add_child(sidewalk)
+	if lot.building == null:
+		return
 	var building: StaticBody3D = BUILDING_ASSEMBLER.assemble(lot.building)
 	building.name = lot.id + "_" + lot.building.archetype
 	building.position = Vector3(lot.position.x - lot.building.width * 0.5, 0.16, lot.position.y - lot.building.depth * 0.5)

@@ -21,7 +21,9 @@ func add_block(block) -> void:
 func building_count() -> int:
 	var result := 0
 	for block in blocks:
-		result += block.lots.size()
+		for lot in block.lots:
+			if lot.building != null:
+				result += 1
 	return result
 
 
