@@ -10,13 +10,13 @@ Logica de jogo, rede, interface e testes automatizados.
 - `build_exports.sh`: gera clientes release autocontidos para Linux e Windows e seus checksums.
 - `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis com mascara para fogo amigo e exclusao do atirador.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto (sem terra marrom sob predios), veiculos oxidados/queimados e muralhas.
-- `game_config.gd`: controles e preferencias graficas persistentes.
+- `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local e navegacao durante a partida.
 - `local_camera.gd`: acompanhamento de um jogador pela camera local.
 - `main.gd`: ciclo da partida, populacao global, integracao de spawn autorizado, snapshots e bot de teste.
-- `menu.gd`: configuracao de jogadores, conexao e opcoes graficas.
+- `menu.gd`: selecao local/multiplayer, navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
-- `network_session.gd`: sessao ENet, roster, handshake de carregamento e suporte a modo de teste unitario.
+- `network_session.gd`: sessao ENet, roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com sistema de 3 vidas maximas, renascimento na Safehouse, armas com fogo amigo e sincronizacao em rede.
 - `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.

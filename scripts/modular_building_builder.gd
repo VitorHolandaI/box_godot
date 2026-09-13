@@ -70,14 +70,16 @@ static func build_procedural_building(kind: String, rng: RandomNumberGenerator) 
 	cutout_wall_mat.shader = CUTOUT_SHADER
 	cutout_wall_mat.set_shader_parameter("base_color", Color(wall_color.r, wall_color.g, wall_color.b, 1.0))
 	cutout_wall_mat.set_shader_parameter("material_roughness", 0.85)
-	cutout_wall_mat.set_shader_parameter("cutout_radius", 8.5)
+	cutout_wall_mat.set_shader_parameter("cutout_radius", 0.9)
+	cutout_wall_mat.set_shader_parameter("floor_height", TILE_SCALE)
 
 	var cutout_trim_mat := ShaderMaterial.new()
 	cutout_trim_mat.shader = CUTOUT_SHADER
 	var trim_c := wall_color.darkened(0.28)
 	cutout_trim_mat.set_shader_parameter("base_color", Color(trim_c.r, trim_c.g, trim_c.b, 1.0))
 	cutout_trim_mat.set_shader_parameter("material_roughness", 0.75)
-	cutout_trim_mat.set_shader_parameter("cutout_radius", 8.5)
+	cutout_trim_mat.set_shader_parameter("cutout_radius", 0.9)
+	cutout_trim_mat.set_shader_parameter("floor_height", TILE_SCALE)
 
 	var door_x := rng.randi_range(1, grid_w - 2)
 	_create_floor_and_ceiling(body, grid_w, grid_d, num_floors)
@@ -130,7 +132,9 @@ static func _create_floor_and_ceiling(body: StaticBody3D, w: int, d: int, floors
 	cutout_slab_mat.shader = CUTOUT_SHADER
 	cutout_slab_mat.set_shader_parameter("base_color", Color(0.24, 0.22, 0.20, 1.0))
 	cutout_slab_mat.set_shader_parameter("material_roughness", 0.9)
-	cutout_slab_mat.set_shader_parameter("cutout_radius", 8.5)
+	cutout_slab_mat.set_shader_parameter("cutout_radius", 0.9)
+	cutout_slab_mat.set_shader_parameter("floor_height", TILE_SCALE)
+	cutout_slab_mat.set_shader_parameter("ceiling_cutout", true)
 
 	# Lajes intermediarias para andares superiores com abertura da escada
 	for fl in range(1, floors):
