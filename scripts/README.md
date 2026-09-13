@@ -21,6 +21,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `player.gd`: personagem jogavel militar com sistema de 3 vidas maximas, renascimento na Safehouse, armas com fogo amigo e sincronizacao em rede.
 - `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
+- `procedural/`: blueprints, geradores e assemblers da cidade procedural experimental ativada por `--procedural-city`.
 - `run_4_bots.sh`: inicializa servidor dedicado e abre 4 janelas com bots jogando sozinhos em grade 2x2.
 - `safehouse_builder.gd`: gerador procedural da Safehouse fortificada de 2 andares com spawns seguros, porta automatica, escadaria, municao, sacada e iluminacao.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores ou zumbis e replicada aos clientes.
