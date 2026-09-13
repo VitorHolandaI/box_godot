@@ -13,7 +13,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `destructible_door.gd`: porta comum com estados aberta/fechada, interacao do jogador e destruicao por ataques de zumbis.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local e navegacao durante a partida.
-- `local_camera.gd`: acompanhamento de um jogador pela camera local.
+- `local_camera.gd`: acompanhamento afastado do jogador para manter a cidade visivel em viewports menores.
 - `main.gd`: ciclo da partida, populacao global, integracao de spawn autorizado, snapshots e bot de teste.
 - `menu.gd`: selecao local/multiplayer, navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
@@ -32,7 +32,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `server_ping_probe.gd`: mede RTT usando o ping nativo do ENet na porta do jogo.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores, indestrutivel e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
-- `split_screen_manager.gd`: viewports, cameras e HUDs locais com vidas e contador global de zumbis vivos.
+- `split_screen_manager.gd`: viewports com audio 3D, cameras e HUDs locais com vidas e contador global de zumbis vivos.
 - `test_combat_and_variants.gd`: testes de combate, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_survival_mode.gd`: regressoes de ondas, mapa com predominio de casas, portas, abates, audio real, alvos e skin do ragdoll.
