@@ -102,11 +102,14 @@ Os executaveis autocontidos e o arquivo `SHA256SUMS` ficam em `dist/`:
 ## Servidor dedicado
 
 O servidor usa ENet na porta `27015/udp` e descoberta de salas na porta
-`27016/udp`. Ele executa a simulacao autoritativa sem um jogador local. Para
+`27016/udp`. O ping exibido no navegador e um ping nativo do ENet medido na
+porta do jogo; a porta de descoberta serve somente para metadados da sala. O
+servidor Docker inicia por padrao no modo Sobrevivencia, com ondas progressivas
+e objetivo de limpar todos os zumbis. Para
 iniciar diretamente com o Godot instalado:
 
 ```bash
-godot --headless --path . -- --server --server-port=27015
+godot --headless --path . -- --server --server-port=27015 --survival
 ```
 
 O menu separa `Jogar local` de `Multiplayer`. O modo local permite de um a
