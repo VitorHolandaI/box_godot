@@ -11,6 +11,7 @@ const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
 const GAMEPLAY_REGRESSION_TESTS_SCRIPT := preload("res://scripts/test_gameplay_regressions.gd")
+const SURVIVAL_TESTS_SCRIPT := preload("res://scripts/test_survival_mode.gd")
 
 var failure_count := 0
 
@@ -21,6 +22,7 @@ func _ready() -> void:
 	_test_friendly_fire_bullet()
 	_test_pistol_fixed_trajectory()
 	GAMEPLAY_REGRESSION_TESTS_SCRIPT.new().run(self)
+	SURVIVAL_TESTS_SCRIPT.new().run(self)
 	if bool(get_meta("unit_test_failed", false)):
 		failure_count += 1
 	_test_hit_reaction_flinch()

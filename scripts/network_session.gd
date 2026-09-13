@@ -26,6 +26,7 @@ var bot_name := ""
 var loaded_peers: Dictionary = {}
 var latency_ms := -1
 var procedural_city_enabled := false
+var survival_mode := false
 var world_seed := DEFAULT_WORLD_SEED
 var _intentional_disconnect := false
 var _connected_to_server := false
@@ -175,16 +176,16 @@ func _request_slots(slot_count: int) -> void:
 	var sender_id := multiplayer.get_remote_sender_id()
 	var requested_count := clampi(slot_count, 0, MAX_PLAYERS)
 	if requested_count != slot_count or requested_count == 0:
-		_join_result.rpc_id(sender_id, false, "Quantidade de jogadores invalida.", procedural_city_enabled, world_seed)
+		_join_result.rpc_id(sender_id, false, "Quantidade de jogadores invalida.", procedural_city_enabled, world_seed, survival_mode)
 		return
 	if _total_player_count() + requested_count > MAX_PLAYERS:
-		_join_result.rpc_id(sender_id, false, "O servidor ja atingiu o limite de 4 jogadores.", procedural_city_enabled, world_seed)
+		_join_result.rpc_id(sender_id, false, "O servidor ja atingiu o limite de 4 jogadores.", procedural_city_enabled, world_seed, survival_mode)
 		return
 
 	peer_slots[sender_id] = requested_count
 	roster_changed.emit()
 	_sync_roster.rpc(peer_slots)
-	_join_result.rpc_id(sender_id, true, "", procedural_city_enabled, world_seed)
+	_join_result.rpc_id(sender_id, true, "", procedural_city_enabled, world_seed, survival_mode)
 	print("Peer %d entrou com %d jogador(es)." % [sender_id, requested_count])
 
 
@@ -195,10 +196,11 @@ func _sync_roster(new_roster: Dictionary) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _join_result(accepted: bool, message: String, server_uses_procedural_city: bool, server_world_seed: int) -> void:
+func _join_result(accepted: bool, message: String, server_uses_procedural_city: bool, server_world_seed: int, server_uses_survival: bool) -> void:
 	if accepted:
 		procedural_city_enabled = server_uses_procedural_city
 		world_seed = server_world_seed
+		survival_mode = server_uses_survival
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
 		join_accepted.emit()
 		return
@@ -250,6 +252,7 @@ func _get_command_line_port() -> int:
 
 func _reset_world_config_from_arguments() -> void:
 	procedural_city_enabled = "--procedural-city" in OS.get_cmdline_user_args()
+	survival_mode = "--survival" in OS.get_cmdline_user_args()
 	world_seed = DEFAULT_WORLD_SEED
 	for argument in OS.get_cmdline_user_args():
 		if not argument.begins_with("--world-seed="):

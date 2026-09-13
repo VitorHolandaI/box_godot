@@ -188,6 +188,16 @@ do container. Para forcar uma seed especifica, defina
 `Conectar ao servidor` e informe somente o IP ou dominio e a porta. O servidor
 envia a seed e o modo procedural durante a conexao.
 
+Para iniciar o modo sobrevivencia no servidor dedicado, use:
+
+```bash
+GAME_SERVER_GAME_MODE=--survival docker compose up --build -d
+```
+
+O modo possui ondas de 10, 20, 30, 40, 60, 80, 120, 140, 160 e depois
+incrementos de 20 ate a onda final de 600 zumbis. O cliente continua usando
+somente o IP e a porta; a configuracao e enviada pelo servidor.
+
 ## Release 0.1 na VPS
 
 Depois que a release 0.1 for publicada no repositorio, a instalacao limpa na VPS
