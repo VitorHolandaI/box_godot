@@ -46,6 +46,8 @@ var capture_action := ""
 var capture_button: Button
 var selected_mode := "local"
 var server_refresh_elapsed := 0.0
+var editing_server_address := ""
+var editing_server_port := -1
 
 
 func _ready() -> void:
@@ -321,12 +323,20 @@ func _refresh_servers() -> void:
 
 
 func _save_server() -> void:
+	var address := server_address_input.text.strip_edges()
 	var port := NetworkSession.parse_server_port_value(server_port_input.text.strip_edges())
-	var error := GameConfig.save_server(server_address_input.text, port)
+	var error := GameConfig.save_server(address, port)
 	if error != OK:
 		server_browser_message.text = "Servidor invalido. Informe IP e porta entre 1024 e 65535."
 		return
-	server_address.text = server_address_input.text.strip_edges()
+	if not editing_server_address.is_empty() and (editing_server_address != address or editing_server_port != port):
+		var remove_error := GameConfig.remove_saved_server(editing_server_address, editing_server_port)
+		if remove_error != OK:
+			server_browser_message.text = "Servidor atualizado, mas o registro antigo nao foi removido: %s" % error_string(remove_error)
+	editing_server_address = ""
+	editing_server_port = -1
+	add_server_button.text = "SALVAR"
+	server_address.text = address
 	server_browser_message.text = "Servidor salvo. Consultando status..."
 	_refresh_servers()
 
@@ -362,6 +372,15 @@ func _render_server_list() -> void:
 		join_button.disabled = not bool(server.get("online", false)) or int(server.get("active_players", 0)) >= int(server.get("max_players", 4))
 		join_button.pressed.connect(_select_server.bind(server))
 		row.add_child(join_button)
+		if bool(server.get("saved", false)):
+			var edit_button := Button.new()
+			edit_button.text = "EDITAR"
+			edit_button.pressed.connect(_edit_saved_server.bind(server))
+			row.add_child(edit_button)
+			var remove_button := Button.new()
+			remove_button.text = "REMOVER"
+			remove_button.pressed.connect(_remove_saved_server.bind(server))
+			row.add_child(remove_button)
 		server_list.add_child(row)
 
 
@@ -369,6 +388,30 @@ func _select_server(server: Dictionary) -> void:
 	server_address.text = String(server.get("address", ""))
 	server_port_input.text = str(int(server.get("port", NetworkSession.DEFAULT_PORT)))
 	_show_setup(1)
+
+
+func _edit_saved_server(server: Dictionary) -> void:
+	editing_server_address = String(server.get("address", ""))
+	editing_server_port = int(server.get("port", NetworkSession.DEFAULT_PORT))
+	server_address_input.text = editing_server_address
+	server_port_input.text = str(editing_server_port)
+	add_server_button.text = "ATUALIZAR"
+	server_browser_message.text = "Edite o endereco ou a porta e confirme em ATUALIZAR."
+
+
+func _remove_saved_server(server: Dictionary) -> void:
+	var address := String(server.get("address", ""))
+	var port := int(server.get("port", NetworkSession.DEFAULT_PORT))
+	var error := GameConfig.remove_saved_server(address, port)
+	if error != OK:
+		server_browser_message.text = "Nao foi possivel remover %s:%d: %s" % [address, port, error_string(error)]
+		return
+	if editing_server_address == address and editing_server_port == port:
+		editing_server_address = ""
+		editing_server_port = -1
+		add_server_button.text = "SALVAR"
+	server_browser_message.text = "Servidor removido: %s:%d" % [address, port]
+	_refresh_servers()
 
 
 func _on_settings_pressed() -> void:

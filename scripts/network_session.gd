@@ -360,6 +360,7 @@ func _register_discovered_server(payload: Dictionary, source_address: String) ->
 		"max_players": MAX_PLAYERS,
 		"ping_ms": ping_ms,
 		"online": true,
+		"saved": _is_saved_server(source_address, port),
 	}
 	for index in discovered_servers.size():
 		if discovered_servers[index].get("key", "") == key:
@@ -386,7 +387,15 @@ func _discovered_servers_add_offline(saved_server: Dictionary) -> void:
 		"max_players": MAX_PLAYERS,
 		"ping_ms": -1,
 		"online": false,
+		"saved": true,
 	})
+
+
+func _is_saved_server(address: String, port: int) -> bool:
+	for saved_server in GameConfig.get_saved_servers():
+		if String(saved_server.get("address", "")) == address and int(saved_server.get("port", 0)) == port:
+			return true
+	return false
 
 
 func _server_mission_name() -> String:

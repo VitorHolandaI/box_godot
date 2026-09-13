@@ -12,10 +12,10 @@ const BLOCK_SIZE := Vector2(42.0, 42.0)
 const LOT_SIZE := Vector2(19.0, 19.0)
 
 
-static func generate_world(world_seed: int):
+static func generate_world(world_seed: int, survival_mode: bool = false):
 	var city = CITY_BLUEPRINT.new(world_seed)
 	_generate_roads(city)
-	_generate_blocks(city, world_seed)
+	_generate_blocks(city, world_seed, survival_mode)
 	return city
 
 
@@ -26,19 +26,19 @@ static func _generate_roads(city) -> void:
 		city.add_road(ROAD_BLUEPRINT.new("collector", Vector2(-96.0, z), Vector2(96.0, z), 7.0))
 
 
-static func _generate_blocks(city, world_seed: int) -> void:
+static func _generate_blocks(city, world_seed: int, survival_mode: bool) -> void:
 	var block_index := 0
 	for x_index in 3:
 		for z_index in 3:
 			var center: Vector2 = Vector2(-48.0 + float(x_index) * 48.0, -48.0 + float(z_index) * 48.0)
 			var district := "urban" if z_index < 2 else "suburban"
 			var block = BLOCK_BLUEPRINT.new("Block_%02d" % block_index, district, center, BLOCK_SIZE)
-			_generate_lots(block, world_seed + block_index * 97)
+			_generate_lots(block, world_seed + block_index * 97, survival_mode)
 			city.add_block(block)
 			block_index += 1
 
 
-static func _generate_lots(block, block_seed: int) -> void:
+static func _generate_lots(block, block_seed: int, survival_mode: bool) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = block_seed
 	var lot_index := 0
@@ -50,7 +50,7 @@ static func _generate_lots(block, block_seed: int) -> void:
 			var lot_seed := block_seed + lot_index * 31
 			var archetype := "house"
 			if block.district == "urban":
-				var urban_variant := absi(block_seed + lot_index) % 8
+				var urban_variant := absi(block_seed + lot_index) % (16 if survival_mode else 8)
 				archetype = "store" if urban_variant == 0 else "grocery" if urban_variant == 1 else "apartment" if urban_variant == 2 else "house"
 			var lot = LOT_BLUEPRINT.new("%s_Lot_%d" % [block.id, lot_index], lot_seed, block.district, lot_position, LOT_SIZE)
 			if not is_safehouse_lot:

@@ -15,6 +15,7 @@ const WANDER_SPEED_FACTOR := 0.4
 const TARGET_SWITCH_COOLDOWN := 1.0
 const TARGET_SWITCH_DISTANCE_MARGIN := 2.0
 const MELEE_RANGE := 1.25
+const MELEE_VERTICAL_RANGE := 1.4
 
 @export var speed := 2.2
 @export var gravity := 22.0
@@ -134,11 +135,13 @@ func _physics_process(delta: float) -> void:
 	elif melee_target != null:
 		_perform_melee_attack(melee_target)
 	elif is_instance_valid(target):
-		var offset := target.global_position - global_position
-		offset.y = 0.0
-		var distance := offset.length()
-		if distance > 1.25:
-			var direction := offset.normalized()
+		var target_offset := target.global_position - global_position
+		var horizontal_offset := target_offset
+		horizontal_offset.y = 0.0
+		var distance := horizontal_offset.length()
+		var same_level := absf(target_offset.y) <= MELEE_VERTICAL_RANGE
+		if distance > MELEE_RANGE or not same_level:
+			var direction := horizontal_offset.normalized()
 			velocity.x = direction.x * speed
 			velocity.z = direction.z * speed
 			if is_on_wall():
@@ -149,7 +152,7 @@ func _physics_process(delta: float) -> void:
 			velocity.x = move_toward(velocity.x, 0.0, speed)
 			velocity.z = move_toward(velocity.z, 0.0, speed)
 			if attack_cooldown <= 0.0:
-				target.take_damage(attack_damage, offset.normalized())
+				_attack_target_or_door(target)
 				attack_cooldown = 0.9
 				attack_animation_time = ATTACK_ANIMATION_DURATION
 				attack_sequence += 1
@@ -285,18 +288,40 @@ func _find_nearest_melee_player() -> CharacterBody3D:
 		if not _is_living_player(player):
 			continue
 		var distance := global_position.distance_to(player.global_position)
-		if distance <= nearest_distance:
+		if distance <= nearest_distance and absf(player.global_position.y - global_position.y) <= MELEE_VERTICAL_RANGE:
 			nearest = player
 			nearest_distance = distance
 	return nearest
 
 
 func _perform_melee_attack(target: CharacterBody3D) -> void:
-	var offset := target.global_position - global_position
-	target.take_damage(attack_damage, offset.normalized(), "melee")
+	_attack_target_or_door(target)
 	attack_cooldown = 0.9
 	attack_animation_time = ATTACK_ANIMATION_DURATION
 	attack_sequence += 1
+
+
+func _attack_target_or_door(target: CharacterBody3D) -> void:
+	if absf(target.global_position.y - global_position.y) > MELEE_VERTICAL_RANGE:
+		return
+	var ray_start := global_position + Vector3.UP * 0.8
+	var ray_end := target.global_position + Vector3.UP * 0.8
+	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [self])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var collider: Node = hit.get("collider")
+	while collider != null:
+		var parent: Node = collider.get_parent()
+		if collider == target:
+			target.take_damage(attack_damage, (target.global_position - global_position).normalized(), "melee", self)
+			return
+		if collider.is_in_group("destructible_door") or (parent != null and parent.has_method("take_damage")):
+			if collider.has_method("take_damage"):
+				collider.take_damage(attack_damage, (target.global_position - global_position).normalized())
+			else:
+				parent.take_damage(attack_damage, (target.global_position - global_position).normalized())
+			return
+		collider = collider.get_parent()
+	target.take_damage(attack_damage, (target.global_position - global_position).normalized(), "melee", self)
 
 
 func _find_heard_player() -> CharacterBody3D:

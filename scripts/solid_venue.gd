@@ -3,6 +3,7 @@ extends StaticBody3D
 
 const CUTOUT_SHADER := preload("res://shaders/building_cutout.gdshader")
 const AMMO_PICKUP_SCENE := preload("res://scenes/ammo_pickup.tscn")
+const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
 const APARTMENT := "apartment"
 const HOUSE := "house"
 const STORE := "store"
@@ -78,6 +79,11 @@ func _create_hollow_building(dimensions: Vector3) -> void:
 	var header_h := wall_h - door_h
 	if header_h > 0.1:
 		_create_box_with_collision("DoorHeader", Vector3(door_w, header_h, thickness), Vector3(0.0, door_h + header_h * 0.5, -half_z), wall_mat)
+	var door = DESTRUCTIBLE_DOOR_SCRIPT.new()
+	door.name = "BuildingDoor"
+	door.configure(Vector3(door_w, door_h, thickness), wall_mat)
+	door.position = Vector3(0.0, 0.0, -half_z)
+	add_child(door)
 
 	_create_box_with_collision("Back", Vector3(dimensions.x, wall_h, thickness), Vector3(0.0, wall_h * 0.5, half_z), wall_mat)
 	_create_box_with_collision("Left", Vector3(thickness, wall_h, dimensions.z), Vector3(-half_x, wall_h * 0.5, 0.0), wall_mat)
