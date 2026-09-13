@@ -6,6 +6,17 @@ config_version=5
 [application]
 
 config/name="Box Godot"
+run/main_scene="res://scenes/menu.tscn"
+run/max_fps=60
+
+[autoload]
+
+GameConfig="*res://scripts/game_config.gd"
+NetworkSession="*res://scripts/network_session.gd"
+
+[debug]
+
+settings/stdout/print_fps=false
 
 [display]
 
@@ -13,7 +24,46 @@ window/size/viewport_width=1280
 window/size/viewport_height=720
 window/size/window_width_override=1280
 window/size/window_height_override=720
-window/stretch/mode="canvas_items"
+window/stretch/mode="disabled"
+
+[input]
+
+move_forward={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":87)]
+}
+move_back={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":83)]
+}
+move_left={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":65)]
+}
+move_right={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":68)]
+}
+jump={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":32)]
+}
+attack={
+"deadzone": 0.5,
+"events": [Object(InputEventMouseButton,"button_index":1), Object(InputEventKey,"physical_keycode":70)]
+}
+weapon_knife={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":49)]
+}
+weapon_pistol={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":50)]
+}
+reload={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"physical_keycode":82)]
+}
 
 [rendering]
 

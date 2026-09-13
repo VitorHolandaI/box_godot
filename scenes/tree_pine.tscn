@@ -1,0 +1,55 @@
+[gd_scene load_steps=6 format=3]
+
+[sub_resource type="StandardMaterial3D" id="TrunkMaterial"]
+albedo_color = Color(0.19, 0.1, 0.045, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="PineMaterial"]
+albedo_color = Color(0.035, 0.14, 0.075, 1)
+roughness = 0.96
+
+[sub_resource type="BoxMesh" id="TrunkMesh"]
+material = SubResource("TrunkMaterial")
+size = Vector3(0.4, 3.4, 0.4)
+
+[sub_resource type="BoxMesh" id="LowerCrownMesh"]
+material = SubResource("PineMaterial")
+size = Vector3(2.5, 1.25, 2.5)
+
+[sub_resource type="BoxMesh" id="MiddleCrownMesh"]
+material = SubResource("PineMaterial")
+size = Vector3(1.85, 1.15, 1.85)
+
+[sub_resource type="BoxMesh" id="UpperCrownMesh"]
+material = SubResource("PineMaterial")
+size = Vector3(1.15, 1.0, 1.15)
+
+[node name="PineTree" type="Node3D"]
+
+[node name="Trunk" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.7, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("TrunkMesh")
+
+[node name="LowerCrown" type="MeshInstance3D" parent="."]
+position = Vector3(0, 2.75, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("LowerCrownMesh")
+
+[node name="MiddleCrown" type="MeshInstance3D" parent="."]
+position = Vector3(0, 3.75, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("MiddleCrownMesh")
+
+[node name="UpperCrown" type="MeshInstance3D" parent="."]
+position = Vector3(0, 4.65, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("UpperCrownMesh")

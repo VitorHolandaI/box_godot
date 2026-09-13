@@ -1,0 +1,77 @@
+[gd_scene load_steps=8 format=3]
+
+[sub_resource type="StandardMaterial3D" id="TrunkMaterial"]
+albedo_color = Color(0.28, 0.16, 0.07, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="FoliageMaterial"]
+albedo_color = Color(0.06, 0.18, 0.09, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="TrunkMesh"]
+material = SubResource("TrunkMaterial")
+size = Vector3(0.5, 5.0, 0.5)
+
+[sub_resource type="BoxMesh" id="Layer1Mesh"]
+material = SubResource("FoliageMaterial")
+size = Vector3(2.4, 0.5, 2.4)
+
+[sub_resource type="BoxMesh" id="Layer2Mesh"]
+material = SubResource("FoliageMaterial")
+size = Vector3(2.0, 0.5, 2.0)
+
+[sub_resource type="BoxMesh" id="Layer3Mesh"]
+material = SubResource("FoliageMaterial")
+size = Vector3(1.6, 0.5, 1.6)
+
+[sub_resource type="BoxMesh" id="Layer4Mesh"]
+material = SubResource("FoliageMaterial")
+size = Vector3(1.2, 0.5, 1.2)
+
+[sub_resource type="BoxMesh" id="Layer5Mesh"]
+material = SubResource("FoliageMaterial")
+size = Vector3(0.7, 0.5, 0.7)
+
+[node name="AraucariaTree" type="Node3D"]
+
+[node name="Trunk" type="MeshInstance3D" parent="."]
+position = Vector3(0, 2.5, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("TrunkMesh")
+
+[node name="Layer1" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.6, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Layer1Mesh")
+
+[node name="Layer2" type="MeshInstance3D" parent="."]
+position = Vector3(0, 2.6, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Layer2Mesh")
+
+[node name="Layer3" type="MeshInstance3D" parent="."]
+position = Vector3(0, 3.6, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Layer3Mesh")
+
+[node name="Layer4" type="MeshInstance3D" parent="."]
+position = Vector3(0, 4.6, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Layer4Mesh")
+
+[node name="Layer5" type="MeshInstance3D" parent="."]
+position = Vector3(0, 5.6, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("Layer5Mesh")

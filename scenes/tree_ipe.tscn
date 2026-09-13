@@ -1,0 +1,48 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="StandardMaterial3D" id="TrunkMaterial"]
+albedo_color = Color(0.32, 0.19, 0.1, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="LeavesMaterial"]
+albedo_color = Color(0.09, 0.22, 0.1, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="FlowerMaterial"]
+albedo_color = Color(0.85, 0.45, 0.7, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="TrunkMesh"]
+material = SubResource("TrunkMaterial")
+size = Vector3(0.45, 2.6, 0.45)
+
+[sub_resource type="BoxMesh" id="LowerCanopyMesh"]
+material = SubResource("LeavesMaterial")
+size = Vector3(2.4, 1.2, 2.4)
+
+[sub_resource type="BoxMesh" id="FlowerCanopyMesh"]
+material = SubResource("FlowerMaterial")
+size = Vector3(1.8, 1.1, 1.8)
+
+[node name="IpeTree" type="Node3D"]
+
+[node name="Trunk" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.3, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("TrunkMesh")
+
+[node name="LowerCanopy" type="MeshInstance3D" parent="."]
+position = Vector3(0, 3.0, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("LowerCanopyMesh")
+
+[node name="FlowerCanopy" type="MeshInstance3D" parent="."]
+position = Vector3(0, 4.2, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("FlowerCanopyMesh")

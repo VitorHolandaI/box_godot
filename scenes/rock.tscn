@@ -1,0 +1,30 @@
+[gd_scene load_steps=4 format=3]
+
+[sub_resource type="StandardMaterial3D" id="RockMaterial"]
+albedo_color = Color(0.35, 0.34, 0.33, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="RockMainMesh"]
+material = SubResource("RockMaterial")
+size = Vector3(1.1, 0.7, 0.9)
+
+[sub_resource type="BoxMesh" id="RockSmallMesh"]
+material = SubResource("RockMaterial")
+size = Vector3(0.55, 0.35, 0.5)
+
+[node name="Rock" type="Node3D"]
+
+[node name="Main" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.35, 0)
+visibility_range_end = 55.0
+visibility_range_end_margin = 12.0
+visibility_range_fade_mode = 1
+mesh = SubResource("RockMainMesh")
+
+[node name="Small" type="MeshInstance3D" parent="."]
+position = Vector3(0.55, 0.18, 0.2)
+rotation_degrees = Vector3(0, 30, 0)
+visibility_range_end = 55.0
+visibility_range_end_margin = 12.0
+visibility_range_fade_mode = 1
+mesh = SubResource("RockSmallMesh")

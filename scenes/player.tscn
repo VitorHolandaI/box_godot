@@ -1,0 +1,183 @@
+[gd_scene load_steps=13 format=3]
+
+[ext_resource type="Script" path="res://scripts/player.gd" id="1_player"]
+
+[sub_resource type="StandardMaterial3D" id="SkinMaterial"]
+albedo_color = Color(0.72, 0.48, 0.3, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="ShirtMaterial"]
+albedo_color = Color(0.2, 0.3, 0.13, 1)
+roughness = 0.75
+
+[sub_resource type="StandardMaterial3D" id="PantsMaterial"]
+albedo_color = Color(0.11, 0.16, 0.08, 1)
+roughness = 0.8
+
+[sub_resource type="StandardMaterial3D" id="EyeMaterial"]
+albedo_color = Color(0.03, 0.03, 0.04, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="KnifeMaterial"]
+albedo_color = Color(0.72, 0.78, 0.82, 1)
+metallic = 0.75
+roughness = 0.25
+
+[sub_resource type="StandardMaterial3D" id="WeaponMaterial"]
+albedo_color = Color(0.08, 0.09, 0.11, 1)
+metallic = 0.4
+roughness = 0.45
+
+[sub_resource type="StandardMaterial3D" id="MuzzleMaterial"]
+albedo_color = Color(1, 0.72, 0.08, 1)
+emission_enabled = true
+emission = Color(1, 0.35, 0.02, 1)
+emission_energy_multiplier = 3.0
+
+[sub_resource type="BoxMesh" id="HeadMesh"]
+material = SubResource("SkinMaterial")
+size = Vector3(0.54, 0.54, 0.54)
+
+[sub_resource type="BoxMesh" id="TorsoMesh"]
+material = SubResource("ShirtMaterial")
+size = Vector3(0.78, 0.84, 0.4)
+
+[sub_resource type="BoxMesh" id="LimbMesh"]
+material = SubResource("ShirtMaterial")
+size = Vector3(0.28, 0.84, 0.34)
+
+[sub_resource type="BoxMesh" id="LegMesh"]
+material = SubResource("PantsMaterial")
+size = Vector3(0.34, 0.84, 0.36)
+
+[sub_resource type="CapsuleShape3D" id="PlayerShape"]
+radius = 0.44
+height = 2.34
+
+[node name="Player" type="CharacterBody3D" groups=["player"]]
+collision_layer = 2
+collision_mask = 23
+script = ExtResource("1_player")
+
+[node name="Model" type="Node3D" parent="."]
+
+[node name="Head" type="MeshInstance3D" parent="Model"]
+position = Vector3(0, 1.13, 0)
+mesh = SubResource("HeadMesh")
+
+[node name="LeftEye" type="CSGBox3D" parent="Model/Head"]
+position = Vector3(-0.12, 0.05, -0.275)
+size = Vector3(0.075, 0.075, 0.02)
+material = SubResource("EyeMaterial")
+
+[node name="RightEye" type="CSGBox3D" parent="Model/Head"]
+position = Vector3(0.12, 0.05, -0.275)
+size = Vector3(0.075, 0.075, 0.02)
+material = SubResource("EyeMaterial")
+
+[node name="Helmet" type="CSGBox3D" parent="Model/Head"]
+position = Vector3(0, 0.27, 0)
+size = Vector3(0.62, 0.16, 0.62)
+material = SubResource("PantsMaterial")
+
+[node name="HelmetRim" type="CSGBox3D" parent="Model/Head"]
+position = Vector3(0, 0.19, -0.05)
+size = Vector3(0.68, 0.07, 0.7)
+material = SubResource("PantsMaterial")
+
+[node name="Torso" type="MeshInstance3D" parent="Model"]
+position = Vector3(0, 0.44, 0)
+mesh = SubResource("TorsoMesh")
+
+[node name="Vest" type="CSGBox3D" parent="Model"]
+position = Vector3(0, 0.46, -0.24)
+size = Vector3(0.72, 0.68, 0.14)
+material = SubResource("PantsMaterial")
+
+[node name="Belt" type="CSGBox3D" parent="Model"]
+position = Vector3(0, 0.04, 0)
+size = Vector3(0.8, 0.1, 0.44)
+material = SubResource("WeaponMaterial")
+
+[node name="Backpack" type="CSGBox3D" parent="Model"]
+position = Vector3(0, 0.45, 0.3)
+size = Vector3(0.58, 0.62, 0.24)
+material = SubResource("PantsMaterial")
+
+[node name="LeftArm" type="Node3D" parent="Model"]
+position = Vector3(-0.55, 0.84, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Model/LeftArm"]
+position = Vector3(0, -0.42, 0)
+mesh = SubResource("LimbMesh")
+
+[node name="RightArm" type="Node3D" parent="Model"]
+position = Vector3(0.55, 0.84, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Model/RightArm"]
+position = Vector3(0, -0.42, 0)
+mesh = SubResource("LimbMesh")
+
+[node name="Knife" type="Node3D" parent="Model/RightArm"]
+position = Vector3(0, -0.86, -0.02)
+
+[node name="Handle" type="CSGBox3D" parent="Model/RightArm/Knife"]
+position = Vector3(0, 0, -0.14)
+size = Vector3(0.14, 0.14, 0.3)
+material = SubResource("WeaponMaterial")
+
+[node name="Blade" type="CSGBox3D" parent="Model/RightArm/Knife"]
+position = Vector3(0, 0, -0.53)
+size = Vector3(0.13, 0.06, 0.5)
+material = SubResource("KnifeMaterial")
+
+[node name="LeftLeg" type="Node3D" parent="Model"]
+position = Vector3(-0.2, 0.02, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Model/LeftLeg"]
+position = Vector3(0, -0.42, 0)
+mesh = SubResource("LegMesh")
+
+[node name="RightLeg" type="Node3D" parent="Model"]
+position = Vector3(0.2, 0.02, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Model/RightLeg"]
+position = Vector3(0, -0.42, 0)
+mesh = SubResource("LegMesh")
+
+[node name="LeftBoot" type="CSGBox3D" parent="Model"]
+position = Vector3(-0.2, -0.75, -0.03)
+size = Vector3(0.36, 0.22, 0.42)
+material = SubResource("WeaponMaterial")
+
+[node name="RightBoot" type="CSGBox3D" parent="Model"]
+position = Vector3(0.2, -0.75, -0.03)
+size = Vector3(0.36, 0.22, 0.42)
+material = SubResource("WeaponMaterial")
+
+[node name="Weapons" type="Node3D" parent="Model"]
+position = Vector3(0.55, -0.02, -0.18)
+
+[node name="Pistol" type="Node3D" parent="Model/Weapons"]
+visible = false
+
+[node name="Body" type="CSGBox3D" parent="Model/Weapons/Pistol"]
+position = Vector3(0, 0, -0.18)
+size = Vector3(0.2, 0.2, 0.52)
+material = SubResource("WeaponMaterial")
+
+[node name="Handle" type="CSGBox3D" parent="Model/Weapons/Pistol"]
+position = Vector3(0, -0.2, -0.04)
+rotation_degrees = Vector3(-12, 0, 0)
+size = Vector3(0.18, 0.38, 0.2)
+material = SubResource("WeaponMaterial")
+
+[node name="MuzzleFlash" type="CSGBox3D" parent="Model/Weapons/Pistol"]
+visible = false
+position = Vector3(0, 0, -0.5)
+size = Vector3(0.16, 0.16, 0.16)
+material = SubResource("MuzzleMaterial")
+
+[node name="CollisionShape" type="CollisionShape3D" parent="."]
+position = Vector3(0, 0.27, 0)
+shape = SubResource("PlayerShape")

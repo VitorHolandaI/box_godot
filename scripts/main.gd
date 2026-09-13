@@ -1,0 +1,474 @@
+extends Node3D
+
+const PLAYER_SCENE := preload("res://scenes/player.tscn")
+const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
+const ZOMBIE_RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
+const BULLET_SCENE := preload("res://scenes/bullet.tscn")
+const AMMO_PICKUP_SCENE := preload("res://scenes/ammo_pickup.tscn")
+const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
+const MAX_LOCAL_PLAYERS := 4
+const MAX_ALIVE_ZOMBIES := 100
+const MAX_CORPSES := 20
+const SPAWN_INTERVAL := 1.0
+const INPUT_INTERVAL := 1.0 / 30.0
+const SNAPSHOT_INTERVAL := 1.0 / 20.0
+const MAX_ZOMBIES_PER_SNAPSHOT_PACKET := 4
+const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 2
+const MIN_ZOMBIE_SPAWN_DISTANCE := 45.0
+const FOREST_SPAWN_INNER := 100.0
+const FOREST_SPAWN_OUTER := 112.0
+const INITIAL_ZOMBIE_SPAWN := 30
+const PLAYER_SPAWN_POINTS := [
+	Vector3(-13.0, 0.5, 9.5),
+	Vector3(-11.0, 0.5, 9.5),
+	Vector3(-13.0, 0.5, 12.5),
+	Vector3(-11.0, 0.5, 12.5),
+]
+
+@onready var players_node: Node3D = $Players
+@onready var zombies: Node3D = $Zombies
+@onready var split_screen = $Interface/SplitScreen
+@onready var sun: DirectionalLight3D = $Sun
+@onready var in_game_menu: Control = $Interface/InGameMenu
+
+var local_players: Array[Node] = []
+var network_players: Dictionary = {}
+var corpses: Array[Node] = []
+var ragdolls: Array[Node] = []
+var spawn_elapsed := 0.0
+var spawn_index := 0
+var input_elapsed := 0.0
+var snapshot_elapsed := 0.0
+var zombie_snapshot_sequence := 0
+var received_zombie_snapshot_sequence := -1
+var received_zombie_snapshot_chunks: Dictionary = {}
+var received_zombie_names: Dictionary = {}
+var bot_ai := PlayerBotAI.new()
+
+
+func _ready() -> void:
+	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
+	coordinator.name = "ZombieFlockCoordinator"
+	add_child(coordinator)
+
+	if not NetworkSession.bot_name.is_empty():
+		DisplayServer.window_set_title("Box Godot - %s" % NetworkSession.bot_name)
+	sun.shadow_enabled = GameConfig.uses_world_shadows()
+	if NetworkSession.is_offline():
+		var configs := _get_local_player_configs()
+		for slot in configs.size():
+			_spawn_offline_player(slot, configs[slot])
+		split_screen.configure(local_players)
+		return
+
+	NetworkSession.roster_changed.connect(_reconcile_network_players)
+	NetworkSession.server_lost.connect(_on_server_lost)
+	_configure_network_zombies()
+	_reconcile_network_players()
+	if NetworkSession.is_server():
+		for _index in INITIAL_ZOMBIE_SPAWN:
+			_spawn_zombie()
+	_notify_scene_loaded.call_deferred()
+
+
+func _notify_scene_loaded() -> void:
+	await get_tree().process_frame
+	await get_tree().create_timer(0.1).timeout
+	NetworkSession.notify_scene_loaded()
+
+
+func _process(delta: float) -> void:
+	if NetworkSession.is_client():
+		return
+	var alive_count := get_tree().get_nodes_in_group("zombies").size()
+	if alive_count < MAX_ALIVE_ZOMBIES:
+		spawn_elapsed += delta
+		if spawn_elapsed >= SPAWN_INTERVAL:
+			spawn_elapsed = 0.0
+			_spawn_zombie()
+	else:
+		spawn_elapsed = 0.0
+
+
+func _physics_process(delta: float) -> void:
+	if NetworkSession.is_client():
+		if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
+			bot_ai.update(delta, get_tree())
+		input_elapsed += delta
+		if input_elapsed >= INPUT_INTERVAL:
+			input_elapsed = 0.0
+			_submit_inputs.rpc_id(NetworkSession.SERVER_ID, _collect_local_inputs())
+	elif NetworkSession.is_server():
+		snapshot_elapsed += delta
+		if snapshot_elapsed >= SNAPSHOT_INTERVAL:
+			snapshot_elapsed = 0.0
+			if not NetworkSession.peer_slots.is_empty() and _loaded_peers_match(NetworkSession.peer_slots, NetworkSession.loaded_peers):
+				_send_player_snapshots(_collect_player_states())
+				_send_zombie_snapshots(_collect_zombie_states())
+
+
+func register_corpse(corpse: Node) -> void:
+	if NetworkSession.is_client():
+		return
+	corpses.append(corpse)
+	if corpses.size() > MAX_CORPSES:
+		var oldest_corpse: Node = corpses.pop_front()
+		if is_instance_valid(oldest_corpse):
+			oldest_corpse.queue_free()
+
+
+func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0) -> void:
+	var ragdoll := ZOMBIE_RAGDOLL_SCENE.instantiate()
+	add_child(ragdoll)
+	ragdoll.global_position = position
+	ragdoll.rotation.y = rotation
+	ragdoll.setup(velocity, z_type)
+	ragdolls.append(ragdoll)
+	if ragdolls.size() > MAX_CORPSES:
+		var oldest_ragdoll: Node = ragdolls.pop_front()
+		if is_instance_valid(oldest_ragdoll):
+			oldest_ragdoll.queue_free()
+	if (NetworkSession.is_server() or NetworkSession.is_offline()) and randf() < 0.25:
+		_spawn_world_ammo(position + Vector3.UP * 0.15)
+
+
+func _spawn_world_ammo(spawn_position: Vector3) -> void:
+	var pickup := AMMO_PICKUP_SCENE.instantiate() as Node3D
+	pickup.set("respawns", false)
+	pickup.set("ammo_amount", 18)
+	add_child(pickup)
+	pickup.global_position = spawn_position
+	if NetworkSession.is_server():
+		for peer_id in NetworkSession.loaded_peers:
+			_replicate_ammo_drop.rpc_id(int(peer_id), spawn_position)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _replicate_ammo_drop(spawn_position: Vector3) -> void:
+	if not NetworkSession.is_client():
+		return
+	var pickup := AMMO_PICKUP_SCENE.instantiate() as Node3D
+	pickup.set("respawns", false)
+	pickup.set("ammo_amount", 18)
+	add_child(pickup)
+	pickup.global_position = spawn_position
+
+
+func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3) -> void:
+	if not NetworkSession.is_server():
+		return
+	for peer_id in NetworkSession.loaded_peers:
+		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3) -> void:
+	if not NetworkSession.is_client():
+		return
+	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
+		bot_ai.notify_bullet()
+	var bullet = BULLET_SCENE.instantiate()
+	add_child(bullet)
+	bullet.global_position = spawn_position
+	bullet.setup(bullet_direction, 0, false)
+	bullet.add_to_group("network_bullet_visuals")
+
+
+func _spawn_offline_player(slot: int, config: Dictionary) -> void:
+	var player = PLAYER_SCENE.instantiate()
+	player.name = "Player%d" % (slot + 1)
+	player.local_slot = slot
+	player.input_action_prefix = "player_%d_" % (slot + 1)
+	player.input_device_name = config["device_name"]
+	player.position = PLAYER_SPAWN_POINTS[slot]
+	player.set_color_index(slot)
+	players_node.add_child(player)
+	local_players.append(player)
+
+
+func _reconcile_network_players() -> void:
+	var expected: Dictionary = {}
+	for peer_value in NetworkSession.peer_slots:
+		var peer_id := int(peer_value)
+		var slot_count := clampi(int(NetworkSession.peer_slots[peer_value]), 0, MAX_LOCAL_PLAYERS)
+		for slot in slot_count:
+			var key := _player_key(peer_id, slot)
+			expected[key] = true
+			if not network_players.has(key):
+				_spawn_network_player(peer_id, slot, key)
+
+	for key in network_players.keys():
+		if expected.has(key):
+			continue
+		var player = network_players[key]
+		network_players.erase(key)
+		if is_instance_valid(player):
+			player.queue_free()
+	_refresh_local_views()
+
+
+func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
+	var player = PLAYER_SCENE.instantiate()
+	player.name = "Player_%d_%d" % [peer_id, slot]
+	player.owner_peer_id = peer_id
+	player.local_slot = slot
+	player.simulation_enabled = NetworkSession.is_server()
+	player.reads_local_input = false
+	player.position = PLAYER_SPAWN_POINTS[network_players.size() % PLAYER_SPAWN_POINTS.size()]
+	player.set_color_index(network_players.size())
+
+	if peer_id == NetworkSession.local_peer_id() and slot < GameConfig.player_input_configs.size():
+		var config: Dictionary = GameConfig.player_input_configs[slot]
+		player.input_action_prefix = "player_%d_" % (slot + 1)
+		if NetworkSession.autoplay_bot:
+			player.input_device_name = NetworkSession.bot_name if not NetworkSession.bot_name.is_empty() else "Bot"
+		else:
+			player.input_device_name = config["device_name"]
+	else:
+		player.input_device_name = "Rede"
+
+	players_node.add_child(player, true)
+	network_players[key] = player
+
+
+func _refresh_local_views() -> void:
+	local_players.clear()
+	var local_id := NetworkSession.local_peer_id()
+	var local_count := int(NetworkSession.peer_slots.get(local_id, 0))
+	for slot in local_count:
+		var player = network_players.get(_player_key(local_id, slot))
+		if player != null:
+			local_players.append(player)
+	split_screen.configure(local_players)
+
+
+func _collect_local_inputs() -> Array:
+	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
+		return bot_ai.collect_inputs(local_players, zombies, get_tree())
+	if in_game_menu.is_open:
+		return _collect_neutral_inputs()
+	var states: Array = []
+	for player in local_players:
+		if is_instance_valid(player):
+			states.append(player.get_local_input_state())
+	return states
+
+
+func _collect_neutral_inputs() -> Array:
+	var states: Array = []
+	for player in local_players:
+		if not is_instance_valid(player):
+			continue
+		states.append({
+			"slot": player.local_slot,
+			"move": Vector2.ZERO,
+			"jump": false,
+			"sprint": false,
+			"attack": false,
+			"knife": false,
+			"pistol": false,
+			"reload": false,
+		})
+	return states
+
+
+@rpc("any_peer", "call_remote", "unreliable_ordered")
+func _submit_inputs(states: Array) -> void:
+	if not NetworkSession.is_server():
+		return
+	var sender_id := multiplayer.get_remote_sender_id()
+	var allowed_slots := int(NetworkSession.peer_slots.get(sender_id, 0))
+	if allowed_slots == 0 or states.size() > allowed_slots:
+		return
+	for state_value in states:
+		if not state_value is Dictionary:
+			continue
+		var state: Dictionary = state_value
+		var slot := int(state.get("slot", -1))
+		if slot < 0 or slot >= allowed_slots:
+			continue
+		var player = network_players.get(_player_key(sender_id, slot))
+		if player != null:
+			player.apply_network_input(state)
+
+
+func _collect_player_states() -> Array:
+	var states: Array = []
+	for key in network_players:
+		var player = network_players[key]
+		if not is_instance_valid(player):
+			continue
+		var state: Dictionary = player.get_network_state()
+		state["key"] = key
+		states.append(state)
+	return states
+
+
+func _collect_zombie_states() -> Array:
+	var states: Array = []
+	for zombie in zombies.get_children():
+		if not zombie.has_method("get_network_state"):
+			continue
+		var state: Dictionary = zombie.get_network_state()
+		state["name"] = zombie.name
+		states.append(state)
+	return states
+
+
+func _send_player_snapshots(states: Array) -> void:
+	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
+	for packet_index in packet_count:
+		var packet_states: Array = []
+		var first_state := packet_index * MAX_PLAYERS_PER_SNAPSHOT_PACKET
+		var state_limit := mini(first_state + MAX_PLAYERS_PER_SNAPSHOT_PACKET, states.size())
+		for state_index in range(first_state, state_limit):
+			packet_states.append(states[state_index])
+		for peer_id in NetworkSession.loaded_peers:
+			_apply_player_snapshot.rpc_id(int(peer_id), packet_states)
+
+
+func _send_zombie_snapshots(states: Array) -> void:
+	var packet_count := maxi(ceili(float(states.size()) / MAX_ZOMBIES_PER_SNAPSHOT_PACKET), 1)
+	for packet_index in packet_count:
+		var packet_states: Array = []
+		var first_state := packet_index * MAX_ZOMBIES_PER_SNAPSHOT_PACKET
+		var state_limit := mini(first_state + MAX_ZOMBIES_PER_SNAPSHOT_PACKET, states.size())
+		for state_index in range(first_state, state_limit):
+			packet_states.append(states[state_index])
+		for peer_id in NetworkSession.loaded_peers:
+			_apply_zombie_snapshot.rpc_id(int(peer_id), packet_states, zombie_snapshot_sequence, packet_index, packet_count)
+	zombie_snapshot_sequence += 1
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _apply_player_snapshot(player_states: Array) -> void:
+	if not NetworkSession.is_client():
+		return
+	for state_value in player_states:
+		if not state_value is Dictionary:
+			continue
+		var state: Dictionary = state_value
+		var player = network_players.get(String(state.get("key", "")))
+		if player != null:
+			player.apply_network_state(state)
+			bot_ai.notify_player_state(state, player in local_players)
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _apply_zombie_snapshot(
+		zombie_states: Array,
+		snapshot_sequence: int,
+		packet_index: int,
+		packet_count: int
+) -> void:
+	if not NetworkSession.is_client():
+		return
+	if snapshot_sequence < received_zombie_snapshot_sequence or packet_count <= 0:
+		return
+	if packet_index < 0 or packet_index >= packet_count:
+		return
+	if snapshot_sequence > received_zombie_snapshot_sequence:
+		received_zombie_snapshot_sequence = snapshot_sequence
+		received_zombie_snapshot_chunks.clear()
+		received_zombie_names.clear()
+	received_zombie_snapshot_chunks[packet_index] = true
+	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
+		bot_ai.notify_zombie_states(zombie_states)
+	_apply_zombie_states(zombie_states)
+	if received_zombie_snapshot_chunks.size() == packet_count:
+		_remove_missing_network_zombies()
+
+
+func _apply_zombie_states(states: Array) -> void:
+	for state_value in states:
+		if not state_value is Dictionary:
+			continue
+		var state: Dictionary = state_value
+		var zombie_name := String(state.get("name", ""))
+		if zombie_name.is_empty() or zombie_name.length() > 64:
+			continue
+		received_zombie_names[zombie_name] = true
+		var zombie := zombies.get_node_or_null(NodePath(zombie_name))
+		if zombie == null:
+			zombie = ZOMBIE_SCENE.instantiate()
+			zombie.name = zombie_name
+			zombie.simulation_enabled = false
+			zombies.add_child(zombie, true)
+		zombie.apply_network_state(state)
+
+
+func _remove_missing_network_zombies() -> void:
+	for zombie in zombies.get_children():
+		if not received_zombie_names.has(String(zombie.name)):
+			zombie.queue_free()
+
+
+func _configure_network_zombies() -> void:
+	if not NetworkSession.is_client():
+		return
+	for zombie in zombies.get_children():
+		zombie.simulation_enabled = false
+
+
+func _spawn_zombie() -> void:
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.name = "ZombieSpawn%d" % spawn_index
+	zombies.add_child(zombie, true)
+	zombie.global_position = _pick_forest_spawn_position()
+	spawn_index += 1
+
+
+func _pick_forest_spawn_position() -> Vector3:
+	for _attempt in 24:
+		var angle := randf() * TAU
+		var radius := randf_range(FOREST_SPAWN_INNER, FOREST_SPAWN_OUTER)
+		var candidate := Vector3(cos(angle) * radius, 1.0, sin(angle) * radius)
+		if _is_far_from_players(candidate):
+			return candidate
+	return Vector3(FOREST_SPAWN_OUTER, 1.0, 0.0)
+
+
+func _is_far_from_players(candidate: Vector3) -> bool:
+	for player in get_tree().get_nodes_in_group("player"):
+		var player_body := player as CharacterBody3D
+		if player_body != null and candidate.distance_to(player_body.global_position) < MIN_ZOMBIE_SPAWN_DISTANCE:
+			return false
+	return true
+
+
+func _player_key(peer_id: int, slot: int) -> String:
+	return "%d:%d" % [peer_id, slot]
+
+
+func _loaded_peers_match(expected: Dictionary, loaded: Dictionary) -> bool:
+	if expected.size() != loaded.size():
+		return false
+	for id in expected.keys():
+		if not loaded.has(id):
+			return false
+	return true
+
+
+func _on_server_lost() -> void:
+	get_tree().change_scene_to_file("res://scenes/menu.tscn")
+
+
+func _get_local_player_configs() -> Array[Dictionary]:
+	var forced_count := _get_forced_local_player_count()
+	if forced_count > 0:
+		var forced_configs: Array[Dictionary] = []
+		for slot in forced_count:
+			forced_configs.append(GameConfig.create_keyboard_config(slot))
+		GameConfig.configure_local_players(forced_configs)
+
+	if GameConfig.player_input_configs.is_empty():
+		var default_configs: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
+		GameConfig.configure_local_players(default_configs)
+	return GameConfig.player_input_configs
+
+
+func _get_forced_local_player_count() -> int:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--local-players="):
+			return clampi(int(argument.trim_prefix("--local-players=")), 1, MAX_LOCAL_PLAYERS)
+	return 0

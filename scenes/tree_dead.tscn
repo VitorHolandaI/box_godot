@@ -1,0 +1,38 @@
+[gd_scene load_steps=4 format=3]
+
+[sub_resource type="StandardMaterial3D" id="WoodMaterial"]
+albedo_color = Color(0.17, 0.105, 0.065, 1)
+roughness = 1.0
+
+[sub_resource type="BoxMesh" id="TrunkMesh"]
+material = SubResource("WoodMaterial")
+size = Vector3(0.5, 4.2, 0.5)
+
+[sub_resource type="BoxMesh" id="BranchMesh"]
+material = SubResource("WoodMaterial")
+size = Vector3(2.0, 0.35, 0.35)
+
+[node name="DeadTree" type="Node3D"]
+
+[node name="Trunk" type="MeshInstance3D" parent="."]
+position = Vector3(0, 2.1, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("TrunkMesh")
+
+[node name="BranchLeft" type="MeshInstance3D" parent="."]
+position = Vector3(-0.65, 3.25, 0)
+rotation_degrees = Vector3(0, 0, -32)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BranchMesh")
+
+[node name="BranchRight" type="MeshInstance3D" parent="."]
+position = Vector3(0.65, 2.65, 0)
+rotation_degrees = Vector3(0, 0, 38)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("BranchMesh")

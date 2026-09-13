@@ -1,0 +1,107 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/zombie.gd" id="1_zombie"]
+
+[sub_resource type="StandardMaterial3D" id="SkinMaterial"]
+albedo_color = Color(0.3, 0.58, 0.24, 1)
+roughness = 0.9
+
+[sub_resource type="StandardMaterial3D" id="ShirtMaterial"]
+albedo_color = Color(0.28, 0.16, 0.12, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="PantsMaterial"]
+albedo_color = Color(0.18, 0.2, 0.22, 1)
+roughness = 0.95
+
+[sub_resource type="StandardMaterial3D" id="EyeMaterial"]
+albedo_color = Color(0.75, 0.05, 0.04, 1)
+emission_enabled = true
+emission = Color(0.3, 0.01, 0, 1)
+
+[sub_resource type="BoxMesh" id="HeadMesh"]
+material = SubResource("SkinMaterial")
+size = Vector3(0.56, 0.56, 0.56)
+
+[sub_resource type="BoxMesh" id="TorsoMesh"]
+material = SubResource("ShirtMaterial")
+size = Vector3(0.8, 0.84, 0.42)
+
+[sub_resource type="BoxMesh" id="ArmMesh"]
+material = SubResource("SkinMaterial")
+size = Vector3(0.3, 0.84, 0.34)
+
+[sub_resource type="BoxMesh" id="LegMesh"]
+material = SubResource("PantsMaterial")
+size = Vector3(0.34, 0.84, 0.36)
+
+[sub_resource type="CapsuleShape3D" id="ZombieShape"]
+radius = 0.4
+height = 2.2
+
+[node name="Zombie" type="CharacterBody3D" groups=["zombies"]]
+collision_layer = 4
+collision_mask = 11
+script = ExtResource("1_zombie")
+
+[node name="Model" type="Node3D" parent="."]
+
+[node name="Head" type="MeshInstance3D" parent="Model"]
+position = Vector3(0, 1.14, 0)
+mesh = SubResource("HeadMesh")
+
+[node name="LeftEye" type="CSGBox3D" parent="Model/Head"]
+position = Vector3(-0.12, 0.05, -0.285)
+size = Vector3(0.08, 0.08, 0.02)
+material = SubResource("EyeMaterial")
+
+[node name="RightEye" type="CSGBox3D" parent="Model/Head"]
+position = Vector3(0.12, 0.05, -0.285)
+size = Vector3(0.08, 0.08, 0.02)
+material = SubResource("EyeMaterial")
+
+[node name="Torso" type="MeshInstance3D" parent="Model"]
+position = Vector3(0, 0.44, 0)
+mesh = SubResource("TorsoMesh")
+
+[node name="LeftArm" type="Node3D" parent="Model"]
+position = Vector3(-0.56, 0.84, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Model/LeftArm"]
+position = Vector3(0, -0.42, 0)
+mesh = SubResource("ArmMesh")
+
+[node name="RightArm" type="Node3D" parent="Model"]
+position = Vector3(0.56, 0.84, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Model/RightArm"]
+position = Vector3(0, -0.42, 0)
+mesh = SubResource("ArmMesh")
+
+[node name="LeftLeg" type="Node3D" parent="Model"]
+position = Vector3(-0.2, 0.02, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Model/LeftLeg"]
+position = Vector3(0, -0.42, 0)
+mesh = SubResource("LegMesh")
+
+[node name="RightLeg" type="Node3D" parent="Model"]
+position = Vector3(0.2, 0.02, 0)
+
+[node name="Mesh" type="MeshInstance3D" parent="Model/RightLeg"]
+position = Vector3(0, -0.42, 0)
+mesh = SubResource("LegMesh")
+
+[node name="CollisionShape" type="CollisionShape3D" parent="."]
+position = Vector3(0, 0.22, 0)
+shape = SubResource("ZombieShape")
+
+[node name="HealthLabel" type="Label3D" parent="."]
+position = Vector3(0, 1.75, 0)
+modulate = Color(0.9, 0.12, 0.08, 1)
+text = "100/100"
+font_size = 48
+outline_size = 8
+pixel_size = 0.008
+billboard = 1
+no_depth_test = true

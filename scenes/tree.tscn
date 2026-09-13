@@ -1,0 +1,44 @@
+[gd_scene load_steps=5 format=3]
+
+[sub_resource type="StandardMaterial3D" id="TrunkMaterial"]
+albedo_color = Color(0.22, 0.12, 0.055, 1)
+roughness = 1.0
+
+[sub_resource type="StandardMaterial3D" id="LeavesMaterial"]
+albedo_color = Color(0.075, 0.2, 0.08, 1)
+roughness = 0.95
+
+[sub_resource type="BoxMesh" id="TrunkMesh"]
+material = SubResource("TrunkMaterial")
+size = Vector3(0.45, 2.8, 0.45)
+
+[sub_resource type="BoxMesh" id="LowerCrownMesh"]
+material = SubResource("LeavesMaterial")
+size = Vector3(2.2, 1.5, 2.2)
+
+[sub_resource type="BoxMesh" id="UpperCrownMesh"]
+material = SubResource("LeavesMaterial")
+size = Vector3(1.5, 1.2, 1.5)
+
+[node name="Tree" type="Node3D"]
+
+[node name="Trunk" type="MeshInstance3D" parent="."]
+position = Vector3(0, 1.4, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("TrunkMesh")
+
+[node name="LowerCrown" type="MeshInstance3D" parent="."]
+position = Vector3(0, 3.0, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("LowerCrownMesh")
+
+[node name="UpperCrown" type="MeshInstance3D" parent="."]
+position = Vector3(0, 4.25, 0)
+visibility_range_end = 85.0
+visibility_range_end_margin = 15.0
+visibility_range_fade_mode = 1
+mesh = SubResource("UpperCrownMesh")

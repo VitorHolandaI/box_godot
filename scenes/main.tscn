@@ -1,0 +1,156 @@
+[gd_scene load_steps=25 format=3]
+
+[ext_resource type="Script" path="res://scripts/main.gd" id="1_main"]
+[ext_resource type="Script" path="res://scripts/split_screen_manager.gd" id="2_split"]
+[ext_resource type="PackedScene" path="res://scenes/zombie.tscn" id="3_zombie"]
+[ext_resource type="PackedScene" path="res://scenes/building.tscn" id="4_building"]
+[ext_resource type="PackedScene" path="res://scenes/car.tscn" id="5_car"]
+[ext_resource type="PackedScene" path="res://scenes/streetlight.tscn" id="6_streetlight"]
+[ext_resource type="Script" path="res://scripts/city_generator.gd" id="7_city_generator"]
+[ext_resource type="PackedScene" path="res://scenes/in_game_menu.tscn" id="8_in_game_menu"]
+[ext_resource type="Shader" path="res://shaders/ground_dirt.gdshader" id="9_dirt"]
+[ext_resource type="Script" path="res://scripts/performance_hud.gd" id="10_perf"]
+
+[sub_resource type="Environment" id="WorldEnvironment"]
+background_mode = 1
+background_color = Color(0.24, 0.33, 0.42, 1)
+ambient_light_source = 3
+ambient_light_color = Color(0.56, 0.62, 0.7, 1)
+ambient_light_energy = 0.65
+fog_enabled = true
+fog_light_color = Color(0.24, 0.33, 0.42, 1)
+fog_light_energy = 1.0
+fog_density = 0.008
+fog_sky_affect = 1.0
+
+[sub_resource type="ShaderMaterial" id="GroundMaterial"]
+shader = ExtResource("9_dirt")
+
+[sub_resource type="BoxMesh" id="GroundMesh"]
+material = SubResource("GroundMaterial")
+size = Vector3(400, 0.2, 400)
+
+[sub_resource type="BoxShape3D" id="GroundShape"]
+size = Vector3(400, 0.2, 400)
+
+[sub_resource type="StandardMaterial3D" id="RoadMaterial"]
+albedo_color = Color(0.075, 0.08, 0.085, 1)
+roughness = 0.9
+
+[sub_resource type="BoxMesh" id="RoadVerticalMesh"]
+material = SubResource("RoadMaterial")
+size = Vector3(8, 0.04, 188)
+
+[sub_resource type="BoxMesh" id="RoadHorizontalMesh"]
+material = SubResource("RoadMaterial")
+size = Vector3(188, 0.04, 8)
+
+[sub_resource type="StandardMaterial3D" id="LineMaterial"]
+albedo_color = Color(0.95, 0.72, 0.08, 1)
+roughness = 0.8
+
+[sub_resource type="BoxMesh" id="LineVerticalMesh"]
+material = SubResource("LineMaterial")
+size = Vector3(0.14, 0.02, 188)
+
+[sub_resource type="BoxMesh" id="LineHorizontalMesh"]
+material = SubResource("LineMaterial")
+size = Vector3(188, 0.02, 0.14)
+
+[sub_resource type="StandardMaterial3D" id="CrosswalkMaterial"]
+albedo_color = Color(0.86, 0.86, 0.8, 1)
+roughness = 0.85
+
+[sub_resource type="BoxMesh" id="CrosswalkMesh"]
+material = SubResource("CrosswalkMaterial")
+size = Vector3(0.55, 0.02, 3.2)
+
+[node name="Main" type="Node3D"]
+script = ExtResource("1_main")
+
+[node name="Environment" type="WorldEnvironment" parent="."]
+environment = SubResource("WorldEnvironment")
+
+[node name="Sun" type="DirectionalLight3D" parent="."]
+rotation_degrees = Vector3(-55, -35, 0)
+light_energy = 1.2
+shadow_enabled = true
+directional_shadow_max_distance = 55.0
+
+[node name="Ground" type="StaticBody3D" parent="."]
+
+[node name="Mesh" type="MeshInstance3D" parent="Ground"]
+mesh = SubResource("GroundMesh")
+
+[node name="CollisionShape" type="CollisionShape3D" parent="Ground"]
+shape = SubResource("GroundShape")
+
+[node name="RoadVertical" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.12, 0)
+mesh = SubResource("RoadVerticalMesh")
+
+[node name="RoadHorizontal" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.13, 0)
+mesh = SubResource("RoadHorizontalMesh")
+
+[node name="RoadLineVertical" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.155, 0)
+mesh = SubResource("LineVerticalMesh")
+
+[node name="RoadLineHorizontal" type="MeshInstance3D" parent="."]
+position = Vector3(0, 0.165, 0)
+mesh = SubResource("LineHorizontalMesh")
+
+[node name="Crosswalks" type="Node3D" parent="."]
+
+[node name="Stripe1" type="MeshInstance3D" parent="Crosswalks"]
+position = Vector3(-2.1, 0.18, 0)
+mesh = SubResource("CrosswalkMesh")
+
+[node name="Stripe2" type="MeshInstance3D" parent="Crosswalks"]
+position = Vector3(-1.05, 0.18, 0)
+mesh = SubResource("CrosswalkMesh")
+
+[node name="Stripe3" type="MeshInstance3D" parent="Crosswalks"]
+position = Vector3(1.05, 0.18, 0)
+mesh = SubResource("CrosswalkMesh")
+
+[node name="Stripe4" type="MeshInstance3D" parent="Crosswalks"]
+position = Vector3(2.1, 0.18, 0)
+mesh = SubResource("CrosswalkMesh")
+
+[node name="GeneratedCity" type="Node3D" parent="."]
+script = ExtResource("7_city_generator")
+
+[node name="Players" type="Node3D" parent="."]
+
+[node name="Zombies" type="Node3D" parent="."]
+
+[node name="ZombieNorth" parent="Zombies" instance=ExtResource("3_zombie")]
+position = Vector3(-12, 1, -2)
+
+[node name="ZombieWest" parent="Zombies" instance=ExtResource("3_zombie")]
+position = Vector3(-6, 1, 0)
+
+[node name="ZombieEast" parent="Zombies" instance=ExtResource("3_zombie")]
+position = Vector3(6, 1, 0)
+
+[node name="ZombieSouth" parent="Zombies" instance=ExtResource("3_zombie")]
+position = Vector3(0, 1, 14)
+
+[node name="Interface" type="CanvasLayer" parent="."]
+
+[node name="SplitScreen" type="Control" parent="Interface"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("2_split")
+
+[node name="InGameMenu" parent="Interface" instance=ExtResource("8_in_game_menu")]
+
+[node name="PerformanceHUD" type="Label" parent="Interface"]
+script = ExtResource("10_perf")

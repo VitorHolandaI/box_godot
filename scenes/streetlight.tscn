@@ -1,0 +1,35 @@
+[gd_scene load_steps=2 format=3]
+
+[sub_resource type="StandardMaterial3D" id="PoleMaterial"]
+albedo_color = Color(0.08, 0.085, 0.09, 1)
+metallic = 0.75
+roughness = 0.5
+
+[sub_resource type="StandardMaterial3D" id="LightMaterial"]
+albedo_color = Color(1, 0.72, 0.25, 1)
+emission_enabled = true
+emission = Color(1, 0.5, 0.12, 1)
+emission_energy_multiplier = 2.0
+
+[node name="Streetlight" type="Node3D"]
+
+[node name="Pole" type="CSGBox3D" parent="."]
+position = Vector3(0, 2.2, 0)
+size = Vector3(0.16, 4.4, 0.16)
+material = SubResource("PoleMaterial")
+
+[node name="Arm" type="CSGBox3D" parent="."]
+position = Vector3(0.45, 4.3, 0)
+size = Vector3(0.9, 0.14, 0.14)
+material = SubResource("PoleMaterial")
+
+[node name="Lamp" type="CSGBox3D" parent="."]
+position = Vector3(0.85, 4.18, 0)
+size = Vector3(0.32, 0.18, 0.32)
+material = SubResource("LightMaterial")
+
+[node name="Light" type="OmniLight3D" parent="."]
+position = Vector3(0.85, 4.05, 0)
+light_color = Color(1, 0.67, 0.35, 1)
+light_energy = 1.8
+omni_range = 7.0
