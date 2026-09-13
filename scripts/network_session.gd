@@ -29,8 +29,8 @@ var autoplay_bot := false
 var bot_name := ""
 var loaded_peers: Dictionary = {}
 var latency_ms := -1
-var procedural_city_enabled := false
-var survival_mode := false
+var procedural_city_enabled := true
+var survival_mode := true
 var world_seed := DEFAULT_WORLD_SEED
 var server_name := "Box Godot"
 var discovered_servers: Array[Dictionary] = []
@@ -431,8 +431,10 @@ func _get_command_line_server_name() -> String:
 
 
 func _reset_world_config_from_arguments() -> void:
-	procedural_city_enabled = "--procedural-city" in OS.get_cmdline_user_args()
-	survival_mode = "--survival" in OS.get_cmdline_user_args()
+	var arguments := OS.get_cmdline_user_args()
+	var unit_test_mode := "--unit-test" in arguments
+	procedural_city_enabled = not unit_test_mode and "--legacy-city" not in arguments
+	survival_mode = not unit_test_mode and "--classic-mode" not in arguments
 	world_seed = DEFAULT_WORLD_SEED
 	for argument in OS.get_cmdline_user_args():
 		if not argument.begins_with("--world-seed="):
