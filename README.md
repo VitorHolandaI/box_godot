@@ -31,17 +31,21 @@ arvores por lado no baixo, 60 no medio e 100 no alto.
 
 Zumbis surgem longe do jogador, na floresta, e caminham para dentro da cidade.
 A muralha bloqueia os jogadores, mas os zumbis atravessam os vao quebrados. O
-limite de zumbis vivos e de 100.
+alvo global da partida e de 600 zumbis vivos: eles aparecem gradualmente e cada
+morte libera uma vaga que tambem e reposta aos poucos, independentemente da
+quantidade de jogadores.
 
 ## Safehouse e Sistema de Vidas
 
 - **3 Vidas por Jogador**: Cada participante inicia com 3 vidas (`MAX_LIVES = 3`). Ao sofrer dano fatal, perde 1 vida e renasce dentro da Safehouse com vida e estamina cheias. Ao perder todas as 3 vidas, o jogador e eliminado da partida e o HUD exibe `[ELIMINADO]`.
 - **Safehouse Fortificada de 2 Andares**: Localizada no lote central da cidade, conta com 4 estacoes de leitos e respawn demarcadas com kits medicos, bancada de armamentos, caixas de suprimento militar e dois pickups funcionais de municao (no terreo e no andar superior).
+- **Porta Automatica**: O portal frontal abre para jogadores e zumbis proximos e fecha depois que a passagem fica vazia.
 - **Segundo Andar e Mirante**: Acesso por escadaria de madeira real com corrimao e rampa suave, sacada de franco-atirador com sacos de areia, janela tatica e holofote defensivo voltado para a rua exterior.
 
 ## Propagacao Sonora de Tiros e Ecolocalizacao
 
 - **Atenuacao Sonora por Distancia**: Cada disparo de pistola gera um estampido que se propaga por um raio de ate 65 metros. A intensidade diminui conforme a distancia da fonte do tiro.
+- **Trajetoria Fixa**: A bala preserva a direcao escolhida no instante do disparo e nao persegue alvos depois de sair da arma.
 - **Ecolocalizacao e Investigacao Lenta**: Zumbis que nao estao engajados em combate direto captam o som, calculam a direcao da fonte sonora e se deslocam em marcha cadenciada e cautelosa (velocidade reduzida em ~40%) em direcao ao local de onde veio o tiro.
 - Se avistarem um sobrevivente pelo caminho, transitam imediatamente para perseguição e investida direta.
 

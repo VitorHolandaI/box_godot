@@ -280,10 +280,10 @@ func _find_knife_target() -> Node3D:
 	return best_target
 
 
-func _fire_pistol() -> void:
+func _fire_pistol() -> Node3D:
 	if pistol_ammo <= 0:
 		_reload_pistol()
-		return
+		return null
 
 	pistol_ammo -= 1
 	attack_cooldown = 0.25
@@ -292,38 +292,17 @@ func _fire_pistol() -> void:
 	pistol_stance_time = 8.0
 	pistol_recoil_time = 0.12
 	var origin := muzzle_flash.global_position
-	var bullet_direction := -global_transform.basis.z
-	var assisted_target := _find_pistol_target()
-	if assisted_target != null:
-		bullet_direction = (assisted_target.global_position + Vector3.UP * 0.7 - origin).normalized()
-	var bullet = BULLET_SCENE.instantiate()
+	var bullet_direction := Vector3(aim_input.x, 0.0, aim_input.y).normalized()
+	if bullet_direction.is_zero_approx():
+		bullet_direction = -global_transform.basis.z
+	var bullet := BULLET_SCENE.instantiate() as Node3D
 	get_tree().current_scene.add_child(bullet)
 	bullet.global_position = origin + bullet_direction * 0.12
 	bullet.setup(bullet_direction, pistol_damage, true, self)
 	get_tree().call_group("zombies", "hear_gunshot", origin, 65.0)
 	if NetworkSession.is_server():
 		get_tree().current_scene.replicate_bullet_visual(bullet.global_position, bullet_direction)
-
-
-func _find_pistol_target() -> Node3D:
-	var forward := -global_transform.basis.z
-	var best_target: Node3D = null
-	var best_alignment := 0.70
-	var space_state := get_world_3d().direct_space_state
-	for target in _get_combat_targets():
-		var offset := target.global_position - global_position
-		offset.y = 0.0
-		if offset.length() > 30.0:
-			continue
-		var alignment := forward.dot(offset.normalized())
-		if alignment > best_alignment:
-			var ray := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.7, target.global_position + Vector3.UP * 0.7)
-			ray.exclude = [get_rid()]
-			var hit := space_state.intersect_ray(ray)
-			if hit.is_empty() or hit.collider == target:
-				best_alignment = alignment
-				best_target = target
-	return best_target
+	return bullet
 
 
 func _reload_pistol() -> void:

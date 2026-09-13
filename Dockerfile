@@ -20,12 +20,15 @@ RUN apt-get update \
 COPY --from=download /usr/local/bin/godot /usr/local/bin/godot
 WORKDIR /game
 COPY --chown=10001:10001 project.godot ./
+COPY --chown=10001:10001 assets/ ./assets/
 COPY --chown=10001:10001 scenes/ ./scenes/
 COPY --chown=10001:10001 scripts/ ./scripts/
 COPY --chown=10001:10001 shaders/ ./shaders/
 
+RUN chown 10001:10001 /game
 USER 10001:10001
 ENV XDG_CACHE_HOME=/tmp/cache
+RUN godot --headless --editor --path /game --quit
 EXPOSE 7000/udp
 
 ENTRYPOINT ["godot", "--headless", "--path", "/game", "--"]

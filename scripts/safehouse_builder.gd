@@ -8,6 +8,7 @@ extends RefCounted
 
 const AMMO_PICKUP_SCENE: PackedScene = preload("res://scenes/ammo_pickup.tscn")
 const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
+const SAFEHOUSE_DOOR_SCRIPT: Script = preload("res://scripts/safehouse_door.gd")
 const FLOOR_HEIGHT: float = 3.2
 
 const MODEL_PALLET: String = "res://assets/models/modular_urban/pallet.glb"
@@ -34,8 +35,10 @@ static func build_safehouse() -> StaticBody3D:
 	_build_ground_floor(house, ground_mat)
 	_build_mezzanine_walkways(house, cutout_floor_mat)
 	_build_all_cutout_walls(house, cutout_wall_mat)
+	_build_automatic_door(house)
 	_build_staircase(house, wood_mat)
 	_build_respawn_bunks(house)
+	_build_player_spawn_markers(house)
 	_build_tactical_armory(house)
 	_build_balcony(house, cutout_floor_mat)
 	_build_sanctuary_lighting(house)
@@ -113,7 +116,6 @@ static func _build_all_cutout_walls(house: StaticBody3D, cutout_mat: Material) -
 	# Fachada Norte - Terreo: Portal largo central de 4.0m
 	_add_wall_block(house, Vector3(4.3, 3.2, 0.3), Vector3(-4.15, 1.6, -6.25), cutout_mat)
 	_add_wall_block(house, Vector3(4.3, 3.2, 0.3), Vector3(4.15, 1.6, -6.25), cutout_mat)
-	_add_wall_block(house, Vector3(4.2, 0.8, 0.3), Vector3(0.0, 2.8, -6.25), cutout_mat)
 
 	# Fachada Norte - 2o Andar
 	_add_wall_block(house, Vector3(4.6, 3.2, 0.3), Vector3(-4.0, 4.8, -6.25), cutout_mat)
@@ -136,6 +138,60 @@ static func _add_wall_block(parent: Node3D, sz: Vector3, pos: Vector3, mat: Mate
 	col.shape = shape
 	col.position = pos
 	parent.add_child(col)
+
+
+static func _build_automatic_door(house: StaticBody3D) -> void:
+	var door := SAFEHOUSE_DOOR_SCRIPT.new() as Node3D
+	door.name = "SafehouseDoor"
+	door.position = Vector3(0.0, 0.0, -6.25)
+
+	var panel := AnimatableBody3D.new()
+	panel.name = "Panel"
+	panel.collision_layer = 1
+	panel.collision_mask = 0
+	var panel_mesh := BoxMesh.new()
+	panel_mesh.size = Vector3(3.8, 2.8, 0.18)
+	var panel_material := StandardMaterial3D.new()
+	panel_material.albedo_color = Color(0.16, 0.22, 0.18)
+	panel_material.metallic = 0.65
+	panel_material.roughness = 0.4
+	panel_mesh.material = panel_material
+	var mesh_instance := MeshInstance3D.new()
+	mesh_instance.mesh = panel_mesh
+	panel.add_child(mesh_instance)
+	var panel_collision := CollisionShape3D.new()
+	var panel_shape := BoxShape3D.new()
+	panel_shape.size = panel_mesh.size
+	panel_collision.shape = panel_shape
+	panel.add_child(panel_collision)
+	door.add_child(panel)
+
+	var detection_area := Area3D.new()
+	detection_area.name = "DetectionArea"
+	detection_area.collision_layer = 0
+	detection_area.collision_mask = 6
+	var detection_collision := CollisionShape3D.new()
+	var detection_shape := BoxShape3D.new()
+	detection_shape.size = Vector3(5.0, 3.0, 6.0)
+	detection_collision.shape = detection_shape
+	detection_collision.position = Vector3(0.0, 1.5, 0.0)
+	detection_area.add_child(detection_collision)
+	door.add_child(detection_area)
+	house.add_child(door)
+
+
+static func _build_player_spawn_markers(house: StaticBody3D) -> void:
+	var positions: Array[Vector3] = [
+		Vector3(-1.0, 1.06, -2.5),
+		Vector3(1.0, 1.06, -2.5),
+		Vector3(-1.0, 1.06, 0.5),
+		Vector3(1.0, 1.06, 0.5),
+	]
+	for index in positions.size():
+		var marker := Marker3D.new()
+		marker.name = "PlayerSpawn%d" % (index + 1)
+		marker.position = positions[index]
+		house.add_child(marker)
 
 
 static func _build_staircase(house: StaticBody3D, wood_mat: Material) -> void:

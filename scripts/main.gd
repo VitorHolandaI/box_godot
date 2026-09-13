@@ -6,23 +6,23 @@ const ZOMBIE_RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const AMMO_PICKUP_SCENE := preload("res://scenes/ammo_pickup.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
+const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
 const MAX_LOCAL_PLAYERS := 4
-const MAX_ALIVE_ZOMBIES := 100
+const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
 const MAX_CORPSES := 20
 const SPAWN_INTERVAL := 1.0
 const INPUT_INTERVAL := 1.0 / 30.0
-const SNAPSHOT_INTERVAL := 1.0 / 20.0
+const SNAPSHOT_INTERVAL := 1.0 / 10.0
 const MAX_ZOMBIES_PER_SNAPSHOT_PACKET := 4
 const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 2
 const MIN_ZOMBIE_SPAWN_DISTANCE := 45.0
 const FOREST_SPAWN_INNER := 100.0
 const FOREST_SPAWN_OUTER := 112.0
-const INITIAL_ZOMBIE_SPAWN := 30
 const PLAYER_SPAWN_POINTS := [
-	Vector3(-13.0, 0.5, 9.5),
-	Vector3(-11.0, 0.5, 9.5),
-	Vector3(-13.0, 0.5, 12.5),
-	Vector3(-11.0, 0.5, 12.5),
+	Vector3(-13.0, 1.18, 9.5),
+	Vector3(-11.0, 1.18, 9.5),
+	Vector3(-13.0, 1.18, 12.5),
+	Vector3(-11.0, 1.18, 12.5),
 ]
 
 @onready var players_node: Node3D = $Players
@@ -30,12 +30,12 @@ const PLAYER_SPAWN_POINTS := [
 @onready var split_screen = $Interface/SplitScreen
 @onready var sun: DirectionalLight3D = $Sun
 @onready var in_game_menu: Control = $Interface/InGameMenu
+@onready var safehouse_door: Node = get_node_or_null("GeneratedCity/CentralSafehouse/SafehouseDoor")
 
 var local_players: Array[Node] = []
 var network_players: Dictionary = {}
 var corpses: Array[Node] = []
 var ragdolls: Array[Node] = []
-var spawn_elapsed := 0.0
 var spawn_index := 0
 var input_elapsed := 0.0
 var snapshot_elapsed := 0.0
@@ -44,6 +44,7 @@ var received_zombie_snapshot_sequence := -1
 var received_zombie_snapshot_chunks: Dictionary = {}
 var received_zombie_names: Dictionary = {}
 var bot_ai := PlayerBotAI.new()
+var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
 
 
 func _ready() -> void:
@@ -65,9 +66,6 @@ func _ready() -> void:
 	NetworkSession.server_lost.connect(_on_server_lost)
 	_configure_network_zombies()
 	_reconcile_network_players()
-	if NetworkSession.is_server():
-		for _index in INITIAL_ZOMBIE_SPAWN:
-			_spawn_zombie()
 	_notify_scene_loaded.call_deferred()
 
 
@@ -80,14 +78,11 @@ func _notify_scene_loaded() -> void:
 func _process(delta: float) -> void:
 	if NetworkSession.is_client():
 		return
+	if not zombie_spawn_schedule.is_spawn_due(delta):
+		return
 	var alive_count := get_tree().get_nodes_in_group("zombies").size()
-	if alive_count < MAX_ALIVE_ZOMBIES:
-		spawn_elapsed += delta
-		if spawn_elapsed >= SPAWN_INTERVAL:
-			spawn_elapsed = 0.0
-			_spawn_zombie()
-	else:
-		spawn_elapsed = 0.0
+	if zombie_spawn_schedule.has_capacity(alive_count):
+		_spawn_zombie()
 
 
 func _physics_process(delta: float) -> void:
@@ -180,7 +175,7 @@ func _spawn_offline_player(slot: int, config: Dictionary) -> void:
 	player.local_slot = slot
 	player.input_action_prefix = "player_%d_" % (slot + 1)
 	player.input_device_name = config["device_name"]
-	player.position = PLAYER_SPAWN_POINTS[slot]
+	player.position = _get_player_spawn_position(slot)
 	player.set_color_index(slot)
 	players_node.add_child(player)
 	local_players.append(player)
@@ -214,7 +209,7 @@ func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
 	player.local_slot = slot
 	player.simulation_enabled = NetworkSession.is_server()
 	player.reads_local_input = false
-	player.position = PLAYER_SPAWN_POINTS[network_players.size() % PLAYER_SPAWN_POINTS.size()]
+	player.position = _get_player_spawn_position(network_players.size())
 	player.set_color_index(network_players.size())
 
 	if peer_id == NetworkSession.local_peer_id() and slot < GameConfig.player_input_configs.size():
@@ -317,6 +312,7 @@ func _collect_zombie_states() -> Array:
 
 func _send_player_snapshots(states: Array) -> void:
 	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
+	var door_open := safehouse_door != null and bool(safehouse_door.call("is_open_requested"))
 	for packet_index in packet_count:
 		var packet_states: Array = []
 		var first_state := packet_index * MAX_PLAYERS_PER_SNAPSHOT_PACKET
@@ -324,7 +320,7 @@ func _send_player_snapshots(states: Array) -> void:
 		for state_index in range(first_state, state_limit):
 			packet_states.append(states[state_index])
 		for peer_id in NetworkSession.loaded_peers:
-			_apply_player_snapshot.rpc_id(int(peer_id), packet_states)
+			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open)
 
 
 func _send_zombie_snapshots(states: Array) -> void:
@@ -341,9 +337,11 @@ func _send_zombie_snapshots(states: Array) -> void:
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func _apply_player_snapshot(player_states: Array) -> void:
+func _apply_player_snapshot(player_states: Array, door_open: bool) -> void:
 	if not NetworkSession.is_client():
 		return
+	if safehouse_door != null:
+		safehouse_door.call("apply_network_open_state", door_open)
 	for state_value in player_states:
 		if not state_value is Dictionary:
 			continue
@@ -434,6 +432,13 @@ func _is_far_from_players(candidate: Vector3) -> bool:
 		if player_body != null and candidate.distance_to(player_body.global_position) < MIN_ZOMBIE_SPAWN_DISTANCE:
 			return false
 	return true
+
+
+func _get_player_spawn_position(slot: int) -> Vector3:
+	var spawn_slot := slot % PLAYER_SPAWN_POINTS.size()
+	var marker_path := "GeneratedCity/CentralSafehouse/PlayerSpawn%d" % (spawn_slot + 1)
+	var marker := get_node_or_null(marker_path) as Marker3D
+	return marker.global_position if marker != null else PLAYER_SPAWN_POINTS[spawn_slot]
 
 
 func _player_key(peer_id: int, slot: int) -> String:
