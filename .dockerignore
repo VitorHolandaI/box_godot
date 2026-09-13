@@ -3,3 +3,4 @@
 .ai-memory.toml
 *.md
 scripts/*.sh
+!scripts/server_entrypoint.sh
