@@ -33,8 +33,8 @@ func _play_spatial(stream: AudioStream, world_position: Vector3, volume: float, 
 	player.volume_db = linear_to_db(volume)
 	player.max_distance = max_distance
 	player.unit_size = 4.0
-	player.global_position = world_position
 	add_child(player)
+	player.global_position = world_position
 	player.finished.connect(player.queue_free)
 	player.play()
 
