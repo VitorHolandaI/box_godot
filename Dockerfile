@@ -31,5 +31,5 @@ ENV XDG_CACHE_HOME=/tmp/cache
 RUN godot --headless --editor --path /game --quit
 EXPOSE 27015/udp
 
-ENTRYPOINT ["godot", "--headless", "--path", "/game", "--"]
+ENTRYPOINT ["/bin/bash", "/game/scripts/server_entrypoint.sh"]
 CMD ["--server", "--server-port=27015"]

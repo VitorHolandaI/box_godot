@@ -11,12 +11,15 @@ static func generate(building_seed: int, archetype: String):
 	rng.seed = building_seed
 	if archetype == "house":
 		return _generate_house(building_seed, rng)
+	if archetype == "store" or archetype == "grocery":
+		return _generate_store(building_seed, archetype)
 	return _generate_apartment_building(building_seed, rng)
 
 
 static func _generate_house(building_seed: int, rng: RandomNumberGenerator):
 	var floors := 1 + int(rng.randi() % 2)
-	var building = BUILDING_BLUEPRINT.new("House_A", building_seed, 10.0, 8.0, floors)
+	var house_variant := String.chr(65 + rng.randi_range(0, 2))
+	var building = BUILDING_BLUEPRINT.new("House_%s" % house_variant, building_seed, 10.0, 8.0, floors)
 	for floor_index in floors:
 		var floor = FLOOR_BLUEPRINT.new("HouseFloor_A", floor_index)
 		var unit = ROOM_GENERATOR.generate_apartment(building_seed + floor_index, floor_index % 2)
@@ -26,8 +29,10 @@ static func _generate_house(building_seed: int, rng: RandomNumberGenerator):
 	return building
 
 
-static func _generate_apartment_building(building_seed: int, _rng: RandomNumberGenerator):
-	var building = BUILDING_BLUEPRINT.new("ApartmentBuilding_A", building_seed, 20.0, 16.0, 6)
+static func _generate_apartment_building(building_seed: int, rng: RandomNumberGenerator):
+	var floor_count := rng.randi_range(4, 6)
+	var variant := String.chr(65 + rng.randi_range(0, 2))
+	var building = BUILDING_BLUEPRINT.new("ApartmentBuilding_%s" % variant, building_seed, 20.0, 16.0, floor_count)
 	var lobby = FLOOR_BLUEPRINT.new("LobbyFloor", 0)
 	lobby.add_unit(ROOM_GENERATOR.generate_lobby(building_seed, building.width, building.depth), Vector2.ZERO)
 	building.add_floor(lobby)
@@ -39,6 +44,17 @@ static func _generate_apartment_building(building_seed: int, _rng: RandomNumberG
 			_add_outer_entrance(unit, position, building.width, building.depth)
 			floor.add_unit(unit, position)
 		building.add_floor(floor)
+	return building
+
+
+static func _generate_store(building_seed: int, archetype: String):
+	var width := 18.0
+	var depth := 14.0
+	var name := "Grocery_A" if archetype == "grocery" else "Shop_A"
+	var building = BUILDING_BLUEPRINT.new(name, building_seed, width, depth, 1)
+	var floor = FLOOR_BLUEPRINT.new("CommercialFloor", 0)
+	floor.add_unit(ROOM_GENERATOR.generate_store(building_seed, width, depth), Vector2.ZERO)
+	building.add_floor(floor)
 	return building
 
 

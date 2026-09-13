@@ -44,13 +44,16 @@ static func _generate_lots(block, block_seed: int) -> void:
 	var lot_index := 0
 	for x_index in 2:
 		for z_index in 2:
-			var jitter := Vector2(rng.randf_range(-1.5, 1.5), rng.randf_range(-1.5, 1.5))
+			var is_safehouse_lot := is_zero_approx(block.position.x) and is_zero_approx(block.position.y) and x_index == 0 and z_index == 1
+			var jitter := Vector2.ZERO if is_safehouse_lot else Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
 			var lot_position: Vector2 = block.position + Vector2(-10.5 + float(x_index) * 21.0, -10.5 + float(z_index) * 21.0) + jitter
 			var lot_seed := block_seed + lot_index * 31
 			var archetype := "house"
-			if block.district == "urban" and absi(block_seed + lot_index) % 4 != 3:
-				archetype = "apartment"
+			if block.district == "urban":
+				var urban_variant := absi(block_seed + lot_index) % 6
+				archetype = "store" if urban_variant == 0 else "grocery" if urban_variant == 1 else "apartment"
 			var lot = LOT_BLUEPRINT.new("%s_Lot_%d" % [block.id, lot_index], lot_seed, block.district, lot_position, LOT_SIZE)
-			lot.building = BUILDING_GENERATOR.generate(lot_seed, archetype)
+			if not is_safehouse_lot:
+				lot.building = BUILDING_GENERATOR.generate(lot_seed, archetype)
 			block.add_lot(lot)
 			lot_index += 1

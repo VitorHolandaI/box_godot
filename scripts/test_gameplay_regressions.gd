@@ -51,8 +51,10 @@ func _test_server_port_validation(test_root: Node) -> void:
 	var valid_port := NetworkSession.parse_server_port_value("32000")
 	var invalid_text := NetworkSession.parse_server_port_value("abc")
 	var invalid_range := NetworkSession.parse_server_port_value("65536")
-	if valid_port != 32000 or invalid_text != -1 or invalid_range != -1:
-		_fail(test_root, "Parser de porta deve aceitar 32000 e rejeitar valores fora do formato/faixa.")
+	var valid_seed: Variant = NetworkSession.parse_world_seed_value("18273")
+	var invalid_seed: Variant = NetworkSession.parse_world_seed_value("cidade")
+	if valid_port != 32000 or invalid_text != -1 or invalid_range != -1 or valid_seed != 18273 or invalid_seed != null:
+		_fail(test_root, "Parsers devem aceitar porta e seed decimais e rejeitar valores invalidos.")
 		return
 	print("PASS: Validacao de porta UDP configuravel validada.")
 
@@ -68,23 +70,39 @@ func _test_procedural_city_seed(test_root: Node) -> void:
 	if first_city.signature() == other_city.signature():
 		_fail(test_root, "Seeds diferentes deveriam produzir blueprints diferentes.")
 		return
-	if first_city.roads.size() != 8 or first_city.blocks.size() != 9 or first_city.building_count() != 36:
-		_fail(test_root, "A cidade procedural deveria conter 8 ruas, 9 quarteiroes e 36 lotes.")
+	if first_city.roads.size() != 8 or first_city.blocks.size() != 9 or first_city.building_count() != 35:
+		_fail(test_root, "A cidade procedural deveria conter 35 edificios e um lote reservado para a Safehouse.")
 		return
+	var archetypes: Dictionary = {}
 	for block in first_city.blocks:
 		for lot in block.lots:
+			if lot.building == null:
+				continue
+			archetypes[lot.building.archetype] = true
 			for floor_blueprint in lot.building.floor_blueprints:
 				for placement in floor_blueprint.units:
 					var unit = placement["blueprint"]
 					if not unit.is_graph_connected():
 						_fail(test_root, "Unidade %s possui comodos desconectados." % unit.archetype)
 						return
+	if not archetypes.has("Shop_A") or not archetypes.has("Grocery_A"):
+		_fail(test_root, "A zona urbana deveria misturar apartamentos, lojas e mercados.")
+		return
 	var visual_root := Node3D.new()
 	var apartment = PROCEDURAL_BUILDING_GENERATOR.generate(18273, "apartment")
 	var apartment_node: StaticBody3D = PROCEDURAL_BUILDING_ASSEMBLER.assemble(apartment)
 	visual_root.add_child(apartment_node)
 	if apartment_node.get_child_count() < 20:
 		_fail(test_root, "Assembler deveria criar geometria e colisoes para um predio.")
+		visual_root.free()
+		return
+	var cutout_found := false
+	for child in apartment_node.get_children():
+		if child is MeshInstance3D and (child as MeshInstance3D).mesh.material is ShaderMaterial:
+			cutout_found = true
+			break
+	if not cutout_found:
+		_fail(test_root, "Predios procedurais deveriam usar o shader da aura de visibilidade.")
 		visual_root.free()
 		return
 	visual_root.free()

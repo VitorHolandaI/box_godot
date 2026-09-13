@@ -26,6 +26,20 @@ static func generate_lobby(_lobby_seed: int, width: float, depth: float):
 	return lobby
 
 
+static func generate_store(_store_seed: int, width: float, depth: float):
+	var store = UNIT_BLUEPRINT.new("ShopUnit_A", width, depth)
+	var sales_depth := depth * 0.65
+	var stock_width := width * 0.62
+	store.add_room(ROOM_BLUEPRINT.new("sales", "sales_floor", Rect2(0.0, 0.0, width, sales_depth)))
+	store.add_room(ROOM_BLUEPRINT.new("stockroom", "stockroom", Rect2(0.0, sales_depth, stock_width, depth - sales_depth)))
+	store.add_room(ROOM_BLUEPRINT.new("office", "office", Rect2(stock_width, sales_depth, width - stock_width, depth - sales_depth)))
+	_add_door(store, "sales", "stockroom", "horizontal", Vector2(stock_width * 0.5, sales_depth), 1.0)
+	_add_door(store, "sales", "office", "horizontal", Vector2(stock_width + (width - stock_width) * 0.5, sales_depth), 0.9)
+	_add_door(store, "sales", "outside", "horizontal", Vector2(width * 0.5, 0.0), 1.8)
+	_add_windows(store)
+	return store
+
+
 static func _add_standard_layout(unit) -> void:
 	unit.add_room(ROOM_BLUEPRINT.new("living", "living_room", Rect2(0.0, 0.0, 5.0, 4.0)))
 	unit.add_room(ROOM_BLUEPRINT.new("kitchen", "kitchen", Rect2(5.0, 0.0, 5.0, 4.0)))

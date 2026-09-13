@@ -23,6 +23,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
 - `procedural/`: blueprints, geradores e assemblers da cidade procedural experimental ativada por `--procedural-city`.
 - `run_4_bots.sh`: inicializa servidor dedicado e abre 4 janelas com bots jogando sozinhos em grade 2x2.
+- `server_entrypoint.sh`: cria a seed a partir do container e inicia o servidor dedicado.
 - `safehouse_builder.gd`: gerador procedural da Safehouse fortificada de 2 andares com spawns seguros, porta automatica, escadaria, municao, sacada e iluminacao.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores ou zumbis e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
