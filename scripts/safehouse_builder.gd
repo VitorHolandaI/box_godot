@@ -196,7 +196,7 @@ static func _build_player_spawn_markers(house: StaticBody3D) -> void:
 
 static func _build_staircase(house: StaticBody3D, wood_mat: Material) -> void:
 	var steps := 12
-	var stair_x := -4.7
+	var stair_x := -2.9
 	var start_z := 2.6
 	var end_z := -2.6
 	var step_run := (start_z - end_z) / float(steps)

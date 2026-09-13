@@ -27,7 +27,7 @@ func _process(_delta: float) -> void:
 		var player := players[index]
 		if not is_instance_valid(player):
 			continue
-		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\nZumbis: %d" % [
+		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\nZumbis: %d | Abates: %d\n%s" % [
 			index + 1,
 			player.input_device_name,
 			player.get_lives_text(),
@@ -37,6 +37,8 @@ func _process(_delta: float) -> void:
 			player.get_weapon_name(),
 			player.get_ammo_text(),
 			alive_zombies,
+			player.zombie_kills,
+			get_tree().current_scene.get_survival_hud_text() if get_tree().current_scene.has_method("get_survival_hud_text") else "",
 		]
 
 

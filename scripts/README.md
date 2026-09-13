@@ -24,12 +24,16 @@ Logica de jogo, rede, interface e testes automatizados.
 - `procedural/`: blueprints, geradores e assemblers da cidade procedural experimental ativada por `--procedural-city`.
 - `run_4_bots.sh`: inicializa servidor dedicado e abre 4 janelas com bots jogando sozinhos em grade 2x2.
 - `server_entrypoint.sh`: cria a seed a partir do container e inicia o servidor dedicado.
+- `survival_map_builder.gd`: cria a arena compacta e suas barreiras para sobrevivencia.
+- `survival_wave_controller.gd`: controla spawning, limpeza e conclusao das ondas.
+- `survival_wave_schedule.gd`: define a progressao ate a onda final de 600 zumbis.
 - `safehouse_builder.gd`: gerador procedural da Safehouse fortificada de 2 andares com spawns seguros, porta automatica, escadaria, municao, sacada e iluminacao.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores ou zumbis e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
 - `split_screen_manager.gd`: viewports, cameras e HUDs locais com vidas e contador global de zumbis vivos.
 - `test_combat_and_variants.gd`: testes de combate, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
+- `test_survival_mode.gd`: regressoes de ondas, abates, audio real, alvos e skin do ragdoll.
 - `test_container.sh`: smoke test do servidor Docker.
 - `test_dedicated.sh`: smoke test do servidor Godot nativo executando testes unitarios e teste com bot.
 - `zombie.gd`: IA de zumbi com ecolocalizacao de tiros com atenuacao por distancia, investigacao em marcha lenta, sentidos, combate, knockback por dano e variantes anatomicas.

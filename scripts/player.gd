@@ -77,6 +77,7 @@ var network_target_rotation := 0.0
 var remote_buttons: Dictionary = {}
 var remote_input_age := 0.0
 var color_index := -1
+var zombie_kills := 0
 
 
 func _ready() -> void:
@@ -195,6 +196,7 @@ func get_network_state() -> Dictionary:
 		"hit_dir_x": hit_direction.x,
 		"lives": lives,
 		"eliminated": is_eliminated,
+		"zombie_kills": zombie_kills,
 	}
 
 
@@ -219,6 +221,7 @@ func apply_network_state(state: Dictionary) -> void:
 	hit_reaction_time = maxf(float(state.get("hit_reaction", 0.0)), hit_reaction_time)
 	hit_direction.x = float(state.get("hit_dir_x", hit_direction.x))
 	lives = clampi(int(state.get("lives", lives)), 0, MAX_LIVES)
+	zombie_kills = maxi(zombie_kills, int(state.get("zombie_kills", zombie_kills)))
 	var next_eliminated := bool(state.get("eliminated", is_eliminated))
 	if next_eliminated != is_eliminated:
 		is_eliminated = next_eliminated
@@ -251,7 +254,7 @@ func _attack_with_knife() -> void:
 	knife_attack_time = KNIFE_ATTACK_DURATION
 	var target := _find_knife_target()
 	if target != null and target.has_method("take_damage"):
-		target.take_damage(knife_damage, -global_transform.basis.z, "knife")
+		target.take_damage(knife_damage, -global_transform.basis.z, "knife", self)
 
 
 func _get_combat_targets() -> Array[Node3D]:
@@ -300,6 +303,8 @@ func _fire_pistol() -> Node3D:
 	bullet.global_position = origin + bullet_direction * 0.12
 	bullet.setup(bullet_direction, pistol_damage, true, self)
 	get_tree().call_group("zombies", "hear_gunshot", origin, 65.0)
+	if NetworkSession.is_offline():
+		AudioFeedback.play_gunshot(origin)
 	if NetworkSession.is_server():
 		get_tree().current_scene.replicate_bullet_visual(bullet.global_position, bullet_direction)
 	return bullet
@@ -310,6 +315,12 @@ func _reload_pistol() -> void:
 	var bullets_loaded := mini(bullets_needed, reserve_ammo)
 	pistol_ammo += bullets_loaded
 	reserve_ammo -= bullets_loaded
+
+
+func register_zombie_kill() -> void:
+	if NetworkSession.is_client():
+		return
+	zombie_kills += 1
 
 
 ## Adiciona municao a reserva do jogador ate o limite MAX_RESERVE_AMMO.
@@ -335,7 +346,7 @@ func can_pickup_ammo() -> bool:
 ## Aplica dano ao jogador, acionando flinch de impacto e empurrao fisico.
 ## Uso:
 ##   player.take_damage(25, Vector3.FORWARD, "bullet")
-func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet") -> void:
+func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _source: Node = null) -> void:
 	if is_eliminated:
 		return
 	health = maxi(health - amount, 0)
