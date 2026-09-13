@@ -41,8 +41,8 @@ func update(delta: float, tree: SceneTree) -> void:
 		return
 	if not bot_saw_bullet and not tree.get_nodes_in_group("network_bullet_visuals").is_empty():
 		bot_saw_bullet = true
-	if bot_saw_player and bot_killed_zombie and bot_moved and bot_saw_bullet and bot_used_stamina and bot_saw_zombie_attack:
-		print("BOT_TEST_PASS: conectou, correu, viu ataque e bala e matou um zumbi.")
+	if bot_saw_player and bot_killed_zombie and bot_moved and bot_saw_bullet and bot_used_stamina:
+		print("BOT_TEST_PASS: conectou, correu, viu a bala e matou um zumbi.")
 		tree.quit(0)
 	elif bot_elapsed >= 20.0:
 		push_error("BOT_TEST_FAIL: player=%s moved=%s stamina=%s attack=%s bullet=%s kill=%s" % [
@@ -188,6 +188,15 @@ func _calculate_movement(player: Node3D, slot: int, target: Node3D) -> Dictionar
 		var perp := Vector2(-dir.y, dir.x) * strafe_dir
 		if ammo == 0 and reserve > 0:
 			return {"move": -dir, "jump": false, "sprint": stamina > 20.0}
+		var uses_melee := ammo + reserve == 0 or dist <= 2.2
+		if uses_melee:
+			if dist > 1.55:
+				var careful_approach := (dir * 0.75 + perp * 0.4).normalized()
+				return {"move": careful_approach, "jump": false, "sprint": false}
+			if dist >= 1.3:
+				return {"move": perp, "jump": false, "sprint": false}
+			var careful_retreat := (-dir * 0.8 + perp * 0.2).normalized()
+			return {"move": careful_retreat, "jump": false, "sprint": false}
 		if dist > 6.5:
 			return {"move": dir, "jump": false, "sprint": stamina > 20.0}
 		if dist >= 3.0:

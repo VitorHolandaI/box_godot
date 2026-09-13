@@ -92,8 +92,20 @@ static func build_procedural_building(kind: String, rng: RandomNumberGenerator) 
 	_assemble_roof(body, num_floors, grid_w, grid_d, style, cutout_wall_mat, cutout_trim_mat, rng)
 	_create_perimeter_colliders(body, grid_w, grid_d, num_floors, door_x)
 	_create_interior(body, grid_w, grid_d, num_floors, rng)
+	_create_zombie_spawn_marker(body, grid_w, grid_d)
 
 	return body
+
+
+static func _create_zombie_spawn_marker(body: StaticBody3D, grid_w: int, grid_d: int) -> void:
+	if grid_w != 3:
+		return
+	var half_depth := float(grid_d - 1) * 0.5 * TILE_SCALE
+	var marker := Marker3D.new()
+	marker.name = "ZombieInteriorSpawn"
+	marker.position = Vector3(0.0, 1.0, half_depth - 1.4)
+	marker.add_to_group("zombie_interior_spawn")
+	body.add_child(marker)
 
 
 static func _create_floor_and_ceiling(body: StaticBody3D, w: int, d: int, floors: int) -> void:
