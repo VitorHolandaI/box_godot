@@ -15,7 +15,7 @@ static func assemble(building) -> StaticBody3D:
 	var trim_material := _cutout_material(facade_color.darkened(0.45))
 	for floor_blueprint in building.floor_blueprints:
 		var floor_y: float = float(floor_blueprint.floor_index) * building.floor_height
-		_add_box(body, "Floor_%d" % floor_blueprint.floor_index, Vector3(building.width, 0.12, building.depth), Vector3(building.width * 0.5, floor_y, building.depth * 0.5), floor_material, true)
+		_add_floor_slab(body, building, floor_blueprint.floor_index, floor_y, floor_material)
 		for placement in floor_blueprint.units:
 			_draw_unit(body, placement["blueprint"], placement["position"], floor_y + 0.08, wall_material, trim_material)
 	if building.floors > 1:
@@ -39,7 +39,47 @@ static func _draw_unit(body: StaticBody3D, unit, origin: Vector2, floor_y: float
 		if is_zero_approx(room.bounds.end.y - unit.depth):
 			_draw_wall_edge(body, unit, room, "horizontal", room.bounds.end.y, room.bounds.position.x, room.bounds.end.x, origin, floor_y, wall_material)
 	for window in unit.windows:
-		_draw_window(body, window, origin, floor_y, trim_material)
+		if not _window_overlaps_door(unit, window):
+			_draw_window(body, window, origin, floor_y, trim_material)
+
+
+static func _add_floor_slab(body: StaticBody3D, building, floor_index: int, floor_y: float, material: Material) -> void:
+	if floor_index == 0 or building.floors <= 1:
+		_add_box(body, "Floor_%d" % floor_index, Vector3(building.width, 0.12, building.depth), Vector3(building.width * 0.5, floor_y, building.depth * 0.5), material, true)
+		return
+	var stair_center_x: float = float(building.width) * 0.15
+	var stair_start_z: float = float(building.depth) - 1.0
+	var stair_end_z: float = maxf(0.8, float(building.depth) - 6.0)
+	var hole_left: float = maxf(0.0, stair_center_x - 1.15)
+	var hole_right: float = minf(float(building.width), stair_center_x + 1.15)
+	var hole_front: float = maxf(0.0, stair_end_z - 0.45)
+	var hole_back: float = minf(float(building.depth), stair_start_z + 0.45)
+	_add_box(body, "Floor_%d_Left" % floor_index, Vector3(hole_left, 0.12, building.depth), Vector3(hole_left * 0.5, floor_y, building.depth * 0.5), material, true)
+	_add_box(body, "Floor_%d_Right" % floor_index, Vector3(building.width - hole_right, 0.12, building.depth), Vector3((hole_right + building.width) * 0.5, floor_y, building.depth * 0.5), material, true)
+	_add_box(body, "Floor_%d_Front" % floor_index, Vector3(hole_right - hole_left, 0.12, hole_front), Vector3((hole_left + hole_right) * 0.5, floor_y, hole_front * 0.5), material, true)
+	_add_box(body, "Floor_%d_Back" % floor_index, Vector3(hole_right - hole_left, 0.12, building.depth - hole_back), Vector3((hole_left + hole_right) * 0.5, floor_y, (hole_back + building.depth) * 0.5), material, true)
+
+
+static func _window_overlaps_door(unit, window: Dictionary) -> bool:
+	var window_center: Vector2 = window["center"]
+	var window_axis: String = window["axis"]
+	var window_along: float = window_center.y if window_axis == "vertical" else window_center.x
+	var window_line: float = window_center.x if window_axis == "vertical" else window_center.y
+	var window_start: float = window_along - float(window["width"]) * 0.5
+	var window_end: float = window_along + float(window["width"]) * 0.5
+	for door in unit.doors:
+		if door.get("axis", "") != window_axis:
+			continue
+		var door_center: Vector2 = door["center"]
+		var door_line: float = door_center.x if window_axis == "vertical" else door_center.y
+		if not is_equal_approx(door_line, window_line):
+			continue
+		var door_along: float = door_center.y if window_axis == "vertical" else door_center.x
+		var door_start: float = door_along - float(door["width"]) * 0.5
+		var door_end: float = door_along + float(door["width"]) * 0.5
+		if window_start < door_end and door_start < window_end:
+			return true
+	return false
 
 
 static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: float, start: float, finish: float, origin: Vector2, floor_y: float, material: Material) -> void:
@@ -85,9 +125,15 @@ static func _draw_window(body: StaticBody3D, window: Dictionary, origin: Vector2
 
 static func _add_stairs(body: StaticBody3D, building) -> void:
 	var step_count := 10
-	for step in step_count:
-		var height: float = building.floor_height / float(step_count) * float(step + 1)
-		_add_box(body, "Stair_%d" % step, Vector3(2.0, height, 3.0 / step_count), Vector3(building.width * 0.5, height * 0.5, -1.5 + float(step) * 3.0 / step_count), _material(Color(0.35, 0.35, 0.37)), true)
+	var stair_x: float = float(building.width) * 0.15
+	var start_z: float = float(building.depth) - 1.0
+	var end_z: float = maxf(0.8, float(building.depth) - 6.0)
+	for floor_index in range(building.floors - 1):
+		var base_y: float = float(floor_index) * float(building.floor_height)
+		for step in step_count:
+			var height: float = building.floor_height / float(step_count) * float(step + 1)
+			var z: float = start_z - float(step) * (start_z - end_z) / float(step_count)
+			_add_box(body, "Stair_%d_%d" % [floor_index, step], Vector3(2.0, height, (start_z - end_z) / step_count), Vector3(stair_x, base_y + height * 0.5, z), _material(Color(0.35, 0.35, 0.37)), true)
 
 
 static func _add_commercial_front(body: StaticBody3D, building) -> void:

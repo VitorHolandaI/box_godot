@@ -13,6 +13,7 @@ run/max_fps=60
 
 GameConfig="*res://scripts/game_config.gd"
 NetworkSession="*res://scripts/network_session.gd"
+AudioFeedback="*res://scripts/audio_feedback.gd"
 
 [debug]
 

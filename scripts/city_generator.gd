@@ -5,6 +5,7 @@ const BuildingAssembler: GDScript = preload("res://scripts/building_assembler_3d
 const SafehouseBuilder: GDScript = preload("res://scripts/safehouse_builder.gd")
 const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/generators/city_generator.gd")
 const PROCEDURAL_CITY_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/city_assembler.gd")
+const SURVIVAL_MAP_BUILDER: GDScript = preload("res://scripts/survival_map_builder.gd")
 const TREE_SCENES := [
 	preload("res://scenes/tree.tscn"),
 	preload("res://scenes/tree_pine.tscn"),
@@ -53,6 +54,12 @@ var sidewalk_material: StandardMaterial3D
 
 
 func _ready() -> void:
+	if NetworkSession.survival_mode:
+		_create_materials()
+		_hide_legacy_center_roads()
+		_create_procedural_safehouse()
+		SURVIVAL_MAP_BUILDER.build(self)
+		return
 	if NetworkSession.procedural_city_enabled:
 		_create_materials()
 		_hide_legacy_center_roads()

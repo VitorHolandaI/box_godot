@@ -8,6 +8,7 @@ const AMMO_PICKUP_SCENE := preload("res://scenes/ammo_pickup.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
 const ZOMBIE_SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator.gd")
+const SURVIVAL_WAVE_CONTROLLER_SCRIPT := preload("res://scripts/survival_wave_controller.gd")
 const MAX_LOCAL_PLAYERS := 4
 const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
 const MAX_CORPSES := 20
@@ -45,9 +46,11 @@ var smoke_test_mode := false
 var bot_ai := PlayerBotAI.new()
 var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
 var zombie_spawn_locator = ZOMBIE_SPAWN_LOCATOR_SCRIPT.new()
+var survival_wave_controller
 
 
 func _ready() -> void:
+	survival_wave_controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(Callable(self, "_spawn_zombie"))
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
 	coordinator.name = "ZombieFlockCoordinator"
 	add_child(coordinator)
@@ -84,6 +87,9 @@ func _notify_scene_loaded() -> void:
 func _process(delta: float) -> void:
 	if NetworkSession.is_client() or smoke_test_mode:
 		return
+	if NetworkSession.survival_mode:
+		survival_wave_controller.tick(delta)
+		return
 	if not zombie_spawn_schedule.is_spawn_due(delta):
 		return
 	var alive_count := get_tree().get_nodes_in_group("zombies").size()
@@ -118,12 +124,12 @@ func register_corpse(corpse: Node) -> void:
 			oldest_corpse.queue_free()
 
 
-func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0) -> void:
+func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0, appearance_hash: int = 0) -> void:
 	var ragdoll := ZOMBIE_RAGDOLL_SCENE.instantiate()
 	add_child(ragdoll)
 	ragdoll.global_position = position
 	ragdoll.rotation.y = rotation
-	ragdoll.setup(velocity, z_type)
+	ragdoll.setup(velocity, z_type, appearance_hash)
 	ragdolls.append(ragdoll)
 	if ragdolls.size() > MAX_CORPSES:
 		var oldest_ragdoll: Node = ragdolls.pop_front()
@@ -166,6 +172,7 @@ func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3)
 func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3) -> void:
 	if not NetworkSession.is_client():
 		return
+	AudioFeedback.play_gunshot(spawn_position)
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 		bot_ai.notify_bullet()
 	var bullet = BULLET_SCENE.instantiate()
@@ -424,9 +431,19 @@ func _spawn_zombie(position_override: Variant = null) -> bool:
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	zombie.name = "ZombieSpawn%d" % spawn_index
 	zombies.add_child(zombie, true)
+	zombie.died.connect(_on_zombie_died)
 	zombie.global_position = spawn_position
 	spawn_index += 1
 	return true
+
+
+func _on_zombie_died(_killer: Node) -> void:
+	if NetworkSession.survival_mode:
+		survival_wave_controller.register_death()
+
+
+func get_survival_hud_text() -> String:
+	return survival_wave_controller.get_hud_text() if NetworkSession.survival_mode else ""
 
 
 func _get_player_spawn_position(slot: int) -> Vector3:
