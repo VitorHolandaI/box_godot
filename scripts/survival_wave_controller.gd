@@ -52,5 +52,6 @@ func register_death() -> void:
 
 func get_hud_text() -> String:
 	if complete:
-		return "SOBREVIVENCIA CONCLUIDA | Abates: %d" % total_kills
-	return "Onda %d/%d | Abates: %d | Restantes: %d/%d" % [wave_index + 1, schedule.wave_count(), total_kills, alive_in_wave, schedule.target_for(wave_index)]
+		return "SOBREVIVENCIA CONCLUIDA | Horas: %d | Abates: %d" % [schedule.wave_count(), total_kills]
+	var current_hour := wave_index + 1
+	return "Hora %d/%d | Onda %d/%d | Abates: %d | Restantes: %d/%d" % [current_hour, schedule.wave_count(), current_hour, schedule.wave_count(), total_kills, alive_in_wave, schedule.target_for(wave_index)]
