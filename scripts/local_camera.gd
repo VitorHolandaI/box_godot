@@ -1,7 +1,7 @@
 extends Camera3D
 
 var target: Node3D
-var camera_offset := Vector3(0, 15, 13.5)
+var camera_offset := Vector3(0, 19, 17.1)
 
 
 func _ready() -> void:
