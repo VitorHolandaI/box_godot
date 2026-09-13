@@ -171,6 +171,19 @@ cd /srv/box-godot
 docker compose up --build -d
 ```
 
+Para testar a cidade procedural experimental na VPS, use a branch
+`feature/procedural-city-mvp` no servidor e no cliente, mantendo a mesma seed:
+
+```bash
+git fetch origin
+git switch feature/procedural-city-mvp
+git pull --ff-only
+GAME_SERVER_CITY_MODE=--procedural-city GAME_SERVER_WORLD_SEED=18273 docker compose up --build -d
+```
+
+O cliente deve ser executado com `--procedural-city --world-seed=18273`. Sem
+`GAME_SERVER_CITY_MODE`, o compose continua iniciando o servidor estavel.
+
 ## Release 0.1 na VPS
 
 Depois que a release 0.1 for publicada no repositorio, a instalacao limpa na VPS
