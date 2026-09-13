@@ -9,12 +9,14 @@ const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
+const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
 
 
 func _ready() -> void:
 	print("--- INICIANDO TESTES DE COMBATE, FOGO AMIGO E VARIANTES ---")
 	_test_friendly_fire_knife()
 	_test_friendly_fire_bullet()
+	_test_pistol_fixed_trajectory()
 	_test_hit_reaction_flinch()
 	_test_zombie_mutilation_variants()
 	_test_ragdoll_mutilation_variants()
@@ -22,8 +24,9 @@ func _ready() -> void:
 	_test_safehouse_structure_and_spawns()
 	_test_gunshot_sound_echolocation()
 	_test_zombie_flock_coordinator()
+	_test_global_zombie_spawn_schedule()
 
-	print("UNIT_TEST_PASS: Todos os testes de combate, fogo amigo, vidas, safehouse e som passaram!")
+	print("UNIT_TEST_PASS: Todos os testes de combate, trajetoria, vidas, safehouse, som, hordas e populacao passaram!")
 	get_tree().quit(0)
 
 
@@ -95,6 +98,40 @@ func _test_friendly_fire_bullet() -> void:
 	p1.queue_free()
 	p2.queue_free()
 	print("PASS: Fogo amigo com bala funcionou com dano e knockback.")
+
+
+func _test_pistol_fixed_trajectory() -> void:
+	print("Testando trajetoria fixa da pistola sem teleguiamento...")
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.reads_local_input = false
+	player.aim_input = Vector2.RIGHT
+	add_child(player)
+	var off_axis_target := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	off_axis_target.position = Vector3(8.0, 1.0, -9.0)
+	add_child(off_axis_target)
+
+	var fired_bullet: Variant = player.call("_fire_pistol")
+	if fired_bullet == null or not fired_bullet is Node3D:
+		push_error("FALHA: Disparo deve retornar o projetil criado para validar sua trajetoria.")
+		get_tree().quit(1)
+		return
+	var bullet := fired_bullet as Node3D
+	var launch_direction: Vector3 = bullet.get("direction")
+	if launch_direction.distance_to(Vector3.RIGHT) > 0.001:
+		push_error("FALHA: Bala saiu em %s, mas deveria preservar a mira %s." % [launch_direction, Vector3.RIGHT])
+		get_tree().quit(1)
+		return
+	player.rotation.y = PI
+	off_axis_target.position = Vector3(-8.0, 1.0, 9.0)
+	bullet.call("_physics_process", 0.01)
+	if (bullet.get("direction") as Vector3).distance_to(launch_direction) > 0.001:
+		push_error("FALHA: Bala alterou a direcao depois do disparo.")
+		get_tree().quit(1)
+		return
+	bullet.queue_free()
+	player.queue_free()
+	off_axis_target.queue_free()
+	print("PASS: Trajetoria fixa da pistola validada.")
 
 
 func _test_hit_reaction_flinch() -> void:
@@ -286,9 +323,37 @@ func _test_safehouse_structure_and_spawns() -> void:
 		push_error("FALHA: Safehouse deve possuir holofote defensivo frontal.")
 		get_tree().quit(1)
 		return
+	for child in safehouse.get_children():
+		if child is CollisionShape3D and child.position.z < -6.0 and absf(child.position.x) < 2.1 and child.position.y < 3.1:
+			push_error("FALHA: Portal da Safehouse possui um lintel baixo que bloqueia a saida.")
+			get_tree().quit(1)
+			return
+	for spawn_index in 4:
+		var marker := safehouse.get_node_or_null("PlayerSpawn%d" % (spawn_index + 1)) as Marker3D
+		if marker == null or marker.position.y < 1.0:
+			push_error("FALHA: Spawn %d deve existir acima do piso da Safehouse." % (spawn_index + 1))
+			get_tree().quit(1)
+			return
+	var door := safehouse.get_node_or_null("SafehouseDoor")
+	if door == null:
+		push_error("FALHA: Safehouse deve possuir porta automatica no portal.")
+		get_tree().quit(1)
+		return
+	door.call("update_for_actor_presence", true, 0.1)
+	if not bool(door.call("is_open_requested")) or int(door.get_node("Panel").collision_layer) != 0:
+		push_error("FALHA: Porta deve abrir e liberar colisao ao detectar jogador ou zumbi.")
+		get_tree().quit(1)
+		return
+	door.call("update_for_actor_presence", false, 1.0)
+	var door_still_open := bool(door.call("is_open_requested"))
+	var closed_collision_layer := int(door.get_node("Panel").collision_layer)
+	if door_still_open or closed_collision_layer != 1:
+		push_error("FALHA: Porta vazia esperava aberta=false/camada=1, recebeu aberta=%s/camada=%d." % [door_still_open, closed_collision_layer])
+		get_tree().quit(1)
+		return
 
 	safehouse.queue_free()
-	print("PASS: Safehouse de 2 andares estruturada e validada com sucesso.")
+	print("PASS: Safehouse, spawns e porta automatica validados com sucesso.")
 
 
 func _test_gunshot_sound_echolocation() -> void:
@@ -348,6 +413,7 @@ func _test_zombie_flock_coordinator() -> void:
 
 	var z_far := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	z_far.position = Vector3(90, 1, 90)
+	z_far.simulation_enabled = false
 	add_child(z_far)
 
 	# Executa atualizacao do coordenador
@@ -388,3 +454,26 @@ func _test_zombie_flock_coordinator() -> void:
 	z2.queue_free()
 	z_far.queue_free()
 	print("PASS: ZombieFlockCoordinator validado com sucesso.")
+
+
+func _test_global_zombie_spawn_schedule() -> void:
+	print("Testando limite global e reposicao gradual de 600 zumbis...")
+	var schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(600, 1.0)
+	if schedule.is_spawn_due(0.99) or not schedule.is_spawn_due(0.01):
+		push_error("FALHA: Spawn inicial deve aguardar um intervalo completo de 1 segundo.")
+		get_tree().quit(1)
+		return
+	if not schedule.has_capacity(599) or schedule.has_capacity(600):
+		push_error("FALHA: Limite global deve permitir 599 e bloquear 600 zumbis ativos.")
+		get_tree().quit(1)
+		return
+
+	var active_zombies := 598
+	for _player_kill_slot in 2:
+		if schedule.is_spawn_due(1.0) and schedule.has_capacity(active_zombies):
+			active_zombies += 1
+	if active_zombies != 600:
+		push_error("FALHA: Duas mortes devem ser repostas em dois ticks globais; ativos=%d." % active_zombies)
+		get_tree().quit(1)
+		return
+	print("PASS: Limite global e reposicao gradual de zumbis validados.")
