@@ -1,6 +1,6 @@
 extends Node
 
-const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload"]
+const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload", "interact"]
 const SETTINGS_PATH := "user://settings.cfg"
 const MAX_SAVED_SERVERS := 12
 const MIN_SERVER_PORT := 1024
@@ -184,10 +184,10 @@ func configure_local_players(configs: Array[Dictionary]) -> void:
 
 func create_keyboard_config(slot: int) -> Dictionary:
 	var profiles := [
-		[KEY_W, KEY_S, KEY_A, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_F, KEY_1, KEY_2, KEY_R],
-		[KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SHIFT, KEY_CTRL, KEY_ENTER, KEY_DELETE, KEY_END, KEY_PAGEDOWN],
-		[KEY_I, KEY_K, KEY_J, KEY_L, KEY_U, KEY_Y, KEY_O, KEY_7, KEY_8, KEY_P],
-		[KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_G, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD],
+		[KEY_W, KEY_S, KEY_A, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_F, KEY_1, KEY_2, KEY_R, KEY_E],
+		[KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SHIFT, KEY_CTRL, KEY_ENTER, KEY_DELETE, KEY_END, KEY_PAGEDOWN, KEY_HOME],
+		[KEY_I, KEY_K, KEY_J, KEY_L, KEY_U, KEY_Y, KEY_O, KEY_7, KEY_8, KEY_P, KEY_0],
+		[KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_G, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_Q],
 	]
 	var bindings: Dictionary = {}
 	var profile: Array = profiles[slot % profiles.size()]
@@ -215,6 +215,7 @@ func create_gamepad_config(device_id: int) -> Dictionary:
 	bindings["knife"] = _create_joy_button(device_id, JOY_BUTTON_LEFT_SHOULDER)
 	bindings["pistol"] = _create_joy_button(device_id, JOY_BUTTON_RIGHT_SHOULDER)
 	bindings["reload"] = _create_joy_button(device_id, JOY_BUTTON_Y)
+	bindings["interact"] = _create_joy_button(device_id, JOY_BUTTON_DPAD_UP)
 	return {
 		"device_type": "gamepad",
 		"device_id": device_id,

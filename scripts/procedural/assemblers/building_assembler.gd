@@ -4,6 +4,7 @@ extends RefCounted
 const WALL_HEIGHT := 2.6
 const WALL_THICKNESS := 0.12
 const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
+const DESTRUCTIBLE_DOOR_SCRIPT: GDScript = preload("res://scripts/destructible_door.gd")
 
 
 static func assemble(building) -> StaticBody3D:
@@ -94,12 +95,24 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 		if is_equal_approx(door_line, line):
 			var along := center.y if axis == "vertical" else center.x
 			openings.append({"start": along - float(door["width"]) * 0.5, "end": along + float(door["width"]) * 0.5})
+			if door.get("room_a", "") == room.id:
+				_add_door(body, door, axis, line, along, origin, floor_y, material)
 	openings.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return left["start"] < right["start"])
 	var cursor := start
 	for opening in openings:
 		_add_wall_segment(body, axis, line, cursor, minf(opening["start"], finish), origin, floor_y, material)
 		cursor = maxf(cursor, float(opening["end"]))
 	_add_wall_segment(body, axis, line, cursor, finish, origin, floor_y, material)
+
+
+static func _add_door(body: StaticBody3D, _door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, material: Material) -> void:
+	var door = DESTRUCTIBLE_DOOR_SCRIPT.new()
+	door.name = "Door_%s_%.1f" % [axis, along]
+	var width := 1.4
+	var size := Vector3(WALL_THICKNESS, WALL_HEIGHT, width) if axis == "vertical" else Vector3(width, WALL_HEIGHT, WALL_THICKNESS)
+	door.configure(size, material)
+	door.position = Vector3(origin.x + line, floor_y, origin.y + along) if axis == "vertical" else Vector3(origin.x + along, floor_y, origin.y + line)
+	body.add_child(door)
 
 
 static func _add_wall_segment(body: StaticBody3D, axis: String, line: float, start: float, finish: float, origin: Vector2, floor_y: float, material: Material) -> void:
