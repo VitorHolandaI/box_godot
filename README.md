@@ -101,16 +101,19 @@ Os executaveis autocontidos e o arquivo `SHA256SUMS` ficam em `dist/`:
 
 ## Servidor dedicado
 
-O servidor usa ENet na porta `27015/udp` e executa a simulacao autoritativa sem
-um jogador local. Para iniciar diretamente com o Godot instalado:
+O servidor usa ENet na porta `27015/udp` e descoberta de salas na porta
+`27016/udp`. Ele executa a simulacao autoritativa sem um jogador local. Para
+iniciar diretamente com o Godot instalado:
 
 ```bash
 godot --headless --path . -- --server --server-port=27015
 ```
 
-O menu do jogo oferece `Conectar ao servidor`; informe o IP ou dominio da VPS.
-Cada computador pode solicitar de um a quatro jogadores locais, respeitando o
-limite de quatro avatares na partida inteira.
+O menu separa `Jogar local` de `Multiplayer`. O modo local permite de um a
+quatro jogadores na mesma maquina. No multiplayer, cada cliente ocupa um slot;
+o servidor mostra no maximo quatro jogadores, a missao ativa e o ping. Salas na
+LAN aparecem automaticamente. Servidores fora da LAN podem ser adicionados por
+IP e porta e ficam salvos em `user://settings.cfg` para a proxima execucao.
 
 ## Cidade procedural experimental
 
@@ -134,14 +137,15 @@ docker compose up --build -d
 docker compose logs -f game-server
 ```
 
-Na VPS, publique somente `27015/udp` no firewall do sistema e no firewall do
-provedor. O container roda como usuario sem privilegios, com filesystem somente
+Na VPS, publique `27015/udp` e `27016/udp` no firewall do sistema e no firewall
+do provedor para permitir jogo e status das salas. O container roda como usuario sem privilegios, com filesystem somente
 leitura, sem capabilities Linux e com limites de CPU, memoria e processos.
 
 Exemplo para uma VPS com UFW:
 
 ```bash
 sudo ufw allow 27015/udp
+sudo ufw allow 27016/udp
 sudo ufw status
 ```
 
@@ -154,10 +158,13 @@ GAME_SERVER_PORT=32000 docker compose up --build -d
 ./box-godot-linux.x86_64 -- --server-port=32000
 ```
 
-O menu usa `27015` por padrao. Em cada um dos dois computadores, execute o
-cliente correspondente, escolha `Conectar ao servidor` e informe o IP publico
-ou dominio da VPS. Este prototipo ainda nao autentica jogadores; para um teste
-privado, prefira limitar a regra UDP aos IPs publicos dos dois computadores.
+Ao usar uma porta customizada, publique tambem a porta seguinte para descoberta
+(`GAME_SERVER_DISCOVERY_PORT=32001` no exemplo acima).
+
+O menu usa `27015` por padrao. Em cada computador, escolha `Multiplayer`,
+selecione a sala online e entre com um jogador. Este prototipo ainda nao
+autentica jogadores; para um teste privado, prefira limitar as regras UDP aos
+IPs publicos dos computadores autorizados.
 
 Para copiar apenas os arquivos de implantacao para a VPS:
 
