@@ -12,6 +12,7 @@ const MAX_PORT := 65535
 const MAX_PLAYERS := 4
 const SERVER_ID := 1
 const PING_INTERVAL := 1.0
+const DEFAULT_WORLD_SEED := 240912
 
 enum Mode { OFFLINE, SERVER, CLIENT }
 
@@ -24,6 +25,8 @@ var autoplay_bot := false
 var bot_name := ""
 var loaded_peers: Dictionary = {}
 var latency_ms := -1
+var procedural_city_enabled := false
+var world_seed := DEFAULT_WORLD_SEED
 var _intentional_disconnect := false
 var _connected_to_server := false
 var _ping_elapsed := PING_INTERVAL
@@ -31,6 +34,7 @@ var _ping_elapsed := PING_INTERVAL
 
 func _ready() -> void:
 	server_port = _get_command_line_port()
+	_reset_world_config_from_arguments()
 	if server_port < 0:
 		get_tree().quit(1)
 		return
@@ -133,6 +137,7 @@ func leave_session() -> void:
 	mode = Mode.OFFLINE
 	peer_slots.clear()
 	loaded_peers.clear()
+	_reset_world_config_from_arguments()
 	_intentional_disconnect = false
 
 
@@ -170,16 +175,16 @@ func _request_slots(slot_count: int) -> void:
 	var sender_id := multiplayer.get_remote_sender_id()
 	var requested_count := clampi(slot_count, 0, MAX_PLAYERS)
 	if requested_count != slot_count or requested_count == 0:
-		_join_result.rpc_id(sender_id, false, "Quantidade de jogadores invalida.")
+		_join_result.rpc_id(sender_id, false, "Quantidade de jogadores invalida.", procedural_city_enabled, world_seed)
 		return
 	if _total_player_count() + requested_count > MAX_PLAYERS:
-		_join_result.rpc_id(sender_id, false, "O servidor ja atingiu o limite de 4 jogadores.")
+		_join_result.rpc_id(sender_id, false, "O servidor ja atingiu o limite de 4 jogadores.", procedural_city_enabled, world_seed)
 		return
 
 	peer_slots[sender_id] = requested_count
 	roster_changed.emit()
 	_sync_roster.rpc(peer_slots)
-	_join_result.rpc_id(sender_id, true, "")
+	_join_result.rpc_id(sender_id, true, "", procedural_city_enabled, world_seed)
 	print("Peer %d entrou com %d jogador(es)." % [sender_id, requested_count])
 
 
@@ -190,8 +195,10 @@ func _sync_roster(new_roster: Dictionary) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _join_result(accepted: bool, message: String) -> void:
+func _join_result(accepted: bool, message: String, server_uses_procedural_city: bool, server_world_seed: int) -> void:
 	if accepted:
+		procedural_city_enabled = server_uses_procedural_city
+		world_seed = server_world_seed
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
 		join_accepted.emit()
 		return
@@ -241,6 +248,21 @@ func _get_command_line_port() -> int:
 	return DEFAULT_PORT
 
 
+func _reset_world_config_from_arguments() -> void:
+	procedural_city_enabled = "--procedural-city" in OS.get_cmdline_user_args()
+	world_seed = DEFAULT_WORLD_SEED
+	for argument in OS.get_cmdline_user_args():
+		if not argument.begins_with("--world-seed="):
+			continue
+		var raw_seed := argument.trim_prefix("--world-seed=")
+		var parsed_seed: Variant = parse_world_seed_value(raw_seed)
+		if parsed_seed == null:
+			push_error("Seed procedural invalida '%s'; esperado inteiro decimal." % raw_seed)
+			return
+		world_seed = int(parsed_seed)
+		return
+
+
 func get_latency_text() -> String:
 	return "--" if latency_ms < 0 else "%d ms" % latency_ms
 
@@ -250,6 +272,10 @@ static func parse_server_port_value(raw_port: String) -> int:
 		return -1
 	var parsed_port := int(raw_port)
 	return parsed_port if parsed_port >= MIN_PORT and parsed_port <= MAX_PORT else -1
+
+
+static func parse_world_seed_value(raw_seed: String) -> Variant:
+	return int(raw_seed) if raw_seed.is_valid_int() else null
 
 
 @rpc("any_peer", "call_remote", "unreliable")
