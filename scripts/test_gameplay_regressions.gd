@@ -8,6 +8,7 @@ const MAIN_SCENE := preload("res://scenes/main.tscn")
 const ZOMBIE_SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator.gd")
 const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
+const PERFORMANCE_HUD_SCRIPT := preload("res://scripts/performance_hud.gd")
 
 
 ## Runs focused regressions for bot tactics, spawning, HUDs and horde physics.
@@ -18,6 +19,7 @@ func run(test_root: Node) -> void:
 	_test_careful_melee_approach(test_root)
 	_test_public_server_port(test_root)
 	_test_server_port_validation(test_root)
+	_test_latency_hud(test_root)
 	_test_hud_alive_zombie_count(test_root)
 	_test_enterable_building_spawn_marker(test_root)
 	_test_no_street_zombie_starts(test_root)
@@ -49,6 +51,24 @@ func _test_server_port_validation(test_root: Node) -> void:
 		_fail(test_root, "Parser de porta deve aceitar 32000 e rejeitar valores fora do formato/faixa.")
 		return
 	print("PASS: Validacao de porta UDP configuravel validada.")
+
+
+func _test_latency_hud(test_root: Node) -> void:
+	print("Testando indicador de ping no HUD...")
+	var previous_latency := NetworkSession.latency_ms
+	NetworkSession.latency_ms = 42
+	var hud := Label.new()
+	hud.set_script(PERFORMANCE_HUD_SCRIPT)
+	test_root.add_child(hud)
+	var hud_text: String = hud.call("_build_text")
+	if not hud_text.contains("ping 42 ms"):
+		_fail(test_root, "HUD deveria exibir a latencia medida; texto=%s." % hud_text)
+		hud.free()
+		NetworkSession.latency_ms = previous_latency
+		return
+	hud.free()
+	NetworkSession.latency_ms = previous_latency
+	print("PASS: Indicador de ping no HUD validado.")
 
 
 func _test_careful_melee_approach(test_root: Node) -> void:

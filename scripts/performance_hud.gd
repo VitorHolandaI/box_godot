@@ -31,8 +31,9 @@ func _build_text() -> String:
 	var node_count := Performance.get_monitor(Performance.OBJECT_NODE_COUNT)
 	var active_physics := Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)
 	var memory_static := Performance.get_monitor(Performance.MEMORY_STATIC)
-	return "FPS %d | draw %d | objs %d | prim %d | nodes %d | phys %d | mem %.1f MB" % [
+	return "FPS %d | ping %s | draw %d | objs %d | prim %d | nodes %d | phys %d | mem %.1f MB" % [
 		roundi(fps),
+		NetworkSession.get_latency_text(),
 		int(draw_calls),
 		int(objects),
 		int(primitives),
