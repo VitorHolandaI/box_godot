@@ -29,7 +29,7 @@ RUN chown 10001:10001 /game
 USER 10001:10001
 ENV XDG_CACHE_HOME=/tmp/cache
 RUN godot --headless --editor --path /game --quit
-EXPOSE 27015/udp
+EXPOSE 27015/udp 27016/udp
 
 ENTRYPOINT ["/bin/bash", "/game/scripts/server_entrypoint.sh"]
-CMD ["--server", "--server-port=27015"]
+CMD ["--server", "--server-port=27015", "--survival"]

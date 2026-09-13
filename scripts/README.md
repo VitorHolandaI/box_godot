@@ -28,6 +28,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `survival_wave_controller.gd`: controla spawning, limpeza e conclusao das ondas.
 - `survival_wave_schedule.gd`: define a progressao ate a onda final de 600 zumbis.
 - `safehouse_builder.gd`: gerador procedural da Safehouse fortificada de 2 andares com spawns seguros, porta automatica, escadaria, municao, sacada e iluminacao.
+- `server_ping_probe.gd`: mede RTT usando o ping nativo do ENet na porta do jogo.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores ou zumbis e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
 - `split_screen_manager.gd`: viewports, cameras e HUDs locais com vidas e contador global de zumbis vivos.
