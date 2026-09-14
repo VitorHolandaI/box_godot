@@ -55,6 +55,14 @@ func take_damage(amount: int, _attack_direction: Vector3 = Vector3.ZERO) -> void
 		is_open = true
 
 
+## Applies the authoritative state received from the multiplayer server.
+## Usage: door.apply_network_state(true, false)
+func apply_network_state(should_open: bool, destroyed: bool) -> void:
+	is_destroyed = destroyed
+	is_open = should_open or destroyed
+	health = 0 if destroyed else max_health
+
+
 func _create_panel() -> void:
 	var mesh := MeshInstance3D.new()
 	mesh.name = "DoorPanel"
@@ -64,6 +72,21 @@ func _create_panel() -> void:
 	mesh.mesh = box_mesh
 	mesh.position.y = panel_size.y * 0.5
 	add_child(mesh)
+	var knob := MeshInstance3D.new()
+	knob.name = "DoorKnob"
+	var knob_mesh := SphereMesh.new()
+	knob_mesh.radius = 0.07
+	knob_mesh.height = 0.14
+	var knob_material := StandardMaterial3D.new()
+	knob_material.albedo_color = Color(0.72, 0.56, 0.18)
+	knob_material.metallic = 0.7
+	knob_mesh.material = knob_material
+	knob.mesh = knob_mesh
+	if panel_size.z < panel_size.x:
+		knob.position = Vector3(panel_size.x * 0.28, panel_size.y * 0.5, -panel_size.z)
+	else:
+		knob.position = Vector3(-panel_size.x, panel_size.y * 0.5, panel_size.z * 0.28)
+	add_child(knob)
 
 	var collision := CollisionShape3D.new()
 	collision.name = "DoorCollision"

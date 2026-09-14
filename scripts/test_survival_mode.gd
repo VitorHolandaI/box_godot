@@ -8,12 +8,18 @@ const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const CITY_GENERATOR_SCRIPT := preload("res://scripts/procedural/generators/city_generator.gd")
 const BUILDING_GENERATOR_SCRIPT := preload("res://scripts/procedural/generators/building_generator.gd")
 const BUILDING_ASSEMBLER_SCRIPT := preload("res://scripts/procedural/assemblers/building_assembler.gd")
+const CITY_ASSEMBLER_SCRIPT := preload("res://scripts/procedural/assemblers/city_assembler.gd")
 const DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
+const DOOR_NETWORK_STATE_SCRIPT := preload("res://scripts/door_network_state.gd")
+const SAFEHOUSE_BUILDER_SCRIPT := preload("res://scripts/safehouse_builder.gd")
+const WAVE_SUPPLY_CONTROLLER_SCRIPT := preload("res://scripts/wave_supply_controller.gd")
+const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state.gd")
 
 
 func run(test_root: Node) -> void:
 	_test_wave_schedule(test_root)
 	_test_wave_controller(test_root)
+	_test_wave_supplies(test_root)
 	_test_survival_hud(test_root)
 	_test_audio_streams(test_root)
 	_test_ragdoll_appearance(test_root)
@@ -21,6 +27,7 @@ func run(test_root: Node) -> void:
 	_test_survival_city_layout(test_root)
 	_test_house_gable_roof(test_root)
 	_test_building_door_states(test_root)
+	_test_building_door_network_state(test_root)
 
 
 func _test_wave_schedule(test_root: Node) -> void:
@@ -42,6 +49,8 @@ func _test_wave_controller(test_root: Node) -> void:
 	var controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(func() -> bool:
 		return true
 	)
+	var started_waves: Array[int] = []
+	controller.wave_started.connect(func(wave_index: int) -> void: started_waves.append(wave_index))
 	for _index in 10:
 		controller.tick(0.2)
 	if controller.spawned_in_wave != 10 or controller.alive_in_wave != 10:
@@ -50,10 +59,61 @@ func _test_wave_controller(test_root: Node) -> void:
 	for _index in 10:
 		controller.register_death()
 	controller.tick(0.01)
-	if controller.wave_index != 1 or controller.total_kills != 10:
+	if controller.wave_index != 1 or controller.total_kills != 10 or started_waves != [1]:
 		_fail(test_root, "Controle deveria avançar para a segunda onda apos limpar a primeira.")
 		return
 	print("PASS: Controle de ondas e abates validado.")
+
+
+func _test_wave_supplies(test_root: Node) -> void:
+	print("Testando suprimentos internos renovados por onda...")
+	var safehouse: StaticBody3D = SAFEHOUSE_BUILDER_SCRIPT.build_safehouse()
+	test_root.add_child(safehouse)
+	var safehouse_supplies: Array[Node] = []
+	var health_count := 0
+	var ammo_count := 0
+	for child in safehouse.find_children("SafehouseSupplyPoint*", "Area3D", true, false):
+		if not child.is_in_group("safehouse_supply_points"):
+			continue
+		safehouse_supplies.append(child)
+		if int(child.get("supply_kind")) == 0:
+			health_count += 1
+		else:
+			ammo_count += 1
+	if safehouse_supplies.size() != 4 or health_count != 2 or ammo_count != 2:
+		_fail(test_root, "Safehouse deveria ter quatro pontos por onda, dois de vida e dois de municao; total=%d vida=%d ammo=%d." % [safehouse_supplies.size(), health_count, ammo_count])
+		safehouse.free()
+		return
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	test_root.add_child(player)
+	player.health = 50
+	var health_supply := safehouse_supplies[0]
+	health_supply.call("_on_body_entered", player)
+	if player.health != 85 or bool(health_supply.get("is_available")):
+		_fail(test_root, "Suprimento de vida deveria recuperar 35 pontos uma vez; vida=%d." % player.health)
+		player.free()
+		safehouse.free()
+		return
+	var supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(test_root.get_tree(), 240912)
+	supply_controller.refresh_wave(1)
+	for supply in safehouse_supplies:
+		if not bool(supply.get("is_available")):
+			_fail(test_root, "Os quatro suprimentos da Safehouse deveriam reaparecer a cada onda.")
+			player.free()
+			safehouse.free()
+			return
+	health_supply.call("set_available", false)
+	var snapshot := SUPPLY_NETWORK_STATE_SCRIPT.collect(test_root.get_tree())
+	health_supply.call("set_available", true)
+	SUPPLY_NETWORK_STATE_SCRIPT.apply(test_root.get_tree(), snapshot)
+	if bool(health_supply.get("is_available")):
+		_fail(test_root, "Snapshot deveria restaurar o estado coletado de um suprimento.")
+		player.free()
+		safehouse.free()
+		return
+	player.free()
+	safehouse.free()
+	print("PASS: Vida, municao, quatro pontos da Safehouse e renovacao por onda validados.")
 
 
 func _test_survival_hud(test_root: Node) -> void:
@@ -147,12 +207,14 @@ func _test_survival_city_layout(test_root: Node) -> void:
 	var city = CITY_GENERATOR_SCRIPT.generate_world(240912, true)
 	var house_count := 0
 	var tall_building_count := 0
+	var street_facing_rotations: Dictionary = {}
 	for block in city.blocks:
 		for lot in block.lots:
 			if lot.building == null:
 				continue
 			if lot.building.archetype.begins_with("House"):
 				house_count += 1
+				street_facing_rotations[lot.building_rotation_y] = true
 				if lot.building.floors != 1:
 					_fail(test_root, "Casa de sobrevivencia deveria ter apenas um piso.")
 			elif lot.building.archetype.begins_with("ApartmentBuilding"):
@@ -161,6 +223,9 @@ func _test_survival_city_layout(test_root: Node) -> void:
 					_fail(test_root, "Predio alto deveria possuir ao menos dois pisos.")
 	if house_count <= 20 or tall_building_count > 3:
 		_fail(test_root, "Mapa deveria priorizar casas e limitar predios altos: casas=%d, altos=%d." % [house_count, tall_building_count])
+		return
+	if not street_facing_rotations.has(0.0) or not street_facing_rotations.has(PI):
+		_fail(test_root, "Casas deveriam orientar suas entradas para ambos os lados das ruas.")
 		return
 	print("PASS: Mapa prioriza casas e limita predios altos com escadas coerentes.")
 
@@ -196,6 +261,7 @@ func _test_house_gable_roof(test_root: Node) -> void:
 	print("Testando telhado inclinado das casas...")
 	var house_blueprint = BUILDING_GENERATOR_SCRIPT.generate(240912, "house")
 	var house: StaticBody3D = BUILDING_ASSEMBLER_SCRIPT.assemble(house_blueprint)
+	test_root.add_child(house)
 	if not house.has_node("RoofLeftSlope") or not house.has_node("RoofRightSlope"):
 		_fail(test_root, "Casa procedural deveria possuir telhado de duas aguas.")
 		house.free()
@@ -204,8 +270,52 @@ func _test_house_gable_roof(test_root: Node) -> void:
 		_fail(test_root, "Telhado da casa deveria possuir inclinacao visivel.")
 		house.free()
 		return
+	var doors := house.find_children("Door_*", "AnimatableBody3D", true, false)
+	if doors.is_empty() or not (doors[0] as AnimatableBody3D).has_node("DoorKnob"):
+		_fail(test_root, "Casa procedural deveria possuir porta externa visivel com macaneta.")
+		house.free()
+		return
+	for furniture_name in ["FurnitureLivingTable", "FurnitureKitchenCounter", "FurnitureBathroomMirror", "FurnitureBed_bedroom_a", "FurnitureWardrobe_bedroom_b", "InteriorLight"]:
+		if not house.has_node(furniture_name):
+			_fail(test_root, "Interior residencial deveria possuir '%s'." % furniture_name)
+			house.free()
+			return
+	for floor_blueprint in house_blueprint.floor_blueprints:
+		for placement in floor_blueprint.units:
+			for door in placement["blueprint"].doors:
+				if door.get("room_b", "") != "outside" and float(door.get("width", 0.0)) < 1.4:
+					_fail(test_root, "Passagem interna deveria ter ao menos 1.4 m; porta=%s." % door)
+					house.free()
+					return
+	if house.find_children("Interior*Supply", "Area3D", true, false).size() != 1:
+		_fail(test_root, "Cada predio procedural deveria possuir um ponto de suprimento interno.")
+		house.free()
+		return
+	CITY_ASSEMBLER_SCRIPT._configure_building_cutout(house, house_blueprint)
+	var roof_material := ((house.get_node("RoofLeftSlope") as MeshInstance3D).mesh as PrimitiveMesh).material as ShaderMaterial
+	if roof_material == null or not bool(roof_material.get_shader_parameter("use_building_bounds")):
+		_fail(test_root, "Recorte da casa deveria conhecer os limites do predio.")
+		house.free()
+		return
 	house.free()
-	print("PASS: Telhado de duas aguas validado.")
+	print("PASS: Telhado, porta, interior mobiliado e limites de recorte validados.")
+
+
+func _test_building_door_network_state(test_root: Node) -> void:
+	print("Testando replicacao das portas comuns...")
+	var door = DOOR_SCRIPT.new()
+	door.name = "NetworkDoor"
+	test_root.add_child(door)
+	door.interact()
+	var states := DOOR_NETWORK_STATE_SCRIPT.collect(test_root.get_tree())
+	door.apply_network_state(false, false)
+	DOOR_NETWORK_STATE_SCRIPT.apply(test_root.get_tree(), states)
+	if not door.is_open:
+		_fail(test_root, "Snapshot do servidor deveria abrir a porta no cliente.")
+		door.free()
+		return
+	door.free()
+	print("PASS: Estado autoritativo das portas comuns validado.")
 
 
 func _fail(test_root: Node, message: String) -> void:

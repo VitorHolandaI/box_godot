@@ -10,6 +10,9 @@ uniform float occlusion_epsilon : hint_range(0.1, 2.0) = 0.5;
 uniform float floor_height : hint_range(1.0, 6.0) = 2.8;
 uniform bool ceiling_cutout = false;
 uniform vec3 camera_offset = vec3(0.0, 19.0, 17.1);
+uniform bool use_building_bounds = false;
+uniform vec3 building_min = vec3(0.0);
+uniform vec3 building_max = vec3(0.0);
 
 varying vec3 world_position;
 
@@ -34,7 +37,13 @@ void fragment() {
 
 	float player_floor_base = floor(player_position.y / floor_height) * floor_height;
 	bool player_floor = world_position.y >= player_floor_base - 0.12 && world_position.y <= player_floor_base + floor_height + 0.12;
-	bool can_cutout = player_floor || (ceiling_cutout && world_position.y > player_floor_base + floor_height);
+	bool player_inside_building = !use_building_bounds || (
+		player_position.x >= building_min.x && player_position.x <= building_max.x &&
+		player_position.y >= building_min.y && player_position.y <= building_max.y &&
+		player_position.z >= building_min.z && player_position.z <= building_max.z
+	);
+	bool upper_floor = ceiling_cutout && world_position.y >= player_floor_base + floor_height - 0.12;
+	bool can_cutout = !player_inside_building || player_floor || upper_floor;
 	if (within_tube && occluding && can_cutout) {
 		discard;
 	}

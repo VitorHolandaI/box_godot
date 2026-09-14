@@ -51,7 +51,7 @@ material = SubResource("PantsMaterial")
 size = Vector3(0.34, 0.84, 0.36)
 
 [sub_resource type="CapsuleShape3D" id="PlayerShape"]
-radius = 0.44
+radius = 0.58
 height = 2.34
 
 [node name="Player" type="CharacterBody3D" groups=["player"]]
