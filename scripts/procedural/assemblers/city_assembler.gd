@@ -2,6 +2,7 @@ class_name ProceduralCityAssembler
 extends RefCounted
 
 const BUILDING_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/building_assembler.gd")
+const MESH_BATCHER: GDScript = preload("res://scripts/procedural/assemblers/mesh_batcher.gd")
 
 
 static func assemble(city, parent: Node3D) -> void:
@@ -39,6 +40,8 @@ static func _add_lot(parent: Node3D, lot) -> void:
 	building.rotation.y = lot.building_rotation_y
 	parent.add_child(building)
 	_configure_building_cutout(building, lot.building)
+	# Depois dos limites de recorte: os materiais ja carregam os parametros do predio.
+	MESH_BATCHER.merge_static_meshes(building)
 
 
 static func _configure_building_cutout(building: StaticBody3D, blueprint) -> void:
