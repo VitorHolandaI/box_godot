@@ -354,8 +354,10 @@ func _test_house_windows_are_glazed_openings(test_root: Node) -> void:
 		return
 	var glass := glass_nodes[0] as MeshInstance3D
 	var glass_box := glass.mesh as BoxMesh
-	var material := glass_box.material as StandardMaterial3D if glass_box != null else null
-	if material == null or material.transparency != BaseMaterial3D.TRANSPARENCY_ALPHA or material.albedo_color.a >= 0.5:
+	# O vidro usa o shader de edificio translucido para sumir junto com os andares ocultos.
+	var material := glass_box.material as ShaderMaterial if glass_box != null else null
+	var glass_color: Color = material.get_shader_parameter("glass_color") if material != null else Color(1, 1, 1, 1)
+	if material == null or not String(material.shader.resource_path).ends_with("building_glass.gdshader") or glass_color.a >= 0.5:
 		_fail(test_root, "Vidro da janela deveria ser translucido, nao um bloco solido.")
 		house.free()
 		return

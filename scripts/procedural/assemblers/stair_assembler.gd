@@ -2,6 +2,7 @@ class_name ProceduralStairAssembler
 extends RefCounted
 
 const BOX_BUILDER: GDScript = preload("res://scripts/procedural/assemblers/box_builder.gd")
+const BUILDING_MATERIALS: GDScript = preload("res://scripts/procedural/assemblers/building_materials.gd")
 
 ## Monta lajes com vao, lances de escada, rampas de colisao e guarda-corpos a
 ## partir de `building.stair_flights`. A rampa usa o comprimento real da
@@ -43,9 +44,7 @@ static func add_floor_slab(body: StaticBody3D, building, floor_index: int, floor
 ## Degraus visuais e rampa de colisao de cada lance.
 ## Uso: ProceduralStairAssembler.add_flights(body, building)
 static func add_flights(body: StaticBody3D, building) -> void:
-	var step_material := StandardMaterial3D.new()
-	step_material.albedo_color = Color(0.35, 0.35, 0.37)
-	step_material.roughness = 0.86
+	var step_material: Material = BUILDING_MATERIALS.opaque(Color(0.35, 0.35, 0.37), building.floor_height, false, 0.0, 0.86, true)
 	for flight in building.stair_flights:
 		var floor_index := int(flight["floor_index"])
 		var base_y: float = float(floor_index) * building.floor_height
@@ -107,8 +106,7 @@ static func _add_steps(body: StaticBody3D, flight: Dictionary, base_y: float, fl
 ## de chegada fica livre para quem sobe.
 static func _add_hole_railings(body: StaticBody3D, flight: Dictionary, floor_index: int, floor_y: float) -> void:
 	var hole := flight_hole_rect(flight)
-	var rail_material := StandardMaterial3D.new()
-	rail_material.albedo_color = Color(0.16, 0.16, 0.17)
+	var rail_material: Material = BUILDING_MATERIALS.opaque(Color(0.16, 0.16, 0.17), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT)
 	var rail_y := floor_y + RAILING_HEIGHT * 0.5
 	var center_z := hole.position.y + hole.size.y * 0.5
 	BOX_BUILDER.add_box(body, "StairRailLeft_%d" % floor_index, Vector3(RAILING_THICKNESS, RAILING_HEIGHT, hole.size.y), Vector3(hole.position.x, rail_y, center_z), rail_material, true)
