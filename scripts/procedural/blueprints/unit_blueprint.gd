@@ -26,6 +26,15 @@ func add_door(door: Dictionary) -> void:
 			room.doors.append(door)
 
 
+## Devolve o id do comodo que contem o ponto local, ou "" se nenhum contiver.
+## Uso: var room_id := unit.room_id_at(Vector2(2.0, 7.9))
+func room_id_at(local_point: Vector2) -> String:
+	for room in rooms:
+		if room.bounds.has_point(local_point):
+			return room.id
+	return ""
+
+
 func add_window(window: Dictionary) -> void:
 	windows.append(window)
 	for room in rooms:
@@ -36,6 +45,9 @@ func add_window(window: Dictionary) -> void:
 func is_graph_connected() -> bool:
 	if rooms.is_empty():
 		return false
+	var room_ids: Dictionary = {}
+	for room in rooms:
+		room_ids[room.id] = true
 	var visited: Dictionary = {rooms[0].id: true}
 	var pending: Array[String] = [rooms[0].id]
 	while not pending.is_empty():
@@ -48,7 +60,8 @@ func is_graph_connected() -> bool:
 				next = door.get("room_b", "")
 			elif door.get("room_b", "") == current:
 				next = door.get("room_a", "")
-			if not next.is_empty() and not visited.has(next):
+			# Portas para "outside" ou para unidades vizinhas nao contam no grafo interno.
+			if room_ids.has(next) and not visited.has(next):
 				visited[next] = true
 				pending.append(next)
 	return visited.size() == rooms.size()

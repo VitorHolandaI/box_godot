@@ -3,6 +3,7 @@ extends CharacterBody3D
 signal died(killer: Node)
 
 const FlockCoordinatorClass = preload("res://scripts/zombie_flock_coordinator.gd")
+const INDOOR_ROUTER_SCRIPT: GDScript = preload("res://scripts/zombie_indoor_router.gd")
 const HIT_REACTION_DURATION := 0.24
 const ATTACK_ANIMATION_DURATION := 0.5
 const VISION_RANGE := 24.0
@@ -18,8 +19,9 @@ const MELEE_RANGE := 1.25
 const MELEE_VERTICAL_RANGE := 1.4
 const DOOR_ATTACK_RANGE := 1.9
 const DOOR_ATTACK_HEIGHT := 0.9
-const STUCK_ESCAPE_TIME := 0.35
-const STUCK_DOOR_SEARCH_RADIUS := 30.0
+const FEET_OFFSET := 1.1
+const FLOCK_PUSH_GAIN := 1.5
+const FLOCK_PUSH_MAX_SPEED_RATIO := 0.5
 const VISUAL_FADE_TIME := 0.6
 
 @export var speed := 2.2
@@ -86,8 +88,7 @@ var is_investigating_sound := false
 var groan_audio_cooldown := 2.0
 var vision_visible := true
 var visual_opacity := 1.0
-var wall_contact_time := 0.0
-var escape_door: Node3D = null
+var indoor_router = INDOOR_ROUTER_SCRIPT.new()
 var _fade_meshes: Array[GeometryInstance3D] = []
 
 
@@ -158,31 +159,11 @@ func _physics_process(delta: float) -> void:
 		var distance := horizontal_offset.length()
 		var same_level := absf(target_offset.y) <= MELEE_VERTICAL_RANGE
 		if distance > MELEE_RANGE or not same_level:
-			var direction := horizontal_offset.normalized()
-			if is_on_wall():
-				wall_contact_time += delta
-				var wall_normal := get_wall_normal()
-				if wall_normal.length_squared() > 0.0001:
-					direction = direction.slide(wall_normal).normalized()
-				if wall_contact_time >= STUCK_ESCAPE_TIME and not is_instance_valid(escape_door) and _is_inside_building():
-					escape_door = _find_nearest_door()
-			else:
-				wall_contact_time = maxf(wall_contact_time - delta, 0.0)
-				if wall_contact_time <= 0.0:
-					escape_door = null
-			if is_instance_valid(escape_door) and bool(escape_door.get("is_open")):
-				escape_door = null
-			if is_instance_valid(escape_door):
-				var to_door := escape_door.global_position - global_position
-				to_door.y = 0.0
-				if to_door.length() <= DOOR_ATTACK_RANGE:
-					_attack_door(escape_door)
-					velocity = Vector3.ZERO
-				else:
-					var door_direction := to_door.normalized()
-					direction = door_direction
-					velocity.x = door_direction.x * speed
-					velocity.z = door_direction.z * speed
+			var direction := _chase_direction(target, horizontal_offset, delta)
+			if is_on_wall() and _try_attack_blocking_door(direction):
+				# Zumbi nao abre porta: fica parado golpeando ate ela quebrar.
+				velocity.x = 0.0
+				velocity.z = 0.0
 			else:
 				velocity.x = direction.x * speed
 				velocity.z = direction.z * speed
@@ -227,9 +208,9 @@ func _physics_process(delta: float) -> void:
 			rotation.y = lerp_angle(rotation.y, atan2(-wander_direction.x, -wander_direction.z), minf(delta * 4.0, 1.0))
 			is_walking = true
 
-	if flock_separation_vector.length_squared() > 0.001:
-		velocity.x += flock_separation_vector.x * 1.5
-		velocity.z += flock_separation_vector.z * 1.5
+	var flock_push := _flock_push(Vector3(velocity.x, 0.0, velocity.z))
+	velocity.x += flock_push.x
+	velocity.z += flock_push.z
 
 	move_and_slide()
 	_animate_pose(delta, is_walking and is_on_floor())
@@ -350,46 +331,48 @@ func _attack_target_or_door(target: CharacterBody3D) -> void:
 
 
 ## Um zumbi bloqueado por uma porta fechada no caminho ate o jogador ataca a
-## porta ate destrui-la, em vez de ficar preso dentro da casa.
-## Uso: _try_attack_blocking_door(direction)
-func _try_attack_blocking_door(direction: Vector3) -> void:
+## porta ate destrui-la. Zumbis nunca abrem portas.
+## Uso: if _try_attack_blocking_door(direction): velocity = Vector3.ZERO
+func _try_attack_blocking_door(direction: Vector3) -> bool:
 	var door := _find_door_ahead(direction)
-	if door != null:
-		_attack_door(door)
+	if door == null:
+		return false
+	_attack_door(door)
+	return true
 
 
-## A rota de fuga so vale para zumbis realmente presos dentro de uma casa.
-## Um zumbi na rua encostado na parede continua perseguindo o jogador.
-## Uso: if zombie._is_inside_building(): ...
-func _is_inside_building() -> bool:
-	for building in get_tree().get_nodes_in_group("visibility_building"):
-		var min_value: Variant = building.get_meta("visibility_min", null)
-		var max_value: Variant = building.get_meta("visibility_max", null)
-		if min_value is Vector3 and max_value is Vector3 and _position_inside_bounds(global_position, min_value, max_value):
-			return true
-	return false
+## Empurrao de Boids limitado a metade da velocidade propria. Enquanto o zumbi
+## segue uma rota interna, a parte que empurra contra o caminho e descartada:
+## a separacao da multidao espalhava a horda para os cantos dos comodos e
+## anulava a rota de saida (zumbis parados com a porta ao lado).
+## Uso: velocity += _flock_push(Vector3(velocity.x, 0.0, velocity.z))
+func _flock_push(desired_velocity: Vector3) -> Vector3:
+	if flock_separation_vector.length_squared() <= 0.001:
+		return Vector3.ZERO
+	var push := (flock_separation_vector * FLOCK_PUSH_GAIN).limit_length(speed * FLOCK_PUSH_MAX_SPEED_RATIO)
+	push.y = 0.0
+	if not indoor_router.has_route or desired_velocity.length_squared() <= 0.0001:
+		return push
+	var forward := desired_velocity.normalized()
+	var backward_amount := push.dot(forward)
+	return push - forward * backward_amount if backward_amount < 0.0 else push
 
 
-func _position_inside_bounds(position: Vector3, minimum: Vector3, maximum: Vector3) -> bool:
-	return position.x >= minimum.x and position.x <= maximum.x and position.y >= minimum.y and position.y <= maximum.y and position.z >= minimum.z and position.z <= maximum.z
-
-
-## Encontra a porta fechada mais proxima dentro do raio de busca. Serve de
-## rota de fuga tanto para zumbis presos dentro de casas quanto para os que
-## ficam travados na parede externa sem a porta exatamente a frente.
-## Uso: var porta := zombie._find_nearest_door()
-func _find_nearest_door() -> Node3D:
-	var nearest: Node3D = null
-	var nearest_distance := STUCK_DOOR_SEARCH_RADIUS
-	for door_node in get_tree().get_nodes_in_group("destructible_door"):
-		var door := door_node as Node3D
-		if door == null or not is_instance_valid(door) or bool(door.get("is_open")):
-			continue
-		var distance := global_position.distance_to(door.global_position)
-		if distance < nearest_distance:
-			nearest_distance = distance
-			nearest = door
-	return nearest
+## Direcao horizontal de perseguicao. Dentro (ou em direcao a) um edificio
+## segue o navmesh: sai do comodo pela porta, usa a escada e contorna moveis.
+## Na rua aberta vai em linha reta ate o alvo.
+## Uso: var direction := _chase_direction(target, target.global_position - global_position, delta)
+func _chase_direction(target: CharacterBody3D, horizontal_offset: Vector3, delta: float) -> Vector3:
+	var feet := global_position - Vector3.UP * FEET_OFFSET
+	var target_feet := target.global_position - Vector3.UP * FEET_OFFSET
+	var waypoint: Vector3 = indoor_router.next_waypoint(get_tree(), feet, target_feet, delta)
+	if not indoor_router.has_route:
+		return horizontal_offset.normalized()
+	var to_waypoint := waypoint - feet
+	to_waypoint.y = 0.0
+	if to_waypoint.length_squared() < 0.0001:
+		return horizontal_offset.normalized()
+	return to_waypoint.normalized()
 
 
 func _attack_door(door: Node) -> void:

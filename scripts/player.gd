@@ -8,6 +8,7 @@ enum Weapon { KNIFE, PISTOL }
 
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const KNIFE_ATTACK_DURATION := 0.4
+const KNIFE_DOOR_REACH := 1.8
 const MAX_LIVES := 3
 const MAX_RESERVE_AMMO := 96
 const VISION_RANGE := 32.0
@@ -293,6 +294,26 @@ func _attack_with_knife() -> void:
 	var target := _find_knife_target()
 	if target != null and target.has_method("take_damage"):
 		target.take_damage(knife_damage, -global_transform.basis.z, "knife", self)
+		return
+	var door := _find_knife_door()
+	if door != null:
+		door.take_damage(knife_damage, -global_transform.basis.z, "knife", self)
+
+
+## Porta inteira logo a frente, ao alcance da faca. Bater repetidamente
+## arromba a porta (tambem funciona com ela aberta).
+## Uso: var door := _find_knife_door()
+func _find_knife_door() -> Node:
+	var ray_start := global_position + Vector3.UP * 0.2
+	var ray_end := ray_start - global_transform.basis.z * KNIFE_DOOR_REACH
+	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var collider: Node = hit.get("collider")
+	while collider != null:
+		if collider.is_in_group("destructible_door") and not bool(collider.get("is_destroyed")):
+			return collider
+		collider = collider.get_parent()
+	return null
 
 
 func _get_combat_targets() -> Array[Node3D]:

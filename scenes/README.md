@@ -3,6 +3,7 @@
 Cenas reutilizaveis e composicao principal do jogo.
 
 - `ammo_pickup.tscn`: caixa de municao militar coletavel com luz e animacao de flutuacao.
+- `benchmark_indoor_escape.tscn`: cena headless que mede custo e taxa de fuga de zumbis presos dentro de casas procedurais.
 - `benchmark_zombies.tscn`: cena dedicada para execucao headless de benchmark de estresse de zumbis, RAM e CPU.
 - `building.tscn`: apartamento solido com shader de recorte.
 - `bullet.tscn`: projetil visual e autoritativo com trajetoria fixa apos o disparo.
