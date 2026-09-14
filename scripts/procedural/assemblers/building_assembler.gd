@@ -8,6 +8,7 @@ const WINDOW_SILL := 1.05
 const WINDOW_HEIGHT := 0.9
 const WINDOW_FRAME_THICKNESS := 0.08
 const BOX_BUILDER: GDScript = preload("res://scripts/procedural/assemblers/box_builder.gd")
+const HOUSE_ROOF_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/house_roof_assembler.gd")
 const STAIR_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/stair_assembler.gd")
 const BUILDING_NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation/building_navigation.gd")
 const BUILDING_MATERIALS: GDScript = preload("res://scripts/procedural/assemblers/building_materials.gd")
@@ -39,7 +40,7 @@ static func assemble(building) -> StaticBody3D:
 			_draw_unit(body, placement["blueprint"], placement["position"], floor_y + 0.08, wall_material, trim_material, furniture_materials)
 	STAIR_ASSEMBLER.add_flights(body, building)
 	if building.archetype.begins_with("House"):
-		_add_gable_roof(body, building, ceiling_material)
+		HOUSE_ROOF_ASSEMBLER.add_gable_roof(body, building, wall_material)
 	else:
 		BOX_BUILDER.add_box(body, "Roof", Vector3(building.width, 0.18, building.depth), Vector3(building.width * 0.5, building.floors * building.floor_height, building.depth * 0.5), ceiling_material, true)
 	if building.archetype == "Shop_A" or building.archetype == "Grocery_A":
@@ -327,18 +328,6 @@ static func _add_commercial_front(body: StaticBody3D, building) -> void:
 	BOX_BUILDER.add_box(body, "StoreSign", Vector3(building.width * 0.48, 0.55, 0.08), Vector3(building.width * 0.5, 2.52, -0.08), BUILDING_MATERIALS.opaque(accent.lightened(0.2), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT), false)
 
 
-static func _add_gable_roof(body: StaticBody3D, building, material: Material) -> void:
-	var overhang := 0.45
-	var roof_rise := 1.8
-	var half_run: float = building.width * 0.5 + overhang
-	var slope_length := sqrt(half_run * half_run + roof_rise * roof_rise)
-	var roof_y: float = building.floors * building.floor_height
-	var roof_depth: float = building.depth + overhang * 2.0
-	var angle := atan2(roof_rise, half_run)
-	_add_rotated_box(body, "RoofLeftSlope", Vector3(slope_length, 0.18, roof_depth), Vector3(building.width * 0.5 - half_run * 0.5, roof_y + roof_rise * 0.5, building.depth * 0.5), angle, material)
-	_add_rotated_box(body, "RoofRightSlope", Vector3(slope_length, 0.18, roof_depth), Vector3(building.width * 0.5 + half_run * 0.5, roof_y + roof_rise * 0.5, building.depth * 0.5), -angle, material)
-
-
 static func _facade_color(seed: int) -> Color:
 	var palette: Array[Color] = [
 		Color(0.58, 0.37, 0.26), Color(0.30, 0.43, 0.53),
@@ -346,23 +335,3 @@ static func _facade_color(seed: int) -> Color:
 		Color(0.52, 0.34, 0.47), Color(0.46, 0.46, 0.48),
 	]
 	return palette[absi(seed) % palette.size()]
-
-
-static func _add_rotated_box(body: StaticBody3D, node_name: String, size: Vector3, position: Vector3, rotation_z: float, material: Material) -> void:
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mesh.material = material
-	var instance := MeshInstance3D.new()
-	instance.name = node_name
-	instance.mesh = mesh
-	instance.position = position
-	instance.rotation.z = rotation_z
-	body.add_child(instance)
-	var shape := BoxShape3D.new()
-	shape.size = size
-	var collision_shape := CollisionShape3D.new()
-	collision_shape.name = node_name + "Collision"
-	collision_shape.shape = shape
-	collision_shape.position = position
-	collision_shape.rotation.z = rotation_z
-	body.add_child(collision_shape)
