@@ -472,6 +472,7 @@ func _die(killer: Node = null) -> void:
 	death_velocity = velocity
 	velocity = Vector3.ZERO
 	remove_from_group("zombies")
+	visible = false
 	health_label.visible = false
 	collision_shape.set_deferred("disabled", true)
 	model.visible = false
@@ -492,6 +493,7 @@ func set_vision_visible(is_visible: bool) -> void:
 
 func _apply_visual_visibility() -> void:
 	var should_show := vision_visible and not is_dead and lod_level != LodLevel.FAR
+	visible = should_show
 	model.visible = should_show
 	health_label.visible = should_show
 
@@ -499,7 +501,7 @@ func _apply_visual_visibility() -> void:
 func _spawn_ragdoll() -> void:
 	var scene := get_tree().current_scene
 	if scene.has_method("spawn_zombie_ragdoll"):
-		scene.spawn_zombie_ragdoll(global_position, rotation.y, death_velocity, int(zombie_type), appearance_hash)
+		scene.spawn_zombie_ragdoll(global_position, rotation.y, death_velocity, int(zombie_type), appearance_hash, name)
 
 
 func _configure_variant() -> void:
