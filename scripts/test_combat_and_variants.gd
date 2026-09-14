@@ -495,6 +495,32 @@ func _test_zombie_only_escapes_indoors() -> void:
 
 func _test_player_sonar_pulse() -> void:
 	print("Testando pulso sonar que revela zumbis...")
+	GameConfig.configure_local_players([GameConfig.create_keyboard_config(0)])
+	if not InputMap.has_action("player_1_sonar") or InputMap.action_get_events("player_1_sonar").is_empty():
+		push_error("FALHA: A acao de sonar deveria estar mapeada para o jogador 1.")
+		_mark_failure()
+		return
+	GameConfig.configure_local_players([{"device_type": "keyboard", "device_id": -1, "device_name": "Antigo", "bindings": {}}])
+	if InputMap.action_get_events("player_1_sonar").is_empty():
+		push_error("FALHA: Config antigo sem sonar deveria receber a tecla padrao.")
+		_mark_failure()
+		return
+	GameConfig.configure_local_players([GameConfig.create_keyboard_config(0)])
+	var client_player := PLAYER_SCENE.instantiate() as PlayerCharacter
+	client_player.reads_local_input = false
+	client_player.is_local_controller = true
+	client_player.simulation_enabled = false
+	client_player.input_action_prefix = "player_1_"
+	add_child(client_player)
+	Input.action_press("player_1_sonar")
+	client_player.call("_poll_local_sonar")
+	Input.action_release("player_1_sonar")
+	if not client_player.is_sonar_active():
+		push_error("FALHA: Sonar deveria funcionar no cliente mesmo sem leitura de movimento.")
+		_mark_failure()
+		client_player.queue_free()
+		return
+	client_player.queue_free()
 	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
 	player.reads_local_input = false
 	add_child(player)
