@@ -15,6 +15,7 @@ var elapsed_seconds := 0.0
 var rtt_samples: Array[float] = []
 var snapshot_interval_samples: Array[float] = []
 var zombie_count_samples: Array[int] = []
+var frame_time_samples: Array[float] = []
 var _last_complete_usec := -1
 var _current_sequence := -1
 var _current_packets: Dictionary = {}
@@ -60,6 +61,13 @@ func record_zombie_packet(sequence: int, packet_index: int, packet_count: int, z
 	zombie_count_samples.append(_current_zombie_count)
 
 
+## Registra a duracao de um frame renderizado (ms) para medir FPS do cliente.
+## Uso: probe.record_frame_time(delta * 1000.0)
+func record_frame_time(frame_ms: float) -> void:
+	if elapsed_seconds > 3.0:
+		frame_time_samples.append(frame_ms)
+
+
 ## Avanca o relogio da sonda; devolve true quando a medicao terminou.
 ## Uso: if probe.tick(delta, rtt_ms): print(probe.build_report())
 func tick(delta: float, rtt_ms: float) -> bool:
@@ -86,6 +94,8 @@ func build_report() -> Dictionary:
 		"complete_snapshots": snapshot_interval_samples.size(),
 		"late_snapshots": late_snapshots,
 		"zombies_last": zombie_count_samples.back() if not zombie_count_samples.is_empty() else 0,
+		"frame_ms_avg": snappedf(_average(frame_time_samples), 0.01),
+		"frame_ms_p95": snappedf(_percentile(frame_time_samples, 0.95), 0.01),
 	}
 
 
