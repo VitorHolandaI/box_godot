@@ -22,9 +22,13 @@ void vertex() {
 
 void fragment() {
 	float player_height = CAMERA_POSITION_WORLD.y - camera_offset.y;
-	float camera_ray_y = min(CAMERA_DIRECTION_WORLD.y, -0.001);
+	vec3 view_direction = CAMERA_DIRECTION_WORLD;
+	if (view_direction.y > 0.0) {
+		view_direction = -view_direction;
+	}
+	float camera_ray_y = min(view_direction.y, -0.001);
 	float camera_to_floor = (player_height - CAMERA_POSITION_WORLD.y) / camera_ray_y;
-	vec3 camera_to_player = CAMERA_DIRECTION_WORLD * camera_to_floor;
+	vec3 camera_to_player = view_direction * camera_to_floor;
 	vec3 player_position = CAMERA_POSITION_WORLD + camera_to_player;
 	float player_distance = length(camera_to_player);
 	vec3 camera_direction = camera_to_player / player_distance;
