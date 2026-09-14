@@ -8,6 +8,7 @@ extends RefCounted
 
 const WAVE_SUPPLY_SCENE: PackedScene = preload("res://scenes/wave_supply_pickup.tscn")
 const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
+const AURA_CUTOUT_RADIUS: float = 3.0
 const SAFEHOUSE_DOOR_SCRIPT: Script = preload("res://scripts/safehouse_door.gd")
 const FLOOR_HEIGHT: float = 3.2
 
@@ -51,7 +52,7 @@ static func _create_cutout_material(color: Color, roughness: float, ceiling_cuto
 	mat.shader = CUTOUT_SHADER
 	mat.set_shader_parameter("base_color", color)
 	mat.set_shader_parameter("material_roughness", roughness)
-	mat.set_shader_parameter("cutout_radius", 1.5)
+	mat.set_shader_parameter("cutout_radius", AURA_CUTOUT_RADIUS)
 	mat.set_shader_parameter("floor_height", FLOOR_HEIGHT)
 	mat.set_shader_parameter("ceiling_cutout", ceiling_cutout)
 	return mat

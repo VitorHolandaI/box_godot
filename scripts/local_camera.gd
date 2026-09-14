@@ -2,7 +2,6 @@ extends Camera3D
 
 const OUTDOOR_OFFSET := Vector3(0.0, 19.0, 17.1)
 const INDOOR_OFFSET := Vector3(0.0, 19.0, 3.0)
-const CAMERA_MARGIN := 1.0
 const INSIDE_CHECK_INTERVAL := 0.15
 const CAMERA_SMOOTH_SPEED := 7.0
 
@@ -27,24 +26,17 @@ func _process(delta: float) -> void:
 		containing_building = _find_containing_building()
 	camera_offset = INDOOR_OFFSET if is_instance_valid(containing_building) else OUTDOOR_OFFSET
 	var desired_position := target.global_position + camera_offset
-	if is_instance_valid(containing_building):
-		desired_position = _clamp_inside_building(desired_position, containing_building)
+	# A camera fica sempre atras/acima do alvo (offset x = 0), sem limitar a
+	# posicao dentro da casa. Assim o shader de recorte, que deriva a posicao do
+	# jogador da direcao da camera, continua seguindo o boneco e o yaw fica 0.
+	var desired_transform := Transform3D(Basis.IDENTITY, desired_position).looking_at(target.global_position, Vector3.UP)
 	if not camera_initialized:
-		global_position = desired_position
-		rotation.x = _fixed_pitch(camera_offset)
+		global_transform = desired_transform
 		camera_initialized = true
 		return
 	var blend := minf(delta * CAMERA_SMOOTH_SPEED, 1.0)
 	global_position = global_position.lerp(desired_position, blend)
-	# A camera mantem o yaw zerado e apenas ajusta a inclinacao conforme o
-	# modo indoor/outdoor, para nao girar junto com o jogador.
-	rotation.x = lerp_angle(rotation.x, _fixed_pitch(camera_offset), blend)
-	rotation.y = 0.0
-	rotation.z = 0.0
-
-
-func _fixed_pitch(offset: Vector3) -> float:
-	return -atan2(offset.y, offset.z)
+	quaternion = quaternion.slerp(desired_transform.basis.get_rotation_quaternion(), blend)
 
 
 func _find_containing_building() -> Node3D:
@@ -58,11 +50,3 @@ func _find_containing_building() -> Node3D:
 
 func _position_inside_bounds(position: Vector3, minimum: Vector3, maximum: Vector3) -> bool:
 	return position.x >= minimum.x and position.x <= maximum.x and position.y >= minimum.y and position.y <= maximum.y and position.z >= minimum.z and position.z <= maximum.z
-
-
-func _clamp_inside_building(position: Vector3, building: Node3D) -> Vector3:
-	var minimum: Vector3 = building.get_meta("visibility_min")
-	var maximum: Vector3 = building.get_meta("visibility_max")
-	position.x = clampf(position.x, minimum.x + CAMERA_MARGIN, maximum.x - CAMERA_MARGIN)
-	position.z = clampf(position.z, minimum.z + CAMERA_MARGIN, maximum.z - CAMERA_MARGIN)
-	return position
