@@ -266,8 +266,11 @@ func _can_detect_player(player: CharacterBody3D) -> bool:
 	return forward.angle_to(offset.normalized()) <= VISION_HALF_ANGLE and _has_line_of_sight(player)
 
 
-func _is_living_player(player: CharacterBody3D) -> bool:
-	return player != null and is_instance_valid(player) and not player.is_queued_for_deletion() and int(player.get("health")) > 0 and not bool(player.get("is_eliminated"))
+func _is_living_player(player: Variant) -> bool:
+	if player == null or not is_instance_valid(player) or not player is CharacterBody3D:
+		return false
+	var player_body := player as CharacterBody3D
+	return not player_body.is_queued_for_deletion() and int(player_body.get("health")) > 0 and not bool(player_body.get("is_eliminated"))
 
 
 func _should_switch_target(candidate: CharacterBody3D) -> bool:
@@ -306,8 +309,11 @@ func _attack_target_or_door(target: CharacterBody3D) -> void:
 		return
 	var ray_start := global_position + Vector3.UP * 0.8
 	var ray_end := target.global_position + Vector3.UP * 0.8
-	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [self])
+	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		target.take_damage(attack_damage, (target.global_position - global_position).normalized(), "melee", self)
+		return
 	var collider: Node = hit.get("collider")
 	while collider != null:
 		var parent: Node = collider.get_parent()
@@ -321,7 +327,6 @@ func _attack_target_or_door(target: CharacterBody3D) -> void:
 				parent.take_damage(attack_damage, (target.global_position - global_position).normalized())
 			return
 		collider = collider.get_parent()
-	target.take_damage(attack_damage, (target.global_position - global_position).normalized(), "melee", self)
 
 
 func _find_heard_player() -> CharacterBody3D:

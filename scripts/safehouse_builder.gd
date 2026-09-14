@@ -6,7 +6,7 @@ extends RefCounted
 ## Uso:
 ##   var safehouse := SafehouseBuilder.build_safehouse()
 
-const AMMO_PICKUP_SCENE: PackedScene = preload("res://scenes/ammo_pickup.tscn")
+const WAVE_SUPPLY_SCENE: PackedScene = preload("res://scenes/wave_supply_pickup.tscn")
 const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
 const SAFEHOUSE_DOOR_SCRIPT: Script = preload("res://scripts/safehouse_door.gd")
 const FLOOR_HEIGHT: float = 3.2
@@ -25,7 +25,7 @@ static func build_safehouse() -> StaticBody3D:
 
 	# Materiais com Shader de Cutout (Aura / Bola de visibilidade do jogador)
 	var cutout_wall_mat := _create_cutout_material(Color(0.38, 0.41, 0.36), 0.88)
-	var cutout_floor_mat := _create_cutout_material(Color(0.24, 0.25, 0.23), 0.90)
+	var cutout_floor_mat := _create_cutout_material(Color(0.24, 0.25, 0.23), 0.90, true)
 	var wood_mat := _create_cutout_material(Color(0.44, 0.30, 0.18), 0.80)
 
 	var ground_mat := StandardMaterial3D.new()
@@ -46,13 +46,14 @@ static func build_safehouse() -> StaticBody3D:
 	return house
 
 
-static func _create_cutout_material(color: Color, roughness: float) -> ShaderMaterial:
+static func _create_cutout_material(color: Color, roughness: float, ceiling_cutout: bool = false) -> ShaderMaterial:
 	var mat := ShaderMaterial.new()
 	mat.shader = CUTOUT_SHADER
 	mat.set_shader_parameter("base_color", color)
 	mat.set_shader_parameter("material_roughness", roughness)
 	mat.set_shader_parameter("cutout_radius", 0.9)
 	mat.set_shader_parameter("floor_height", FLOOR_HEIGHT)
+	mat.set_shader_parameter("ceiling_cutout", ceiling_cutout)
 	return mat
 
 
@@ -267,14 +268,15 @@ static func _build_respawn_bunks(house: StaticBody3D) -> void:
 		pillow.position = base_pos + Vector3(-0.55, 0.32, 0.0)
 		house.add_child(pillow)
 
-		var medkit := MeshInstance3D.new()
-		var m_mesh := BoxMesh.new()
-		m_mesh.size = Vector3(0.3, 0.2, 0.4)
-		var m_mat := StandardMaterial3D.new()
-		m_mat.albedo_color = Color(0.92, 0.92, 0.92)
-		medkit.mesh = m_mesh
-		medkit.position = base_pos + Vector3(0.7, 0.12, 0.5)
-		house.add_child(medkit)
+		var supply := WAVE_SUPPLY_SCENE.instantiate() as Area3D
+		var station_number: int = st["num"]
+		var is_health := station_number % 2 == 1
+		supply.name = "SafehouseSupplyPoint%d" % station_number
+		supply.set("supply_kind", 0 if is_health else 1)
+		supply.set("supply_amount", 35 if is_health else 30)
+		supply.position = base_pos + Vector3(0.7, 0.2, 0.5)
+		supply.add_to_group("safehouse_supply_points")
+		house.add_child(supply)
 
 
 static func _build_tactical_armory(house: StaticBody3D) -> void:
@@ -289,11 +291,6 @@ static func _build_tactical_armory(house: StaticBody3D) -> void:
 	var box2 := _load_model(MODEL_BOX_B, Vector3(0.4, 0.35, 4.1), Vector3.ONE * 1.2)
 	if box2 != null:
 		house.add_child(box2)
-
-	var ammo_ground := AMMO_PICKUP_SCENE.instantiate() as Node3D
-	ammo_ground.position = Vector3(0.0, 0.8, 4.0)
-	ammo_ground.set("respawns", true)
-	house.add_child(ammo_ground)
 
 	var bench := _load_model(MODEL_BENCH, Vector3(2.6, 0.14, 4.0), Vector3.ONE * 1.5)
 	if bench != null:
@@ -333,12 +330,6 @@ static func _build_balcony(house: StaticBody3D, cutout_mat: Material) -> void:
 	var bar_front2 := _load_model(MODEL_BARRIER, Vector3(1.6, FLOOR_HEIGHT + 0.08, -8.15), Vector3.ONE * 1.2)
 	if bar_front2 != null:
 		house.add_child(bar_front2)
-
-	var ammo_upper := AMMO_PICKUP_SCENE.instantiate() as Node3D
-	ammo_upper.position = Vector3(0.0, FLOOR_HEIGHT + 0.6, -5.1)
-	ammo_upper.set("respawns", true)
-	house.add_child(ammo_upper)
-
 
 static func _build_sanctuary_lighting(house: StaticBody3D) -> void:
 	# Lustre / Iluminacao central acolhedora no atrio (ampla iluminacao ambar)

@@ -12,6 +12,7 @@ const PERFORMANCE_HUD_SCRIPT := preload("res://scripts/performance_hud.gd")
 const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/generators/city_generator.gd")
 const PROCEDURAL_BUILDING_GENERATOR: GDScript = preload("res://scripts/procedural/generators/building_generator.gd")
 const PROCEDURAL_BUILDING_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/building_assembler.gd")
+const PROCEDURAL_CITY_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/city_assembler.gd")
 
 
 ## Runs focused regressions for bot tactics, spawning, HUDs and horde physics.
@@ -20,6 +21,7 @@ func run(test_root: Node) -> void:
 	if not test_root.has_meta("unit_test_failed"):
 		test_root.set_meta("unit_test_failed", false)
 	_test_careful_melee_approach(test_root)
+	_test_freed_player_is_not_a_target(test_root)
 	_test_public_server_port(test_root)
 	_test_server_port_validation(test_root)
 	_test_procedural_city_seed(test_root)
@@ -70,9 +72,25 @@ func _test_procedural_city_seed(test_root: Node) -> void:
 	if first_city.signature() == other_city.signature():
 		_fail(test_root, "Seeds diferentes deveriam produzir blueprints diferentes.")
 		return
-	if first_city.roads.size() != 8 or first_city.blocks.size() != 9 or first_city.building_count() != 35:
+	if first_city.roads.size() != 80 or first_city.blocks.size() != 9 or first_city.building_count() != 35:
 		_fail(test_root, "A cidade procedural deveria conter 35 edificios e um lote reservado para a Safehouse.")
 		return
+	var has_curved_segment := false
+	for road in first_city.roads:
+		if not is_zero_approx(road.start.x - road.finish.x) and not is_zero_approx(road.start.y - road.finish.y):
+			has_curved_segment = true
+			break
+	if not has_curved_segment:
+		_fail(test_root, "A cidade procedural deveria montar ruas organicas com segmentos diagonais.")
+		return
+	var empty_lot = first_city.blocks[4].lots[1]
+	var empty_lot_root := Node3D.new()
+	PROCEDURAL_CITY_ASSEMBLER._add_lot(empty_lot_root, empty_lot)
+	if empty_lot_root.get_child_count() != 0:
+		_fail(test_root, "Lote vazio nao deveria criar a antiga base retangular clara.")
+		empty_lot_root.free()
+		return
+	empty_lot_root.free()
 	var archetypes: Dictionary = {}
 	var house_count := 0
 	var apartment_count := 0
@@ -163,6 +181,19 @@ func _test_careful_melee_approach(test_root: Node) -> void:
 	player.free()
 	zombies.free()
 	print("PASS: Aproximacao cautelosa dos bots validada.")
+
+
+func _test_freed_player_is_not_a_target(test_root: Node) -> void:
+	print("Testando descarte de alvo desconectado...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	var disconnected_player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	test_root.add_child(zombie)
+	test_root.add_child(disconnected_player)
+	disconnected_player.free()
+	if bool(zombie.call("_is_living_player", disconnected_player)):
+		_fail(test_root, "Jogador ja liberado nao deveria continuar como alvo do zumbi.")
+	zombie.free()
+	print("PASS: Alvo desconectado descartado sem erro.")
 
 
 func _test_hud_alive_zombie_count(test_root: Node) -> void:

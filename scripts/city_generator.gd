@@ -49,7 +49,6 @@ const BUILDING_COLORS := [
 var road_material: StandardMaterial3D
 var line_material: StandardMaterial3D
 var boundary_material: StandardMaterial3D
-var sidewalk_material: StandardMaterial3D
 
 
 func _ready() -> void:
@@ -84,11 +83,6 @@ func _create_materials() -> void:
 	boundary_material.albedo_color = Color(0.16, 0.19, 0.17)
 	boundary_material.roughness = 0.92
 
-	sidewalk_material = StandardMaterial3D.new()
-	sidewalk_material.albedo_color = Color(0.68, 0.68, 0.66)
-	sidewalk_material.roughness = 0.88
-
-
 func _hide_legacy_center_roads() -> void:
 	for node_name in ["RoadVertical", "RoadHorizontal", "RoadLineVertical", "RoadLineHorizontal", "Crosswalks"]:
 		var legacy_node := get_parent().get_node_or_null(node_name) as Node3D
@@ -101,6 +95,9 @@ func _create_procedural_safehouse() -> void:
 	safehouse.name = "CentralSafehouse"
 	safehouse.position = Vector3(-10.5, 0.12, 10.5)
 	add_child(safehouse)
+	var safehouse_min := safehouse.global_position + Vector3(-6.4, 0.0, -6.4)
+	var safehouse_max := safehouse.global_position + Vector3(6.4, 6.6, 6.4)
+	PROCEDURAL_CITY_ASSEMBLER.configure_cutout_bounds(safehouse, safehouse_min, safehouse_max)
 
 
 func _create_roads() -> void:
@@ -143,7 +140,6 @@ func _create_outer_buildings() -> void:
 
 
 func _spawn_lot_building(index: int, building_position: Vector3, rng: RandomNumberGenerator) -> void:
-	_create_lot_sidewalk(index, building_position)
 	if is_equal_approx(building_position.x, -12.0) and is_equal_approx(building_position.z, 12.0):
 		var safehouse: StaticBody3D = SafehouseBuilder.build_safehouse()
 		safehouse.name = "CentralSafehouse"
@@ -156,17 +152,6 @@ func _spawn_lot_building(index: int, building_position: Vector3, rng: RandomNumb
 	lot.position = building_position
 	lot.rotation.y = rng.randi_range(0, 3) * PI * 0.5
 	add_child(lot)
-
-
-func _create_lot_sidewalk(index: int, pos: Vector3) -> void:
-	var pad := BoxMesh.new()
-	pad.size = Vector3(16.0, 0.08, 16.0)
-	pad.material = sidewalk_material
-	var inst := MeshInstance3D.new()
-	inst.name = "LotSidewalk%d" % index
-	inst.mesh = pad
-	inst.position = Vector3(pos.x, 0.14, pos.z)
-	add_child(inst)
 
 
 func _create_street_props() -> void:
