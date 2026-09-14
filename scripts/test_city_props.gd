@@ -14,6 +14,7 @@ const PLAYER_HEIGHT := 2.34
 func run(test_root: Node) -> void:
 	_test_street_lights_tower_over_player_on_sidewalks(test_root)
 	_test_house_roof_is_closed_and_pitched(test_root)
+	_test_house_rooms_fit_player_size(test_root)
 
 
 func _test_street_lights_tower_over_player_on_sidewalks(test_root: Node) -> void:
@@ -70,6 +71,24 @@ func _test_house_roof_is_closed_and_pitched(test_root: Node) -> void:
 		_fail(test_root, "Telhado deveria ter cumeeira e caimento de %.0f graus; cumeeira=%s caimento=%.1f." % [ROOF_ASSEMBLER_SCRIPT.PITCH_DEGREES, has_ridge, pitch])
 		return
 	print("PASS: Telhado com empenas, cumeeira e caimento de %.0f graus." % pitch)
+
+
+func _test_house_rooms_fit_player_size(test_root: Node) -> void:
+	print("Testando comodos da casa proporcionais ao boneco...")
+	var player_width := 1.16
+	var blueprint = BUILDING_GENERATOR_SCRIPT.generate(240912, "house")
+	for floor_blueprint in blueprint.floor_blueprints:
+		for placement in floor_blueprint.units:
+			var unit = placement["blueprint"]
+			for room in unit.rooms:
+				if minf(room.bounds.size.x, room.bounds.size.y) < player_width * 2.5:
+					_fail(test_root, "Comodo '%s' com %s e apertado para boneco de %.2f m de largura." % [room.id, room.bounds.size, player_width])
+					return
+			for door in unit.doors:
+				if float(door["width"]) < player_width * 1.6:
+					_fail(test_root, "Porta %s com %.2f m e estreita para o boneco." % [door["center"], float(door["width"])])
+					return
+	print("PASS: Casa de %.0fx%.0f m com comodos e portas proporcionais ao boneco." % [blueprint.width, blueprint.depth])
 
 
 func _fail(test_root: Node, message: String) -> void:
