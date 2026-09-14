@@ -27,6 +27,7 @@ func run(test_root: Node) -> void:
 	_test_survival_city_layout(test_root)
 	_test_house_gable_roof(test_root)
 	_test_house_windows_are_glazed_openings(test_root)
+	_test_house_doorways_are_clear(test_root)
 	_test_building_door_states(test_root)
 	_test_building_door_network_state(test_root)
 
@@ -229,6 +230,41 @@ func _test_survival_city_layout(test_root: Node) -> void:
 		_fail(test_root, "Casas deveriam orientar suas entradas para ambos os lados das ruas.")
 		return
 	print("PASS: Mapa prioriza casas e limita predios altos com escadas coerentes.")
+
+
+func _test_house_doorways_are_clear(test_root: Node) -> void:
+	print("Testando vaos de porta sem parede no lugar...")
+	var house_blueprint = BUILDING_GENERATOR_SCRIPT.generate(240912, "house")
+	var house: StaticBody3D = BUILDING_ASSEMBLER_SCRIPT.assemble(house_blueprint)
+	test_root.add_child(house)
+	var doors: Array = house.find_children("Door_*", "AnimatableBody3D", true, false)
+	if doors.is_empty():
+		_fail(test_root, "Casa procedural deveria possuir portas animaveis.")
+		house.free()
+		return
+	for door_node in doors:
+		var door := door_node as AnimatableBody3D
+		var panel := door.get_node_or_null("DoorPanel") as MeshInstance3D
+		if panel == null:
+			continue
+		var panel_box := panel.mesh as BoxMesh
+		var doorway_center: Vector3 = door.position + panel.position
+		var doorway_size := Vector3(panel_box.size.x * 0.7, panel_box.size.y * 0.7, panel_box.size.z * 0.7)
+		for node in house.find_children("*", "MeshInstance3D", true, false):
+			var wall := node as MeshInstance3D
+			if wall == panel or String(wall.name).begins_with("Door"):
+				continue
+			var wall_box := wall.mesh as BoxMesh
+			if wall_box == null:
+				continue
+			var half := (wall_box.size + doorway_size) * 0.5
+			var offset := wall.position - doorway_center
+			if absf(offset.x) < half.x and absf(offset.y) < half.y and absf(offset.z) < half.z:
+				_fail(test_root, "Vao da porta %s esta coberto por '%s'." % [door.name, wall.name])
+				house.free()
+				return
+	house.free()
+	print("PASS: Nenhum vao de porta esta coberto por parede.")
 
 
 func _test_building_door_states(test_root: Node) -> void:

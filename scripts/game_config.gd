@@ -238,8 +238,23 @@ func _apply_input_map() -> void:
 				InputMap.add_action(mapped_action, 0.2)
 			InputMap.action_erase_events(mapped_action)
 			var event := bindings.get(action) as InputEvent
+			if event == null:
+				event = _fallback_binding(slot, action, player_input_configs[slot])
 			if event != null:
 				InputMap.action_add_event(mapped_action, event)
+
+
+## Bindings antigos pode nao conter acoes novas (ex.: sonar). Garante um
+## controle padrao para o jogador nao ficar sem a acao.
+func _fallback_binding(slot: int, action: String, config: Dictionary) -> InputEvent:
+	if action != "sonar":
+		return null
+	if String(config.get("device_type", "keyboard")) == "gamepad":
+		var device_id := int(config.get("device_id", -1))
+		return _create_joy_button(device_id, JOY_BUTTON_DPAD_RIGHT)
+	var key := InputEventKey.new()
+	key.physical_keycode = KEY_Q
+	return key
 
 
 func _create_joy_button(device_id: int, button_index: JoyButton) -> InputEventJoypadButton:

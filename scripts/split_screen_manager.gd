@@ -41,7 +41,8 @@ class MinimapView extends Control:
 			if zombie == null or not is_instance_valid(zombie):
 				continue
 			var zombie_point := center + Vector2(zombie.global_position.x, zombie.global_position.z) * scale_value
-			draw_circle(zombie_point, 3.0, Color(1.0, 0.35, 0.2, 0.9))
+			draw_circle(zombie_point, 5.0, Color(1.0, 0.12, 0.08, 0.95))
+			draw_arc(zombie_point, 8.0, 0.0, TAU, 16, Color(1.0, 0.55, 0.1, 0.8), 2.0)
 
 var players: Array[Node] = []
 var view_panels: Array[Control] = []

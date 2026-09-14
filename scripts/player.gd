@@ -16,7 +16,7 @@ const VISION_ARC_SEGMENTS := 32
 const VISION_ARC_RADIUS := VISION_RANGE
 const VISION_ARC_Y := -0.85
 const VISION_OVERLAY_ALPHA := 0.18
-const SONAR_DURATION := 3.0
+const SONAR_DURATION := 4.0
 const SONAR_COOLDOWN := 6.0
 
 @export var speed := 6.5
