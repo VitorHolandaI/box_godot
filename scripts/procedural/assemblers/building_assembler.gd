@@ -105,40 +105,61 @@ static func _window_overlaps_door(unit, window: Dictionary) -> bool:
 
 static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: float, start: float, finish: float, origin: Vector2, floor_y: float, material: Material) -> void:
 	var openings: Array[Dictionary] = []
+	var door_ranges: Array[Vector2] = []
 	for door in unit.doors:
-		var belongs_to_room: bool = door.get("room_a", "") == room.id or door.get("room_b", "") == room.id
-		if not belongs_to_room or door.get("axis", "") != axis:
+		if door.get("axis", "") != axis:
 			continue
 		var center: Vector2 = door["center"]
 		var door_line := center.x if axis == "vertical" else center.y
-		if is_equal_approx(door_line, line):
-			var along := center.y if axis == "vertical" else center.x
-			openings.append({
-				"start": along - float(door["width"]) * 0.5,
-				"end": along + float(door["width"]) * 0.5,
-				"bottom": 0.0,
-				"top": DOOR_HEIGHT,
-				"fill_top": false,
-			})
-			var door_belongs_to_edge: bool = door.get("room_b", "") == room.id or (door.get("room_a", "") == room.id and door.get("room_b", "") == "outside")
-			if door_belongs_to_edge:
-				_add_door(body, door, axis, line, along, origin, floor_y, material)
-			_add_door_header(body, door, axis, line, along, origin, floor_y, material)
+		if not is_equal_approx(door_line, line):
+			continue
+		var along := center.y if axis == "vertical" else center.x
+		var half_width := float(door["width"]) * 0.5
+		if along + half_width <= start or along - half_width >= finish:
+			continue
+		door_ranges.append(Vector2(along - half_width, along + half_width))
+		openings.append({
+			"start": along - half_width,
+			"end": along + half_width,
+			"bottom": 0.0,
+			"top": DOOR_HEIGHT,
+			"fill_top": false,
+		})
+		# Cada vao recebe porta e batente uma unica vez, mesmo que a mesma
+		# linha de parede seja desenhada por salas ou unidades vizinhas.
+		var door_suffix := "%s_%.1f_%.1f_%.1f_%.1f" % [axis, origin.x, origin.y, door_line, along]
+		if not body.has_node("Door_" + door_suffix):
+			_add_door(body, door, axis, line, along, origin, floor_y, material, "Door_" + door_suffix)
+		if not body.has_node("DoorHeader_" + door_suffix):
+			_add_door_header(body, door, axis, line, along, origin, floor_y, material, "DoorHeader_" + door_suffix)
 	for window in unit.windows:
-		if window.get("room_id", "") != room.id or window.get("axis", "") != axis:
+		if window.get("axis", "") != axis:
 			continue
 		var window_center: Vector2 = window["center"]
 		var window_line := window_center.x if axis == "vertical" else window_center.y
-		if is_equal_approx(window_line, line):
-			var window_along := window_center.y if axis == "vertical" else window_center.x
-			var window_half_width := float(window["width"]) * 0.5
-			openings.append({
-				"start": window_along - window_half_width,
-				"end": window_along + window_half_width,
-				"bottom": WINDOW_SILL,
-				"top": WINDOW_SILL + WINDOW_HEIGHT,
-				"fill_top": true,
-			})
+		if not is_equal_approx(window_line, line):
+			continue
+		var window_along := window_center.y if axis == "vertical" else window_center.x
+		var window_half_width := float(window["width"]) * 0.5
+		var window_start := window_along - window_half_width
+		var window_end := window_along + window_half_width
+		if window_end <= start or window_start >= finish:
+			continue
+		# Janela sobreposta por porta deixaria parede dentro do vao da porta.
+		var overlaps_door := false
+		for door_range in door_ranges:
+			if window_start < door_range.y and door_range.x < window_end:
+				overlaps_door = true
+				break
+		if overlaps_door:
+			continue
+		openings.append({
+			"start": window_start,
+			"end": window_end,
+			"bottom": WINDOW_SILL,
+			"top": WINDOW_SILL + WINDOW_HEIGHT,
+			"fill_top": true,
+		})
 	openings.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return left["start"] < right["start"])
 	var cursor := start
 	for opening in openings:
@@ -153,9 +174,9 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 	_add_wall_panel(body, axis, line, cursor, finish, 0.0, WALL_HEIGHT, origin, floor_y, material)
 
 
-static func _add_door(body: StaticBody3D, door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, _material: Material) -> void:
+static func _add_door(body: StaticBody3D, door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, _material: Material, door_name: String) -> void:
 	var door = DESTRUCTIBLE_DOOR_SCRIPT.new()
-	door.name = "Door_%s_%.1f_%.1f" % [axis, line, along]
+	door.name = door_name
 	var width := float(door_data.get("width", 1.4))
 	var size := Vector3(WALL_THICKNESS, DOOR_HEIGHT, width) if axis == "vertical" else Vector3(width, DOOR_HEIGHT, WALL_THICKNESS)
 	door.configure(size, _cutout_material(Color(0.24, 0.12, 0.055)))
@@ -163,12 +184,12 @@ static func _add_door(body: StaticBody3D, door_data: Dictionary, axis: String, l
 	body.add_child(door)
 
 
-static func _add_door_header(body: StaticBody3D, door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, material: Material) -> void:
+static func _add_door_header(body: StaticBody3D, door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, material: Material, header_name: String) -> void:
 	var width := float(door_data.get("width", 1.4))
 	var header_height := WALL_HEIGHT - DOOR_HEIGHT
 	var size := Vector3(WALL_THICKNESS, header_height, width) if axis == "vertical" else Vector3(width, header_height, WALL_THICKNESS)
 	var position := Vector3(origin.x + line, floor_y + DOOR_HEIGHT + header_height * 0.5, origin.y + along) if axis == "vertical" else Vector3(origin.x + along, floor_y + DOOR_HEIGHT + header_height * 0.5, origin.y + line)
-	_add_box(body, "DoorHeader", size, position, material, true)
+	_add_box(body, header_name, size, position, material, true)
 
 
 static func _add_wall_panel(body: StaticBody3D, axis: String, line: float, start: float, finish: float, y_bottom: float, y_top: float, origin: Vector2, floor_y: float, material: Material) -> void:
