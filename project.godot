@@ -70,3 +70,10 @@ reload={
 
 renderer/rendering_method="gl_compatibility"
 renderer/rendering_method.mobile="gl_compatibility"
+
+[shader_globals]
+
+interior_focus_position={
+"type": "vec3",
+"value": Vector3(0, -10000, 0)
+}

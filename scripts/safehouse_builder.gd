@@ -28,6 +28,8 @@ static func build_safehouse() -> StaticBody3D:
 	var cutout_wall_mat := _create_cutout_material(Color(0.38, 0.41, 0.36), 0.88)
 	var cutout_floor_mat := _create_cutout_material(Color(0.24, 0.25, 0.23), 0.90, true)
 	var wood_mat := _create_cutout_material(Color(0.44, 0.30, 0.18), 0.80)
+	# Madeira so e usada na escadaria: fica inteira no corte de meia altura.
+	wood_mat.set_shader_parameter("section_cut_exempt", true)
 
 	var ground_mat := StandardMaterial3D.new()
 	ground_mat.albedo_color = Color(0.22, 0.23, 0.21)
