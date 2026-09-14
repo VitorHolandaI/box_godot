@@ -38,6 +38,7 @@ var local_players: Array[Node] = []
 var network_players: Dictionary = {}
 var corpses: Array[Node] = []
 var ragdolls: Array[Node] = []
+var ragdolls_by_zombie: Dictionary = {}
 var spawn_index := 0
 var input_elapsed := 0.0
 var snapshot_elapsed := 0.0
@@ -134,16 +135,24 @@ func register_corpse(corpse: Node) -> void:
 			oldest_corpse.queue_free()
 
 
-func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0, appearance_hash: int = 0) -> void:
+func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0, appearance_hash: int = 0, source_name: String = "") -> void:
+	if not source_name.is_empty() and is_instance_valid(ragdolls_by_zombie.get(source_name)):
+		return
 	var ragdoll := ZOMBIE_RAGDOLL_SCENE.instantiate()
 	add_child(ragdoll)
-	ragdoll.global_position = position
+	ragdoll.position = position
 	ragdoll.rotation.y = rotation
 	ragdoll.setup(velocity, z_type, appearance_hash)
 	ragdolls.append(ragdoll)
+	if not source_name.is_empty():
+		ragdoll.set_meta("source_zombie", source_name)
+		ragdolls_by_zombie[source_name] = ragdoll
 	if ragdolls.size() > MAX_CORPSES:
 		var oldest_ragdoll: Node = ragdolls.pop_front()
 		if is_instance_valid(oldest_ragdoll):
+			var oldest_source := String(oldest_ragdoll.get_meta("source_zombie", ""))
+			if not oldest_source.is_empty():
+				ragdolls_by_zombie.erase(oldest_source)
 			oldest_ragdoll.queue_free()
 
 

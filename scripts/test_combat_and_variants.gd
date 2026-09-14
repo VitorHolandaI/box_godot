@@ -13,6 +13,7 @@ const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedu
 const GAMEPLAY_REGRESSION_TESTS_SCRIPT := preload("res://scripts/test_gameplay_regressions.gd")
 const SURVIVAL_TESTS_SCRIPT := preload("res://scripts/test_survival_mode.gd")
 const COLLISION_BOUNDARY_TESTS_SCRIPT := preload("res://scripts/test_collision_boundaries.gd")
+const MAIN_SCRIPT := preload("res://scripts/main.gd")
 
 var failure_count := 0
 
@@ -32,6 +33,8 @@ func _ready() -> void:
 	_test_ragdoll_mutilation_variants()
 	_test_player_three_lives_and_elimination()
 	_test_player_vision_cone()
+	_test_zombie_vision_hides_entire_proxy()
+	_test_network_ragdoll_is_unique_per_zombie()
 	_test_safehouse_structure_and_spawns()
 	_test_gunshot_sound_echolocation()
 	_test_zombie_flock_coordinator()
@@ -347,6 +350,36 @@ func _test_player_vision_cone() -> void:
 		return
 	player.queue_free()
 	print("PASS: Cone frontal, alcance e overlay branco opaco validados.")
+
+
+func _test_zombie_vision_hides_entire_proxy() -> void:
+	print("Testando ocultacao completa do proxy de zumbi...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.simulation_enabled = false
+	add_child(zombie)
+	zombie.set_vision_visible(false)
+	if zombie.visible or zombie.get_node("Model").visible or zombie.get_node("HealthLabel").visible:
+		push_error("FALHA: FOV deveria ocultar proxy, modelo e barra de vida do zumbi.")
+		_mark_failure()
+		zombie.queue_free()
+		return
+	zombie.queue_free()
+	print("PASS: FOV oculta todo o proxy visual do zumbi.")
+
+
+func _test_network_ragdoll_is_unique_per_zombie() -> void:
+	print("Testando ragdoll unico por zumbi de rede...")
+	var main := MAIN_SCRIPT.new()
+	main.call("spawn_zombie_ragdoll", Vector3.ZERO, 0.0, Vector3.ZERO, 0, 123, "ZombieSnapshot1")
+	main.call("spawn_zombie_ragdoll", Vector3.ZERO, 0.0, Vector3.ZERO, 0, 123, "ZombieSnapshot1")
+	var spawned_ragdolls: Array = main.get("ragdolls")
+	if spawned_ragdolls.size() != 1:
+		push_error("FALHA: Um zumbi de rede deveria gerar um corpo; gerou %d." % spawned_ragdolls.size())
+		_mark_failure()
+		main.free()
+		return
+	main.free()
+	print("PASS: Snapshot repetido mantem somente um ragdoll por zumbi.")
 
 
 func _test_safehouse_structure_and_spawns() -> void:
