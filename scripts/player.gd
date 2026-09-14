@@ -435,6 +435,17 @@ func set_spawn_position(position: Vector3) -> void:
 	spawn_position = position
 
 
+## Reinicia o contador de vidas ao comecar uma nova onda de sobrevivencia.
+## Jogadores eliminados voltam na Safehouse com 3 vidas e vida cheia.
+## Uso: player.restore_wave_lives()
+func restore_wave_lives() -> void:
+	lives = MAX_LIVES
+	lives_changed.emit(lives)
+	if not is_eliminated:
+		return
+	respawn()
+
+
 func configure_vision_overlay(layer: int) -> void:
 	if vision_overlay == null or layer < 1 or layer > 20:
 		return

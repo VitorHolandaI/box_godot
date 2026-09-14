@@ -60,6 +60,7 @@ func _ready() -> void:
 	if not NetworkSession.is_client():
 		wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
 		survival_wave_controller.wave_started.connect(wave_supply_controller.refresh_wave)
+		survival_wave_controller.wave_started.connect(_reset_wave_lives)
 		wave_supply_controller.refresh_wave(0)
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
 	coordinator.name = "ZombieFlockCoordinator"
@@ -441,6 +442,21 @@ func _spawn_zombie(position_override: Variant = null) -> bool:
 func _on_zombie_died(_killer: Node) -> void:
 	if NetworkSession.survival_mode:
 		survival_wave_controller.register_death()
+
+
+## Cada nova onda devolve 3 vidas a todos os jogadores, inclusive os que
+## haviam sido eliminados. O cliente recebe o novo estado pelos snapshots.
+## Uso: conectado ao sinal wave_started do SurvivalWaveController.
+func _reset_wave_lives(_wave_index: int) -> void:
+	if NetworkSession.is_client():
+		return
+	for player_node in get_tree().get_nodes_in_group("player"):
+		var player := player_node as CharacterBody3D
+		if player == null or not is_instance_valid(player) or not player.has_method("restore_wave_lives"):
+			continue
+		if players_node != null and not players_node.is_ancestor_of(player):
+			continue
+		player.restore_wave_lives()
 
 
 func get_survival_hud_text() -> String:
