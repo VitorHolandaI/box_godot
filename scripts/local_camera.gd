@@ -29,14 +29,22 @@ func _process(delta: float) -> void:
 	var desired_position := target.global_position + camera_offset
 	if is_instance_valid(containing_building):
 		desired_position = _clamp_inside_building(desired_position, containing_building)
-	var desired_transform := Transform3D(Basis.IDENTITY, desired_position).looking_at(target.global_position, Vector3.UP)
 	if not camera_initialized:
-		global_transform = desired_transform
+		global_position = desired_position
+		rotation.x = _fixed_pitch(camera_offset)
 		camera_initialized = true
 		return
 	var blend := minf(delta * CAMERA_SMOOTH_SPEED, 1.0)
 	global_position = global_position.lerp(desired_position, blend)
-	quaternion = quaternion.slerp(desired_transform.basis.get_rotation_quaternion(), blend)
+	# A camera mantem o yaw zerado e apenas ajusta a inclinacao conforme o
+	# modo indoor/outdoor, para nao girar junto com o jogador.
+	rotation.x = lerp_angle(rotation.x, _fixed_pitch(camera_offset), blend)
+	rotation.y = 0.0
+	rotation.z = 0.0
+
+
+func _fixed_pitch(offset: Vector3) -> float:
+	return -atan2(offset.y, offset.z)
 
 
 func _find_containing_building() -> Node3D:
