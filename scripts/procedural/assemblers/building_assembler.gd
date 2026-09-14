@@ -4,6 +4,9 @@ extends RefCounted
 const WALL_HEIGHT := 3.2
 const WALL_THICKNESS := 0.12
 const DOOR_HEIGHT := 2.75
+const WINDOW_SILL := 1.05
+const WINDOW_HEIGHT := 0.9
+const WINDOW_FRAME_THICKNESS := 0.08
 const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
 const DESTRUCTIBLE_DOOR_SCRIPT: GDScript = preload("res://scripts/destructible_door.gd")
 const WAVE_SUPPLY_SCENE: PackedScene = preload("res://scenes/wave_supply_pickup.tscn")
@@ -110,7 +113,13 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 		var door_line := center.x if axis == "vertical" else center.y
 		if is_equal_approx(door_line, line):
 			var along := center.y if axis == "vertical" else center.x
-			openings.append({"start": along - float(door["width"]) * 0.5, "end": along + float(door["width"]) * 0.5})
+			openings.append({
+				"start": along - float(door["width"]) * 0.5,
+				"end": along + float(door["width"]) * 0.5,
+				"bottom": 0.0,
+				"top": DOOR_HEIGHT,
+				"fill_top": false,
+			})
 			var door_belongs_to_edge: bool = door.get("room_b", "") == room.id or (door.get("room_a", "") == room.id and door.get("room_b", "") == "outside")
 			if door_belongs_to_edge:
 				_add_door(body, door, axis, line, along, origin, floor_y, material)
@@ -123,13 +132,25 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 		if is_equal_approx(window_line, line):
 			var window_along := window_center.y if axis == "vertical" else window_center.x
 			var window_half_width := float(window["width"]) * 0.5
-			openings.append({"start": window_along - window_half_width, "end": window_along + window_half_width})
+			openings.append({
+				"start": window_along - window_half_width,
+				"end": window_along + window_half_width,
+				"bottom": WINDOW_SILL,
+				"top": WINDOW_SILL + WINDOW_HEIGHT,
+				"fill_top": true,
+			})
 	openings.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return left["start"] < right["start"])
 	var cursor := start
 	for opening in openings:
-		_add_wall_segment(body, axis, line, cursor, minf(opening["start"], finish), origin, floor_y, material)
+		var opening_start: float = maxf(float(opening["start"]), start)
+		var opening_end: float = minf(float(opening["end"]), finish)
+		_add_wall_panel(body, axis, line, cursor, minf(opening_start, finish), 0.0, WALL_HEIGHT, origin, floor_y, material)
+		if float(opening["bottom"]) > 0.0:
+			_add_wall_panel(body, axis, line, opening_start, opening_end, 0.0, float(opening["bottom"]), origin, floor_y, material)
+		if bool(opening["fill_top"]) and float(opening["top"]) < WALL_HEIGHT:
+			_add_wall_panel(body, axis, line, opening_start, opening_end, float(opening["top"]), WALL_HEIGHT, origin, floor_y, material)
 		cursor = maxf(cursor, float(opening["end"]))
-	_add_wall_segment(body, axis, line, cursor, finish, origin, floor_y, material)
+	_add_wall_panel(body, axis, line, cursor, finish, 0.0, WALL_HEIGHT, origin, floor_y, material)
 
 
 static func _add_door(body: StaticBody3D, door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, _material: Material) -> void:
@@ -150,26 +171,51 @@ static func _add_door_header(body: StaticBody3D, door_data: Dictionary, axis: St
 	_add_box(body, "DoorHeader", size, position, material, true)
 
 
-static func _add_wall_segment(body: StaticBody3D, axis: String, line: float, start: float, finish: float, origin: Vector2, floor_y: float, material: Material) -> void:
-	if finish - start <= 0.05:
+static func _add_wall_panel(body: StaticBody3D, axis: String, line: float, start: float, finish: float, y_bottom: float, y_top: float, origin: Vector2, floor_y: float, material: Material) -> void:
+	if finish - start <= 0.05 or y_top - y_bottom <= 0.05:
 		return
 	var center: Vector3
 	var size: Vector3
+	var center_y := floor_y + (y_bottom + y_top) * 0.5
+	var height := y_top - y_bottom
 	if axis == "vertical":
-		center = Vector3(origin.x + line, floor_y + WALL_HEIGHT * 0.5, origin.y + (start + finish) * 0.5)
-		size = Vector3(WALL_THICKNESS, WALL_HEIGHT, finish - start)
+		center = Vector3(origin.x + line, center_y, origin.y + (start + finish) * 0.5)
+		size = Vector3(WALL_THICKNESS, height, finish - start)
 	else:
-		center = Vector3(origin.x + (start + finish) * 0.5, floor_y + WALL_HEIGHT * 0.5, origin.y + line)
-		size = Vector3(finish - start, WALL_HEIGHT, WALL_THICKNESS)
+		center = Vector3(origin.x + (start + finish) * 0.5, center_y, origin.y + line)
+		size = Vector3(finish - start, height, WALL_THICKNESS)
 	_add_box(body, "Wall", size, center, material, true)
 
 
 static func _draw_window(body: StaticBody3D, window: Dictionary, origin: Vector2, floor_y: float, material: Material) -> void:
 	var center: Vector2 = window["center"]
 	var axis: String = window["axis"]
-	var size := Vector3(float(window["width"]), 0.85, 0.05) if axis == "horizontal" else Vector3(0.05, 0.85, float(window["width"]))
-	var position := Vector3(origin.x + center.x, floor_y + 1.45, origin.y + center.y)
-	_add_box(body, "Window_%s" % window["room_id"], size, position, material, false)
+	var width := float(window["width"])
+	var center_y := floor_y + WINDOW_SILL + WINDOW_HEIGHT * 0.5
+	var position := Vector3(origin.x + center.x, center_y, origin.y + center.y)
+	var frame_material := material
+	var glass_material := _window_glass_material()
+	var glass_size := Vector3(width - WINDOW_FRAME_THICKNESS * 2.0, WINDOW_HEIGHT - WINDOW_FRAME_THICKNESS * 2.0, 0.05)
+	if axis == "vertical":
+		glass_size = Vector3(0.05, WINDOW_HEIGHT - WINDOW_FRAME_THICKNESS * 2.0, width - WINDOW_FRAME_THICKNESS * 2.0)
+	_add_box(body, "WindowGlass_%s" % window["room_id"], glass_size, position, glass_material, false)
+	_add_box(body, "WindowSill_%s" % window["room_id"], _window_frame_size(axis, width, WINDOW_FRAME_THICKNESS), position + Vector3(0.0, -WINDOW_HEIGHT * 0.5, 0.0), frame_material, true)
+	_add_box(body, "WindowLintel_%s" % window["room_id"], _window_frame_size(axis, width, WINDOW_FRAME_THICKNESS), position + Vector3(0.0, WINDOW_HEIGHT * 0.5, 0.0), frame_material, true)
+
+
+static func _window_frame_size(axis: String, width: float, thickness: float) -> Vector3:
+	if axis == "vertical":
+		return Vector3(WALL_THICKNESS * 1.2, thickness, width)
+	return Vector3(width, thickness, WALL_THICKNESS * 1.2)
+
+
+static func _window_glass_material() -> StandardMaterial3D:
+	var glass := StandardMaterial3D.new()
+	glass.albedo_color = Color(0.66, 0.82, 0.92, 0.32)
+	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	glass.metallic = 0.1
+	glass.roughness = 0.08
+	return glass
 
 
 static func _draw_room_furniture(body: StaticBody3D, room, origin: Vector2, floor_y: float, materials: Array[Material]) -> void:
