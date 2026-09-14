@@ -3,6 +3,7 @@
 Logica de jogo, rede, interface e testes automatizados.
 
 - `ammo_pickup.gd`: caixa de municao militar coletavel, recarga de reserva e sincronizacao de rede.
+- `benchmark_indoor_escape.gd`: benchmark de zumbis presos em casas (`--benchmark-indoor-escape`, `--closed-doors`, `--sample-frames=N`) com tempo de script por frame e contagem de fugas.
 - `benchmark_zombies.gd`: suite de estresse e perfilamento de consumo de RAM (Heap e RSS SO), tempo de CPU de fisica e capacidade maxima de zumbis do servidor.
 - `benchmark_zombies.sh`: script de execucao automatizada do benchmark de zumbis em modo headless.
 - `building.gd`: cor individual dos apartamentos.
@@ -10,7 +11,8 @@ Logica de jogo, rede, interface e testes automatizados.
 - `build_exports.sh`: gera clientes release autocontidos para Linux e Windows e seus checksums.
 - `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis com mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
-- `destructible_door.gd`: porta comum visivel com macaneta, estados aberta/fechada, interacao e destruicao por zumbis.
+- `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores, tremida ao apanhar e arrombamento por zumbis, faca ou tiro que libera o vao.
+- `door_debris_effect.gd`: animacao visual de tabuas e lascas voando quando uma porta e arrombada.
 - `door_network_state.gd`: coleta e aplica estados autoritativos das portas comuns por caminho deterministico.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local e navegacao durante a partida.
@@ -18,12 +20,13 @@ Logica de jogo, rede, interface e testes automatizados.
 - `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos e bot de teste.
 - `menu.gd`: selecao local/multiplayer, navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
+- `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT e atraso entre snapshots de um servidor remoto.
 - `network_session.gd`: sessao ENet, roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
-- `player.gd`: personagem jogavel militar com 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede.
+- `player.gd`: personagem jogavel militar com faca que tambem arromba portas, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede.
 - `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
-- `procedural/`: blueprints, geradores e assemblers da cidade procedural experimental ativada por `--procedural-city`.
+- `procedural/`: blueprints, geradores, assemblers e navegacao da cidade procedural experimental ativada por `--procedural-city`.
 - `run_4_bots.sh`: inicializa servidor dedicado e abre 4 janelas com bots jogando sozinhos em grade 2x2.
 - `server_entrypoint.sh`: cria a seed a partir do container e inicia o servidor dedicado.
 - `survival_map_builder.gd`: cria a arena compacta e suas barreiras para sobrevivencia.
@@ -38,12 +41,16 @@ Logica de jogo, rede, interface e testes automatizados.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
 - `split_screen_manager.gd`: viewports com audio 3D, cameras, HUDs locais e minimapa com o jogador, os aliados e os zumbis dentro do raio do sonar.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
+- `test_building_navigation.gd`: regressoes da escada alternada, navmesh por edificio, zumbi subindo/descendo, jogador subindo e zumbi saindo de casa arrombando portas.
 - `test_collision_boundaries.gd`: regressao focada para faca, tiro e ataque de zumbi bloqueados por paredes.
+- `test_door_breaking.gd`: regressoes de destrocos, vao liberado, tremida, faca do jogador e replicacao da quebra.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
+- `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
 - `test_survival_mode.gd`: regressoes de ondas, mapa com predominio de casas, portas, abates, audio real, alvos e skin do ragdoll.
 - `test_container.sh`: smoke test do servidor Docker.
 - `test_dedicated.sh`: smoke test do servidor Godot nativo executando testes unitarios e teste com bot.
-- `zombie.gd`: IA de zumbi com perseguicao global do jogador, fuga pela porta apenas quando preso dentro de uma casa, esvaecimento por FOV, sentidos, combate bloqueado por paredes, knockback e variantes anatomicas.
+- `zombie.gd`: IA de zumbi com perseguicao global do jogador, rota pelo navmesh do edificio (sai de comodos, usa escadas, quebra portas sem abri-las), empurrao de bando limitado, esvaecimento por FOV, sentidos, combate bloqueado por paredes, knockback e variantes anatomicas.
+- `zombie_indoor_router.gd`: caminho do zumbi pelo navmesh do edificio, replanejado em intervalos com jitter.
 - `zombie_flock_coordinator.gd`: hordas persistentes com um cerebro, drones, fusao aleatoria de lideres, Boids e LOD.
 - `zombie_mutator.gd`: configurador procedural de 9 variantes anatomicas (pedaco de braco, sem 1 braco, pedaco de perna, sem 1 perna, cabeca pela metade com cerebro exposto, rastejante, manco, corredor e classico) e animacoes de marcha e flinch.
 - `zombie_ragdoll.gd`: ragdoll articulado com pescoco limitado, camada propria de cadaver (nao prende o jogador) que some ao ser atingido, e suporte as amputacoes das 9 variantes.
