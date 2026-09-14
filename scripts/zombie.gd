@@ -91,7 +91,7 @@ var groan_audio_cooldown := 2.0
 var vision_visible := true
 var visual_opacity := 1.0
 var indoor_router = INDOOR_ROUTER_SCRIPT.new()
-var _fade_meshes: Array[GeometryInstance3D] = []
+var _dissolve_visual = null
 
 
 func _ready() -> void:
@@ -575,12 +575,12 @@ func _update_visual_fade(delta: float) -> void:
 	# Po so quando a desintegracao comeca por perda de visao, e nunca no servidor.
 	if was_whole and visual_opacity < 0.999 and not vision_visible and not is_dead and not NetworkSession.is_server():
 		DISSOLVE_VISUAL_SCRIPT.emit_dust(self, ZombieMutator.appearance_colors(appearance_hash)[1])
-	DISSOLVE_VISUAL_SCRIPT.set_dissolve(_fade_meshes, 1.0 - visual_opacity)
+	_dissolve_visual.set_dissolve(1.0 - visual_opacity)
 	health_label.modulate.a = visual_opacity
 
 
 func _collect_fade_meshes() -> void:
-	_fade_meshes = DISSOLVE_VISUAL_SCRIPT.prepare_meshes(model)
+	_dissolve_visual = DISSOLVE_VISUAL_SCRIPT.new(model)
 
 
 func _spawn_ragdoll() -> void:
