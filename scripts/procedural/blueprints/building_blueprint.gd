@@ -16,7 +16,7 @@ func _init(building_archetype: String, building_seed: int, building_width: float
 	width = building_width
 	depth = building_depth
 	floors = floor_count
-	floor_height = 2.8
+	floor_height = 3.4
 
 
 func add_floor(floor_blueprint) -> void:

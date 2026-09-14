@@ -1,9 +1,9 @@
 class_name ProceduralBuildingAssembler
 extends RefCounted
 
-const WALL_HEIGHT := 2.6
+const WALL_HEIGHT := 3.2
 const WALL_THICKNESS := 0.12
-const DOOR_HEIGHT := 2.15
+const DOOR_HEIGHT := 2.75
 const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
 const DESTRUCTIBLE_DOOR_SCRIPT: GDScript = preload("res://scripts/destructible_door.gd")
 const WAVE_SUPPLY_SCENE: PackedScene = preload("res://scenes/wave_supply_pickup.tscn")
@@ -19,10 +19,10 @@ static func assemble(building) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = building.archetype
 	var facade_color := _facade_color(building.seed)
-	var wall_material := _cutout_material(facade_color)
-	var floor_material := _cutout_material(Color(0.27, 0.29, 0.31), true)
-	var trim_material := _cutout_material(facade_color.darkened(0.45))
-	var ceiling_material := _cutout_material(facade_color.darkened(0.45), true)
+	var wall_material := _cutout_material(facade_color, false, building.floor_height)
+	var floor_material := _cutout_material(Color(0.27, 0.29, 0.31), true, building.floor_height)
+	var trim_material := _cutout_material(facade_color.darkened(0.45), false, building.floor_height)
+	var ceiling_material := _cutout_material(facade_color.darkened(0.45), true, building.floor_height)
 	var furniture_materials: Array[Material] = []
 	if building.archetype.begins_with("House"):
 		furniture_materials = _furniture_materials(building.seed)
@@ -111,7 +111,8 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 		if is_equal_approx(door_line, line):
 			var along := center.y if axis == "vertical" else center.x
 			openings.append({"start": along - float(door["width"]) * 0.5, "end": along + float(door["width"]) * 0.5})
-			if door.get("room_b", "") == "outside":
+			var door_belongs_to_edge: bool = door.get("room_b", "") == room.id or (door.get("room_a", "") == room.id and door.get("room_b", "") == "outside")
+			if door_belongs_to_edge:
 				_add_door(body, door, axis, line, along, origin, floor_y, material)
 			_add_door_header(body, door, axis, line, along, origin, floor_y, material)
 	openings.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return left["start"] < right["start"])
@@ -124,11 +125,11 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 
 static func _add_door(body: StaticBody3D, door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, _material: Material) -> void:
 	var door = DESTRUCTIBLE_DOOR_SCRIPT.new()
-	door.name = "Door_%s_%.1f" % [axis, along]
+	door.name = "Door_%s_%.1f_%.1f" % [axis, line, along]
 	var width := float(door_data.get("width", 1.4))
 	var size := Vector3(WALL_THICKNESS, DOOR_HEIGHT, width) if axis == "vertical" else Vector3(width, DOOR_HEIGHT, WALL_THICKNESS)
 	door.configure(size, _cutout_material(Color(0.24, 0.12, 0.055)))
-	door.position = Vector3(origin.x + line, floor_y, origin.y + along) if axis == "vertical" else Vector3(origin.x + along, floor_y, origin.y + line)
+	door.position = Vector3(origin.x + line, floor_y, origin.y + along - width * 0.5) if axis == "vertical" else Vector3(origin.x + along - width * 0.5, floor_y, origin.y + line)
 	body.add_child(door)
 
 
@@ -311,13 +312,13 @@ static func _facade_color(seed: int) -> Color:
 	return palette[absi(seed) % palette.size()]
 
 
-static func _cutout_material(color: Color, ceiling_cutout: bool = false) -> ShaderMaterial:
+static func _cutout_material(color: Color, ceiling_cutout: bool = false, floor_height: float = 3.4) -> ShaderMaterial:
 	var material := ShaderMaterial.new()
 	material.shader = CUTOUT_SHADER
 	material.set_shader_parameter("base_color", color)
 	material.set_shader_parameter("material_roughness", 0.86)
 	material.set_shader_parameter("cutout_radius", 0.9)
-	material.set_shader_parameter("floor_height", 2.8)
+	material.set_shader_parameter("floor_height", floor_height)
 	material.set_shader_parameter("ceiling_cutout", ceiling_cutout)
 	return material
 
