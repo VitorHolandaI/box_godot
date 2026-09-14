@@ -10,6 +10,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `building_assembler_3d.gd`: montador procedural de lotes e edificios com muros perimetrais, rampas de garagem subterranea, cercas, toldos e props urbanos.
 - `build_exports.sh`: gera clientes release autocontidos para Linux e Windows e seus checksums.
 - `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis com mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
+- `corpse_cleanup_policy.gd`: escolhe quais ragdolls somem: so os longe de todos os jogadores, com teto que remove o mais distante.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
 - `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores, tremida ao apanhar e arrombamento por zumbis, faca ou tiro que libera o vao.
 - `door_debris_effect.gd`: animacao visual de tabuas e lascas voando quando uma porta e arrombada.
@@ -17,7 +18,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local e navegacao durante a partida.
 - `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
-- `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos e bot de teste.
+- `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos que so somem longe dos jogadores e bot de teste.
 - `menu.gd`: selecao local/multiplayer, navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
 - `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT e atraso entre snapshots de um servidor remoto.
@@ -43,6 +44,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_building_navigation.gd`: regressoes da escada alternada, navmesh por edificio, zumbi subindo/descendo, jogador subindo e zumbi saindo de casa arrombando portas.
 - `test_city_props.gd`: regressoes da altura/posicao dos postes e do telhado das casas.
+- `test_corpse_cleanup.gd`: regressoes do sumico de cadaveres por distancia.
 - `test_collision_boundaries.gd`: regressao focada para faca, tiro e ataque de zumbi bloqueados por paredes.
 - `test_door_breaking.gd`: regressoes de destrocos, vao liberado, tremida, faca do jogador e replicacao da quebra.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.

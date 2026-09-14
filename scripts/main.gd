@@ -11,6 +11,8 @@ const SURVIVAL_WAVE_CONTROLLER_SCRIPT := preload("res://scripts/survival_wave_co
 const DOOR_NETWORK_STATE_SCRIPT := preload("res://scripts/door_network_state.gd")
 const WAVE_SUPPLY_CONTROLLER_SCRIPT := preload("res://scripts/wave_supply_controller.gd")
 const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state.gd")
+const CORPSE_CLEANUP_POLICY_SCRIPT := preload("res://scripts/corpse_cleanup_policy.gd")
+const CORPSE_CLEANUP_INTERVAL := 1.0
 const MAX_LOCAL_PLAYERS := 4
 const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
 const MAX_CORPSES := 20
@@ -48,6 +50,7 @@ var received_zombie_snapshot_chunks: Dictionary = {}
 var received_zombie_names: Dictionary = {}
 var smoke_test_mode := false
 var player_vision_elapsed := 0.0
+var corpse_cleanup_elapsed := 0.0
 var bot_ai := PlayerBotAI.new()
 var lag_probe := NetworkLagProbe.from_arguments(OS.get_cmdline_user_args())
 var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
@@ -97,7 +100,10 @@ func _notify_scene_loaded() -> void:
 
 
 func _process(delta: float) -> void:
+	if lag_probe.is_enabled():
+		lag_probe.record_frame_time(delta * 1000.0)
 	_update_player_vision(delta)
+	_cleanup_far_ragdolls(delta)
 	if NetworkSession.is_client() or smoke_test_mode:
 		return
 	if NetworkSession.survival_mode:
@@ -160,13 +166,36 @@ func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3,
 	if not source_name.is_empty():
 		ragdoll.set_meta("source_zombie", source_name)
 		ragdolls_by_zombie[source_name] = ragdoll
-	if ragdolls.size() > MAX_CORPSES:
-		var oldest_ragdoll: Node = ragdolls.pop_front()
-		if is_instance_valid(oldest_ragdoll):
-			var oldest_source := String(oldest_ragdoll.get_meta("source_zombie", ""))
-			if not oldest_source.is_empty():
-				ragdolls_by_zombie.erase(oldest_source)
-			oldest_ragdoll.queue_free()
+
+
+## Corpos visiveis (ragdolls) so somem longe de todos os jogadores; antes o mais
+## antigo sumia a partir do 21o, mesmo caido ao lado do jogador.
+## Uso: chamado em _process; age a cada CORPSE_CLEANUP_INTERVAL.
+func _cleanup_far_ragdolls(delta: float) -> void:
+	corpse_cleanup_elapsed += delta
+	if corpse_cleanup_elapsed < CORPSE_CLEANUP_INTERVAL:
+		return
+	corpse_cleanup_elapsed = 0.0
+	ragdolls = ragdolls.filter(func(node: Node) -> bool: return is_instance_valid(node) and not node.is_queued_for_deletion())
+	var corpse_positions: Array[Vector3] = []
+	for ragdoll in ragdolls:
+		corpse_positions.append(_ragdoll_position(ragdoll))
+	var player_positions: Array[Vector3] = []
+	for player_node in get_tree().get_nodes_in_group("player"):
+		player_positions.append((player_node as Node3D).global_position)
+	for index in CORPSE_CLEANUP_POLICY_SCRIPT.pick_removals(corpse_positions, player_positions):
+		var ragdoll: Node = ragdolls[index]
+		var source := String(ragdoll.get_meta("source_zombie", ""))
+		if not source.is_empty():
+			ragdolls_by_zombie.erase(source)
+		ragdoll.queue_free()
+		ragdolls.remove_at(index)
+
+
+func _ragdoll_position(ragdoll: Node) -> Vector3:
+	# O torso rola para longe da origem do no ao cair.
+	var torso := ragdoll.get_node_or_null("Torso") as Node3D
+	return torso.global_position if torso != null else (ragdoll as Node3D).global_position
 
 
 func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3) -> void:
