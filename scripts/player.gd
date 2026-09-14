@@ -14,7 +14,7 @@ const VISION_RANGE := 24.0
 const VISION_HALF_ANGLE := deg_to_rad(55.0)
 const VISION_ARC_SEGMENTS := 32
 const VISION_ARC_RADIUS := 24.0
-const VISION_ARC_Y := -1.12
+const VISION_ARC_Y := -1.0
 
 @export var speed := 6.5
 @export var sprint_speed := 8.0
