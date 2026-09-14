@@ -14,6 +14,8 @@ const BUILDING_NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/n
 const BUILDING_MATERIALS: GDScript = preload("res://scripts/procedural/assemblers/building_materials.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT: GDScript = preload("res://scripts/destructible_door.gd")
 const WAVE_SUPPLY_SCENE: PackedScene = preload("res://scenes/wave_supply_pickup.tscn")
+# Moveis acompanham o tamanho do boneco (2.34 m) e a planta ampliada das casas.
+const FURNITURE_SCALE := 1.3
 const WOOD := 0
 const DARK_WOOD := 1
 const FABRIC := 2
@@ -241,10 +243,10 @@ static func _draw_room_furniture(body: StaticBody3D, room, origin: Vector2, floo
 	var bottom: float = origin.y + room.bounds.end.y
 	match room.room_type:
 		"living_room":
-			_add_table(body, Vector3(left + 1.0, floor_y, top + room.bounds.size.y * 0.5), materials)
+			_add_table(body, Vector3(left + 1.0 * FURNITURE_SCALE, floor_y, top + room.bounds.size.y * 0.5), materials)
 			_add_room_light(body, Vector3((left + right) * 0.5, floor_y + 2.35, (top + bottom) * 0.5))
 		"kitchen":
-			_add_kitchen(body, Vector3(right - 0.45, floor_y, top + room.bounds.size.y * 0.5), Vector3(right - 0.5, floor_y, top + 0.5), materials)
+			_add_kitchen(body, Vector3(right - 0.45 * FURNITURE_SCALE, floor_y, top + room.bounds.size.y * 0.5), Vector3(right - 0.5 * FURNITURE_SCALE, floor_y, top + 0.5 * FURNITURE_SCALE), materials)
 		"bathroom":
 			_add_bathroom(body, Vector3(left, floor_y, top), Vector2(room.bounds.size.x, room.bounds.size.y), materials)
 		"bedroom":
@@ -252,31 +254,40 @@ static func _draw_room_furniture(body: StaticBody3D, room, origin: Vector2, floo
 
 
 static func _add_table(body: StaticBody3D, position: Vector3, materials: Array[Material]) -> void:
-	BOX_BUILDER.add_box(body, "FurnitureLivingTable", Vector3(1.25, 0.12, 0.75), position + Vector3.UP * 0.72, materials[WOOD], true)
-	BOX_BUILDER.add_box(body, "FurnitureLivingTableBase", Vector3(0.22, 0.66, 0.22), position + Vector3.UP * 0.36, materials[DARK_WOOD], false)
+	_add_furniture(body, "FurnitureLivingTable", Vector3(1.25, 0.12, 0.75), position, Vector3.UP * 0.72, materials[WOOD], true)
+	_add_furniture(body, "FurnitureLivingTableBase", Vector3(0.22, 0.66, 0.22), position, Vector3.UP * 0.36, materials[DARK_WOOD], false)
 
 
 static func _add_kitchen(body: StaticBody3D, counter_position: Vector3, fridge_position: Vector3, materials: Array[Material]) -> void:
-	BOX_BUILDER.add_box(body, "FurnitureKitchenCounter", Vector3(0.7, 0.9, 1.8), counter_position + Vector3.UP * 0.45, materials[DARK_WOOD], true)
-	BOX_BUILDER.add_box(body, "FurnitureKitchenTop", Vector3(0.76, 0.08, 1.86), counter_position + Vector3.UP * 0.94, materials[METAL], false)
-	BOX_BUILDER.add_box(body, "FurnitureKitchenSink", Vector3(0.42, 0.04, 0.55), counter_position + Vector3(0.0, 1.0, 0.38), materials[GLASS], false)
-	BOX_BUILDER.add_box(body, "FurnitureKitchenFridge", Vector3(0.78, 1.85, 0.78), fridge_position + Vector3.UP * 0.925, materials[METAL], true)
+	_add_furniture(body, "FurnitureKitchenCounter", Vector3(0.7, 0.9, 1.8), counter_position, Vector3.UP * 0.45, materials[DARK_WOOD], true)
+	_add_furniture(body, "FurnitureKitchenTop", Vector3(0.76, 0.08, 1.86), counter_position, Vector3.UP * 0.94, materials[METAL], false)
+	_add_furniture(body, "FurnitureKitchenSink", Vector3(0.42, 0.04, 0.55), counter_position, Vector3(0.0, 1.0, 0.38), materials[GLASS], false)
+	_add_furniture(body, "FurnitureKitchenFridge", Vector3(0.78, 1.85, 0.78), fridge_position, Vector3.UP * 0.925, materials[METAL], true)
 
 
 static func _add_bathroom(body: StaticBody3D, corner: Vector3, size: Vector2, materials: Array[Material]) -> void:
-	BOX_BUILDER.add_box(body, "FurnitureBathroomSink", Vector3(0.5, 0.82, 0.58), corner + Vector3(0.35, 0.41, 0.75), materials[CERAMIC], true)
-	BOX_BUILDER.add_box(body, "FurnitureBathroomMirror", Vector3(0.04, 0.72, 0.62), corner + Vector3(0.07, 1.45, 0.75), materials[GLASS], false)
-	BOX_BUILDER.add_box(body, "FurnitureBathroomToilet", Vector3(0.58, 0.48, 0.72), corner + Vector3(0.4, 0.24, size.y - 0.55), materials[CERAMIC], true)
-	BOX_BUILDER.add_box(body, "FurnitureBathroomShower", Vector3(0.72, 0.12, 0.82), corner + Vector3(size.x - 0.48, 0.06, size.y - 0.55), materials[GLASS], true)
+	var scaled_depth := size.y / FURNITURE_SCALE
+	var scaled_width := size.x / FURNITURE_SCALE
+	_add_furniture(body, "FurnitureBathroomSink", Vector3(0.5, 0.82, 0.58), corner, Vector3(0.35, 0.41, 0.75), materials[CERAMIC], true)
+	_add_furniture(body, "FurnitureBathroomMirror", Vector3(0.04, 0.72, 0.62), corner, Vector3(0.07, 1.45, 0.75), materials[GLASS], false)
+	_add_furniture(body, "FurnitureBathroomToilet", Vector3(0.58, 0.48, 0.72), corner, Vector3(0.4, 0.24, scaled_depth - 0.55), materials[CERAMIC], true)
+	_add_furniture(body, "FurnitureBathroomShower", Vector3(0.72, 0.12, 0.82), corner, Vector3(scaled_width - 0.48, 0.06, scaled_depth - 0.55), materials[GLASS], true)
 
 
 static func _add_bedroom(body: StaticBody3D, room_id: String, corner: Vector3, size: Vector2, materials: Array[Material]) -> void:
-	var bed_width := minf(1.15, size.x - 0.35)
-	var bed_depth := minf(1.8, size.y * 0.48)
-	var bed_position := corner + Vector3(size.x - bed_width * 0.5 - 0.14, 0.28, size.y - bed_depth * 0.5 - 0.14)
-	BOX_BUILDER.add_box(body, "FurnitureBed_%s" % room_id, Vector3(bed_width, 0.48, bed_depth), bed_position, materials[FABRIC], true)
-	BOX_BUILDER.add_box(body, "FurniturePillow_%s" % room_id, Vector3(bed_width * 0.72, 0.14, 0.38), bed_position + Vector3(0.0, 0.3, -bed_depth * 0.3), materials[CERAMIC], false)
-	BOX_BUILDER.add_box(body, "FurnitureWardrobe_%s" % room_id, Vector3(0.58, 1.8, 0.82), corner + Vector3(0.36, 0.9, 0.55), materials[DARK_WOOD], true)
+	var scaled_size := size / FURNITURE_SCALE
+	var bed_width := minf(1.15, scaled_size.x - 0.35)
+	var bed_depth := minf(1.8, scaled_size.y * 0.48)
+	var bed_offset := Vector3(scaled_size.x - bed_width * 0.5 - 0.14, 0.28, scaled_size.y - bed_depth * 0.5 - 0.14)
+	_add_furniture(body, "FurnitureBed_%s" % room_id, Vector3(bed_width, 0.48, bed_depth), corner, bed_offset, materials[FABRIC], true)
+	_add_furniture(body, "FurniturePillow_%s" % room_id, Vector3(bed_width * 0.72, 0.14, 0.38), corner, bed_offset + Vector3(0.0, 0.3, -bed_depth * 0.3), materials[CERAMIC], false)
+	_add_furniture(body, "FurnitureWardrobe_%s" % room_id, Vector3(0.58, 1.8, 0.82), corner, Vector3(0.36, 0.9, 0.55), materials[DARK_WOOD], true)
+
+
+## Caixa de movel com tamanho e deslocamento na escala base, ampliados por
+## FURNITURE_SCALE a partir do ponto de ancoragem (canto ou encosto na parede).
+static func _add_furniture(body: StaticBody3D, node_name: String, base_size: Vector3, anchor: Vector3, base_offset: Vector3, material: Material, collision: bool) -> void:
+	BOX_BUILDER.add_box(body, node_name, base_size * FURNITURE_SCALE, anchor + base_offset * FURNITURE_SCALE, material, collision)
 
 
 static func _add_room_light(body: StaticBody3D, position: Vector3) -> void:

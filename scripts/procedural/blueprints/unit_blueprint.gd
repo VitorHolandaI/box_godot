@@ -35,6 +35,25 @@ func room_id_at(local_point: Vector2) -> String:
 	return ""
 
 
+## Amplia a planta na horizontal (comodos, portas e janelas) mantendo o pe-direito.
+## Portas crescem junto, limitadas a `max_door_width`.
+## Uso: unit.scale_layout(1.5, 2.0)
+func scale_layout(factor: float, max_door_width: float) -> void:
+	if factor <= 0.0:
+		push_error("Fator de escala da planta invalido %.2f; esperado > 0." % factor)
+		return
+	width *= factor
+	depth *= factor
+	for room in rooms:
+		room.bounds = Rect2(room.bounds.position * factor, room.bounds.size * factor)
+	for door in doors:
+		door["center"] = (door["center"] as Vector2) * factor
+		door["width"] = minf(float(door["width"]) * factor, max_door_width)
+	for window in windows:
+		window["center"] = (window["center"] as Vector2) * factor
+		window["width"] = float(window["width"]) * factor
+
+
 func add_window(window: Dictionary) -> void:
 	windows.append(window)
 	for room in rooms:

@@ -17,6 +17,7 @@ const BUILDING_NAVIGATION_TESTS_SCRIPT := preload("res://scripts/test_building_n
 const DOOR_BREAKING_TESTS_SCRIPT := preload("res://scripts/test_door_breaking.gd")
 const NETWORK_LAG_PROBE_TESTS_SCRIPT := preload("res://scripts/test_network_lag_probe.gd")
 const CITY_PROPS_TESTS_SCRIPT := preload("res://scripts/test_city_props.gd")
+const CORPSE_CLEANUP_TESTS_SCRIPT := preload("res://scripts/test_corpse_cleanup.gd")
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
 
@@ -35,6 +36,7 @@ func _ready() -> void:
 	await DOOR_BREAKING_TESTS_SCRIPT.new().run(self)
 	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
+	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
 	if bool(get_meta("unit_test_failed", false)):
 		failure_count += 1
 	_test_hit_reaction_flinch()
