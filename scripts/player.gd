@@ -40,6 +40,7 @@ var input_action_prefix := "player_1_"
 var input_device_name := "Teclado"
 var simulation_enabled := true
 var reads_local_input := true
+var is_local_controller := true
 
 @onready var model: Node3D = $Model
 @onready var head: Node3D = $Model/Head
@@ -82,7 +83,6 @@ var knife_pressed := false
 var pistol_pressed := false
 var reload_pressed := false
 var interact_pressed := false
-var sonar_pressed := false
 var sonar_pulse_time := 0.0
 var sonar_cooldown := 0.0
 var network_target_position := Vector3.ZERO
@@ -119,6 +119,7 @@ func _physics_process(delta: float) -> void:
 	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
 	sonar_pulse_time = maxf(sonar_pulse_time - delta, 0.0)
 	sonar_cooldown = maxf(sonar_cooldown - delta, 0.0)
+	_poll_local_sonar()
 	muzzle_flash.visible = muzzle_flash_time > 0.0
 	if not simulation_enabled:
 		var previous_position := global_position
@@ -139,8 +140,6 @@ func _physics_process(delta: float) -> void:
 		if remote_input_age > 0.3:
 			move_input = Vector2.ZERO
 			aim_input = Vector2.ZERO
-	if sonar_pressed:
-		trigger_sonar()
 	_handle_interaction_input()
 	_handle_weapon_input()
 
@@ -595,7 +594,17 @@ func _poll_input() -> void:
 	pistol_pressed = Input.is_action_just_pressed(input_action_prefix + "pistol")
 	reload_pressed = Input.is_action_just_pressed(input_action_prefix + "reload")
 	interact_pressed = Input.is_action_just_pressed(input_action_prefix + "interact")
-	sonar_pressed = Input.is_action_just_pressed(input_action_prefix + "sonar")
+
+
+## Le o pulso sonar apenas para o avatar controlado localmente. No cliente de
+## rede o jogador nao le input de movimento (o servidor e autoritativo), mas o
+## sonar e local e continua funcionando.
+## Uso: chamado a cada tick de fisica.
+func _poll_local_sonar() -> void:
+	if not is_local_controller:
+		return
+	if Input.is_action_just_pressed(input_action_prefix + "sonar"):
+		trigger_sonar()
 
 
 func _network_button_just_pressed(action: String, pressed: bool) -> bool:
@@ -611,7 +620,6 @@ func _clear_transient_input() -> void:
 	pistol_pressed = false
 	reload_pressed = false
 	interact_pressed = false
-	sonar_pressed = false
 
 
 ## Define o indice de cor do uniforme do jogador.

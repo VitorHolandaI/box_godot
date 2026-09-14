@@ -219,6 +219,7 @@ func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
 	player.local_slot = slot
 	player.simulation_enabled = NetworkSession.is_server()
 	player.reads_local_input = false
+	player.is_local_controller = peer_id == NetworkSession.local_peer_id()
 	player.position = _get_player_spawn_position(network_players.size())
 	player.set_color_index(network_players.size())
 
