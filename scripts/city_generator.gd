@@ -5,6 +5,8 @@ const BuildingAssembler: GDScript = preload("res://scripts/building_assembler_3d
 const SafehouseBuilder: GDScript = preload("res://scripts/safehouse_builder.gd")
 const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/generators/city_generator.gd")
 const PROCEDURAL_CITY_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/city_assembler.gd")
+const STREET_LIGHT_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/street_light_assembler.gd")
+const SAFEHOUSE_LOT_AREA := Rect2(-17.5, 3.5, 14.0, 14.0)
 const TREE_SCENES := [
 	preload("res://scenes/tree.tscn"),
 	preload("res://scenes/tree_pine.tscn"),
@@ -58,7 +60,9 @@ func _ready() -> void:
 		var city_blueprint = PROCEDURAL_CITY_GENERATOR.generate_world(NetworkSession.world_seed, NetworkSession.survival_mode)
 		PROCEDURAL_CITY_ASSEMBLER.assemble(city_blueprint, self)
 		_create_procedural_safehouse()
-		_create_street_props()
+		var safehouse_area: Array[Rect2] = [SAFEHOUSE_LOT_AREA]
+		STREET_LIGHT_ASSEMBLER.assemble(city_blueprint, self, safehouse_area)
+		_create_abandoned_cars(_street_props_rng())
 		_create_boundaries()
 		_create_forest()
 		return
@@ -155,10 +159,15 @@ func _spawn_lot_building(index: int, building_position: Vector3, rng: RandomNumb
 
 
 func _create_street_props() -> void:
-	var rng := RandomNumberGenerator.new()
-	rng.seed = city_seed + 942
+	var rng := _street_props_rng()
 	_create_streetlights(rng)
 	_create_abandoned_cars(rng)
+
+
+func _street_props_rng() -> RandomNumberGenerator:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = city_seed + 942
+	return rng
 
 
 func _create_streetlights(rng: RandomNumberGenerator) -> void:
@@ -171,7 +180,7 @@ func _create_streetlights(rng: RandomNumberGenerator) -> void:
 			var light_inst := light_scene.instantiate() as Node3D
 			light_inst.position = Vector3(offset + side, 0.12, z_pos)
 			light_inst.rotation.y = 0.0 if side > 0.0 else PI
-			light_inst.scale = Vector3.ONE * 1.6
+			light_inst.scale = Vector3.ONE * STREET_LIGHT_ASSEMBLER.STREETLIGHT_SCALE
 			add_child(light_inst)
 
 
