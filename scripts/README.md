@@ -14,7 +14,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `door_network_state.gd`: coleta e aplica estados autoritativos das portas comuns por caminho deterministico.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local e navegacao durante a partida.
-- `local_camera.gd`: acompanhamento afastado do jogador para manter a cidade visivel em viewports menores.
+- `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo (sem girar junto com o personagem) e alternancia suave entre visao externa e interna.
 - `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos e bot de teste.
 - `menu.gd`: selecao local/multiplayer, navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
