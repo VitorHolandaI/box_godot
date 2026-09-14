@@ -10,11 +10,12 @@ const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const KNIFE_ATTACK_DURATION := 0.4
 const MAX_LIVES := 3
 const MAX_RESERVE_AMMO := 96
-const VISION_RANGE := 24.0
-const VISION_HALF_ANGLE := deg_to_rad(55.0)
+const VISION_RANGE := 32.0
+const VISION_HALF_ANGLE := deg_to_rad(70.0)
 const VISION_ARC_SEGMENTS := 32
-const VISION_ARC_RADIUS := 24.0
+const VISION_ARC_RADIUS := VISION_RANGE
 const VISION_ARC_Y := -0.85
+const VISION_OVERLAY_ALPHA := 0.18
 
 @export var speed := 6.5
 @export var sprint_speed := 8.0
@@ -488,7 +489,8 @@ func _create_vision_overlay() -> void:
 	vision_overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	vision_overlay.mesh = _build_vision_arc_mesh()
 	var material := StandardMaterial3D.new()
-	material.albedo_color = Color.WHITE
+	material.albedo_color = Color(1.0, 1.0, 1.0, VISION_OVERLAY_ALPHA)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	vision_overlay.material_override = material
