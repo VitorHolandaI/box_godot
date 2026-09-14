@@ -241,6 +241,10 @@ func _test_building_door_states(test_root: Node) -> void:
 	if not door.is_open:
 		_fail(test_root, "Interacao deveria abrir a porta comum.")
 		return
+	door.call("_physics_process", 0.5)
+	if absf(float(door.rotation.y)) < 1.0:
+		_fail(test_root, "Porta comum deveria girar na dobradica ao abrir.")
+		return
 	door.interact()
 	if door.is_open:
 		_fail(test_root, "Segunda interacao deveria fechar a porta comum.")
@@ -271,8 +275,8 @@ func _test_house_gable_roof(test_root: Node) -> void:
 		house.free()
 		return
 	var doors := house.find_children("Door_*", "AnimatableBody3D", true, false)
-	if doors.is_empty() or not (doors[0] as AnimatableBody3D).has_node("DoorKnob"):
-		_fail(test_root, "Casa procedural deveria possuir porta externa visivel com macaneta.")
+	if doors.size() < 5 or not (doors[0] as AnimatableBody3D).has_node("DoorKnob"):
+		_fail(test_root, "Casa procedural deveria possuir 5 portas visiveis; encontradas=%d." % doors.size())
 		house.free()
 		return
 	for furniture_name in ["FurnitureLivingTable", "FurnitureKitchenCounter", "FurnitureBathroomMirror", "FurnitureBed_bedroom_a", "FurnitureWardrobe_bedroom_b", "InteriorLight"]:
