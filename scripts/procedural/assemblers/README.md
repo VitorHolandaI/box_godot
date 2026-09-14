@@ -5,6 +5,7 @@ usa `BoxMesh` e `BoxShape3D` para provar escala, portas, janelas, andares e
 interiores antes de trocar a aparencia pelos assets finais.
 
 - `building_materials.gd`: fabrica de materiais opacos e de vidro com visibilidade por andar.
+- `mesh_batcher.gd`: funde as caixas estaticas de cada edificio num unico no por material para cortar draw calls.
 - `box_builder.gd`: caixa visual com colisao opcional compartilhada pelos assemblers.
 - `building_assembler.gd`: monta casas com telhado, paredes internas, portas com nome deterministico, moveis por comodo, luzes, apartamentos e o navmesh do edificio.
 - `house_roof_assembler.gd`: telhado de duas aguas a 30 graus com empenas fechadas, cumeeira, testeiras, cor de telha e chamine.
