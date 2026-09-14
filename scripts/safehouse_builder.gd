@@ -160,12 +160,15 @@ static func _build_automatic_door(house: StaticBody3D) -> void:
 	panel_mesh.material = panel_material
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.mesh = panel_mesh
+	mesh_instance.position.x = panel_mesh.size.x * 0.5
 	panel.add_child(mesh_instance)
 	var panel_collision := CollisionShape3D.new()
 	var panel_shape := BoxShape3D.new()
 	panel_shape.size = panel_mesh.size
 	panel_collision.shape = panel_shape
+	panel_collision.position.x = panel_mesh.size.x * 0.5
 	panel.add_child(panel_collision)
+	panel.position.x = -panel_mesh.size.x * 0.5
 	door.add_child(panel)
 
 	var detection_area := Area3D.new()
