@@ -352,6 +352,12 @@ func _test_player_vision_cone() -> void:
 		_mark_failure()
 		player.queue_free()
 		return
+	# Bolha de proximidade: logo atras (3 m) enxerga; atras mais longe (5 m) nao.
+	if not player.can_see_position(Vector3(0.0, 1.0, 3.0)) or player.can_see_position(Vector3(0.0, 1.0, 5.0)):
+		push_error("FALHA: Bolha de visao deveria revelar ate %.1f m atras do jogador e nada alem." % player.PROXIMITY_VISION_RADIUS)
+		_mark_failure()
+		player.queue_free()
+		return
 	var overlay := player.get_node_or_null("VisionArc") as MeshInstance3D
 	var material := overlay.material_override as StandardMaterial3D if overlay != null else null
 	player.configure_vision_overlay(17)
@@ -376,7 +382,15 @@ func _test_zombie_vision_hides_entire_proxy() -> void:
 		_mark_failure()
 		zombie.queue_free()
 		return
-	zombie.call("_update_visual_fade", 1.0)
+	var torso := zombie.get_node("Model/Torso") as GeometryInstance3D
+	var dissolve := float(torso.get_instance_shader_parameter(&"dissolve_amount"))
+	var dust := zombie.get_node_or_null("DissolveDust") as CPUParticles3D
+	if not torso.material_override is ShaderMaterial or dissolve <= 0.0 or dissolve >= 1.0 or dust == null:
+		push_error("FALHA: Saida do FOV deveria desintegrar em po (shader dissolve=%.2f, po=%s)." % [dissolve, dust])
+		_mark_failure()
+		zombie.queue_free()
+		return
+	zombie.call("_update_visual_fade", float(zombie.get("DISSOLVE_OUT_TIME")))
 	if zombie.visible or zombie.get_node("Model").visible or zombie.get_node("HealthLabel").visible:
 		push_error("FALHA: Fade concluido deveria ocultar proxy, modelo e barra de vida do zumbi.")
 		_mark_failure()
@@ -666,7 +680,7 @@ func _test_zombie_flock_coordinator() -> void:
 		_mark_failure()
 		return
 	z_far._physics_process(0.2)
-	z_far.call("_update_visual_fade", 1.0)
+	z_far.call("_update_visual_fade", float(z_far.get("DISSOLVE_OUT_TIME")))
 	if (z_far.get_node("Model") as Node3D).visible or (z_far.get_node("HealthLabel") as Label3D).visible:
 		push_error("FALHA: Proxy distante deveria esvaecer e ocultar modelo e etiqueta no cliente.")
 		_mark_failure()
