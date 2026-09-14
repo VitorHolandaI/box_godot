@@ -60,6 +60,10 @@ func _ready() -> void:
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/benchmark_zombies.tscn")
 		return
 
+	if "--benchmark-indoor-escape" in OS.get_cmdline_user_args():
+		get_tree().call_deferred("change_scene_to_file", "res://scenes/benchmark_indoor_escape.tscn")
+		return
+
 	if OS.has_feature("dedicated_server") or "--server" in OS.get_cmdline_user_args():
 		var error := start_server(server_port)
 		if error != OK:
