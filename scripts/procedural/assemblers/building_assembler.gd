@@ -4,14 +4,13 @@ extends RefCounted
 const WALL_HEIGHT := 3.2
 const WALL_THICKNESS := 0.12
 const DOOR_HEIGHT := 2.75
-const AURA_CUTOUT_RADIUS := 3.0
 const WINDOW_SILL := 1.05
 const WINDOW_HEIGHT := 0.9
 const WINDOW_FRAME_THICKNESS := 0.08
-const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
 const BOX_BUILDER: GDScript = preload("res://scripts/procedural/assemblers/box_builder.gd")
 const STAIR_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/stair_assembler.gd")
 const BUILDING_NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation/building_navigation.gd")
+const BUILDING_MATERIALS: GDScript = preload("res://scripts/procedural/assemblers/building_materials.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT: GDScript = preload("res://scripts/destructible_door.gd")
 const WAVE_SUPPLY_SCENE: PackedScene = preload("res://scenes/wave_supply_pickup.tscn")
 const WOOD := 0
@@ -26,10 +25,10 @@ static func assemble(building) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = building.archetype
 	var facade_color := _facade_color(building.seed)
-	var wall_material := _cutout_material(facade_color, false, building.floor_height)
-	var floor_material := _cutout_material(Color(0.27, 0.29, 0.31), true, building.floor_height)
-	var trim_material := _cutout_material(facade_color.darkened(0.45), false, building.floor_height)
-	var ceiling_material := _cutout_material(facade_color.darkened(0.45), true, building.floor_height)
+	var wall_material: Material = BUILDING_MATERIALS.opaque(facade_color, building.floor_height)
+	var floor_material: Material = BUILDING_MATERIALS.opaque(Color(0.27, 0.29, 0.31), building.floor_height, true)
+	var trim_material: Material = BUILDING_MATERIALS.opaque(facade_color.darkened(0.45), building.floor_height)
+	var ceiling_material: Material = BUILDING_MATERIALS.opaque(facade_color.darkened(0.45), building.floor_height, true)
 	var furniture_materials: Array[Material] = []
 	if building.archetype.begins_with("House"):
 		furniture_materials = _furniture_materials(building.seed)
@@ -183,7 +182,7 @@ static func _add_door(body: StaticBody3D, door_data: Dictionary, axis: String, l
 	door.name = door_name
 	var width := float(door_data.get("width", 1.4))
 	var size := Vector3(WALL_THICKNESS, DOOR_HEIGHT, width) if axis == "vertical" else Vector3(width, DOOR_HEIGHT, WALL_THICKNESS)
-	door.configure(size, _cutout_material(Color(0.24, 0.12, 0.055)))
+	door.configure(size, BUILDING_MATERIALS.opaque(Color(0.24, 0.12, 0.055), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT))
 	door.position = Vector3(origin.x + line, floor_y, origin.y + along - width * 0.5) if axis == "vertical" else Vector3(origin.x + along - width * 0.5, floor_y, origin.y + line)
 	body.add_child(door)
 
@@ -219,7 +218,7 @@ static func _draw_window(body: StaticBody3D, window: Dictionary, origin: Vector2
 	var center_y := floor_y + WINDOW_SILL + WINDOW_HEIGHT * 0.5
 	var position := Vector3(origin.x + center.x, center_y, origin.y + center.y)
 	var frame_material := material
-	var glass_material := _window_glass_material()
+	var glass_material: Material = BUILDING_MATERIALS.glass(BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT)
 	var glass_size := Vector3(width - WINDOW_FRAME_THICKNESS * 2.0, WINDOW_HEIGHT - WINDOW_FRAME_THICKNESS * 2.0, 0.05)
 	if axis == "vertical":
 		glass_size = Vector3(0.05, WINDOW_HEIGHT - WINDOW_FRAME_THICKNESS * 2.0, width - WINDOW_FRAME_THICKNESS * 2.0)
@@ -232,15 +231,6 @@ static func _window_frame_size(axis: String, width: float, thickness: float) -> 
 	if axis == "vertical":
 		return Vector3(WALL_THICKNESS * 1.2, thickness, width)
 	return Vector3(width, thickness, WALL_THICKNESS * 1.2)
-
-
-static func _window_glass_material() -> StandardMaterial3D:
-	var glass := StandardMaterial3D.new()
-	glass.albedo_color = Color(0.66, 0.82, 0.92, 0.32)
-	glass.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	glass.metallic = 0.1
-	glass.roughness = 0.08
-	return glass
 
 
 static func _draw_room_furniture(body: StaticBody3D, room, origin: Vector2, floor_y: float, materials: Array[Material]) -> void:
@@ -322,27 +312,19 @@ static func _add_wave_supply(body: StaticBody3D, building) -> void:
 static func _furniture_materials(seed: int) -> Array[Material]:
 	var wood_shift := float(absi(seed) % 4) * 0.025
 	return [
-		_material(Color(0.40 + wood_shift, 0.25, 0.13)),
-		_material(Color(0.24 + wood_shift, 0.14, 0.08)),
-		_material(Color(0.31, 0.36, 0.27)),
-		_material(Color(0.84, 0.85, 0.81)),
-		_metal_material(Color(0.48, 0.51, 0.52), 0.5, 0.32),
-		_metal_material(Color(0.50, 0.72, 0.78), 0.75, 0.08),
+		BUILDING_MATERIALS.opaque(Color(0.40 + wood_shift, 0.25, 0.13), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT),
+		BUILDING_MATERIALS.opaque(Color(0.24 + wood_shift, 0.14, 0.08), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT),
+		BUILDING_MATERIALS.opaque(Color(0.31, 0.36, 0.27), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT),
+		BUILDING_MATERIALS.opaque(Color(0.84, 0.85, 0.81), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT),
+		BUILDING_MATERIALS.opaque(Color(0.48, 0.51, 0.52), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT, false, 0.5, 0.32),
+		BUILDING_MATERIALS.opaque(Color(0.50, 0.72, 0.78), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT, false, 0.75, 0.08),
 	]
-
-
-static func _metal_material(color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.metallic = metallic
-	material.roughness = roughness
-	return material
 
 
 static func _add_commercial_front(body: StaticBody3D, building) -> void:
 	var accent := Color(0.26, 0.58, 0.32) if building.archetype == "Grocery_A" else Color(0.84, 0.36, 0.14)
-	BOX_BUILDER.add_box(body, "StoreAwning", Vector3(building.width * 0.72, 0.22, 0.9), Vector3(building.width * 0.5, 2.2, -0.38), _material(accent), false)
-	BOX_BUILDER.add_box(body, "StoreSign", Vector3(building.width * 0.48, 0.55, 0.08), Vector3(building.width * 0.5, 2.52, -0.08), _material(accent.lightened(0.2)), false)
+	BOX_BUILDER.add_box(body, "StoreAwning", Vector3(building.width * 0.72, 0.22, 0.9), Vector3(building.width * 0.5, 2.2, -0.38), BUILDING_MATERIALS.opaque(accent, BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT), false)
+	BOX_BUILDER.add_box(body, "StoreSign", Vector3(building.width * 0.48, 0.55, 0.08), Vector3(building.width * 0.5, 2.52, -0.08), BUILDING_MATERIALS.opaque(accent.lightened(0.2), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT), false)
 
 
 static func _add_gable_roof(body: StaticBody3D, building, material: Material) -> void:
@@ -364,24 +346,6 @@ static func _facade_color(seed: int) -> Color:
 		Color(0.52, 0.34, 0.47), Color(0.46, 0.46, 0.48),
 	]
 	return palette[absi(seed) % palette.size()]
-
-
-static func _cutout_material(color: Color, ceiling_cutout: bool = false, floor_height: float = 3.4) -> ShaderMaterial:
-	var material := ShaderMaterial.new()
-	material.shader = CUTOUT_SHADER
-	material.set_shader_parameter("base_color", color)
-	material.set_shader_parameter("material_roughness", 0.86)
-	material.set_shader_parameter("cutout_radius", AURA_CUTOUT_RADIUS)
-	material.set_shader_parameter("floor_height", floor_height)
-	material.set_shader_parameter("ceiling_cutout", ceiling_cutout)
-	return material
-
-
-static func _material(color: Color) -> StandardMaterial3D:
-	var material := StandardMaterial3D.new()
-	material.albedo_color = color
-	material.roughness = 0.86
-	return material
 
 
 static func _add_rotated_box(body: StaticBody3D, node_name: String, size: Vector3, position: Vector3, rotation_z: float, material: Material) -> void:

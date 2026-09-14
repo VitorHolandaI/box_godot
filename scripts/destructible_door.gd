@@ -6,6 +6,7 @@ const PANEL_SPEED := 4.5
 const OPEN_SWING := PI * 0.5
 const HIT_SHAKE_DURATION := 0.18
 const HIT_SHAKE_AMPLITUDE := 0.05
+const KNOB_COLOR := Color(0.72, 0.56, 0.18)
 
 var panel_size := Vector3(2.2, 2.4, 0.14)
 var panel_material: Material
@@ -116,6 +117,20 @@ func _update_hit_shake(delta: float) -> void:
 	panel.rotation.y = wobble * 0.6
 
 
+## Macaneta dourada. Se a folha usa o shader de edificio, a macaneta herda a
+## mesma regra de visibilidade por andar em vez de flutuar nos andares ocultos.
+func _create_knob_material() -> Material:
+	if panel_material is ShaderMaterial:
+		var shader_knob := (panel_material as ShaderMaterial).duplicate() as ShaderMaterial
+		shader_knob.set_shader_parameter("base_color", KNOB_COLOR)
+		shader_knob.set_shader_parameter("material_metallic", 0.7)
+		return shader_knob
+	var standard_knob := StandardMaterial3D.new()
+	standard_knob.albedo_color = KNOB_COLOR
+	standard_knob.metallic = 0.7
+	return standard_knob
+
+
 func _create_panel() -> void:
 	var mesh := MeshInstance3D.new()
 	mesh.name = "DoorPanel"
@@ -131,10 +146,7 @@ func _create_panel() -> void:
 	var knob_mesh := SphereMesh.new()
 	knob_mesh.radius = 0.07
 	knob_mesh.height = 0.14
-	var knob_material := StandardMaterial3D.new()
-	knob_material.albedo_color = Color(0.72, 0.56, 0.18)
-	knob_material.metallic = 0.7
-	knob_mesh.material = knob_material
+	knob_mesh.material = _create_knob_material()
 	knob.mesh = knob_mesh
 	if panel_size.z < panel_size.x:
 		knob.position = _hinge_offset + Vector3(panel_size.x * 0.28, 0.0, -panel_size.z)

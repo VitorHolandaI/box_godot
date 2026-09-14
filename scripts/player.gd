@@ -14,6 +14,9 @@ const MAX_RESERVE_AMMO := 96
 const VISION_RANGE := 32.0
 const VISION_HALF_ANGLE := deg_to_rad(70.0)
 const VISION_ARC_SEGMENTS := 32
+# Bolha curta em todas as direcoes: o jogador percebe o que chega por tras.
+const PROXIMITY_VISION_RADIUS := 4.0
+const PROXIMITY_ARC_SEGMENTS := 40
 const VISION_ARC_RADIUS := VISION_RANGE
 const VISION_ARC_Y := -0.85
 const VISION_OVERLAY_ALPHA := 0.18
@@ -518,7 +521,9 @@ func can_see_position(target_position: Vector3) -> bool:
 	var offset := target_position - global_position
 	offset.y = 0.0
 	var distance := offset.length()
-	if distance <= 0.01 or distance > VISION_RANGE:
+	if distance <= PROXIMITY_VISION_RADIUS:
+		return true
+	if distance > VISION_RANGE:
 		return false
 	return -global_transform.basis.z.dot(offset / distance) >= cos(VISION_HALF_ANGLE)
 
@@ -573,13 +578,22 @@ func _build_vision_arc_mesh() -> ArrayMesh:
 		var first_angle := lerpf(-VISION_HALF_ANGLE, VISION_HALF_ANGLE, float(segment) / VISION_ARC_SEGMENTS)
 		var second_angle := lerpf(-VISION_HALF_ANGLE, VISION_HALF_ANGLE, float(segment + 1) / VISION_ARC_SEGMENTS)
 		surface.add_vertex(Vector3.ZERO)
-		surface.add_vertex(_vision_arc_point(first_angle))
-		surface.add_vertex(_vision_arc_point(second_angle))
+		surface.add_vertex(_vision_arc_point(first_angle, VISION_ARC_RADIUS))
+		surface.add_vertex(_vision_arc_point(second_angle, VISION_ARC_RADIUS))
+	# Bolha de proximidade so fora do cone, para nao dobrar a opacidade na frente.
+	var proximity_start := VISION_HALF_ANGLE
+	var proximity_end := TAU - VISION_HALF_ANGLE
+	for segment in PROXIMITY_ARC_SEGMENTS:
+		var first_angle := lerpf(proximity_start, proximity_end, float(segment) / PROXIMITY_ARC_SEGMENTS)
+		var second_angle := lerpf(proximity_start, proximity_end, float(segment + 1) / PROXIMITY_ARC_SEGMENTS)
+		surface.add_vertex(Vector3.ZERO)
+		surface.add_vertex(_vision_arc_point(first_angle, PROXIMITY_VISION_RADIUS))
+		surface.add_vertex(_vision_arc_point(second_angle, PROXIMITY_VISION_RADIUS))
 	return surface.commit()
 
 
-func _vision_arc_point(angle: float) -> Vector3:
-	return Vector3(sin(angle) * VISION_ARC_RADIUS, 0.02, -cos(angle) * VISION_ARC_RADIUS)
+func _vision_arc_point(angle: float, radius: float) -> Vector3:
+	return Vector3(sin(angle) * radius, 0.02, -cos(angle) * radius)
 
 
 func _update_noise(delta: float, direction: Vector3) -> void:
