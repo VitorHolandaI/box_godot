@@ -16,6 +16,7 @@ const MINIMAP_PLAYER_COLORS := [
 ## O mapa e centrado na origem do mundo, cobrindo cidade e floresta.
 class MinimapView extends Control:
 	var tracked_players: Array = []
+	var tracked_zombies: Array = []
 	var own_player: Node = null
 	var world_extent := 160.0
 	var colors: Array = []
@@ -35,6 +36,12 @@ class MinimapView extends Control:
 			if node == own_player:
 				draw_circle(point, 6.0, Color(1, 1, 1, 0.95))
 			draw_circle(point, 4.0, color)
+		for zombie_node in tracked_zombies:
+			var zombie := zombie_node as Node3D
+			if zombie == null or not is_instance_valid(zombie):
+				continue
+			var zombie_point := center + Vector2(zombie.global_position.x, zombie.global_position.z) * scale_value
+			draw_circle(zombie_point, 3.0, Color(1.0, 0.35, 0.2, 0.9))
 
 var players: Array[Node] = []
 var view_panels: Array[Control] = []
@@ -60,14 +67,18 @@ func configure(local_players: Array[Node]) -> void:
 func _process(_delta: float) -> void:
 	var alive_zombies := get_tree().get_nodes_in_group("zombies").size()
 	var all_players := get_tree().get_nodes_in_group("player")
+	var all_zombies := get_tree().get_nodes_in_group("zombies")
 	for index in minimaps.size():
+		var view_player: Node = players[index] if index < players.size() else null
+		var show_zombies: bool = view_player != null and is_instance_valid(view_player) and view_player.has_method("is_sonar_active") and view_player.is_sonar_active()
 		minimaps[index].tracked_players = all_players
+		minimaps[index].tracked_zombies = all_zombies if show_zombies else []
 		minimaps[index].queue_redraw()
 	for index in players.size():
 		var player := players[index]
 		if not is_instance_valid(player):
 			continue
-		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\nZumbis: %d | Abates: %d\n%s" % [
+		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\nZumbis: %d | Abates: %d\n%s\n%s" % [
 			index + 1,
 			player.input_device_name,
 			player.get_lives_text(),
@@ -78,6 +89,7 @@ func _process(_delta: float) -> void:
 			player.get_ammo_text(),
 			alive_zombies,
 			player.zombie_kills,
+			player.get_sonar_text(),
 			get_tree().current_scene.get_survival_hud_text() if get_tree().current_scene.has_method("get_survival_hud_text") else "",
 		]
 

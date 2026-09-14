@@ -164,7 +164,7 @@ func _physics_process(delta: float) -> void:
 				var wall_normal := get_wall_normal()
 				if wall_normal.length_squared() > 0.0001:
 					direction = direction.slide(wall_normal).normalized()
-				if wall_contact_time >= STUCK_ESCAPE_TIME and not is_instance_valid(escape_door):
+				if wall_contact_time >= STUCK_ESCAPE_TIME and not is_instance_valid(escape_door) and _is_inside_building():
 					escape_door = _find_nearest_door()
 			else:
 				wall_contact_time = maxf(wall_contact_time - delta, 0.0)
@@ -356,6 +356,22 @@ func _try_attack_blocking_door(direction: Vector3) -> void:
 	var door := _find_door_ahead(direction)
 	if door != null:
 		_attack_door(door)
+
+
+## A rota de fuga so vale para zumbis realmente presos dentro de uma casa.
+## Um zumbi na rua encostado na parede continua perseguindo o jogador.
+## Uso: if zombie._is_inside_building(): ...
+func _is_inside_building() -> bool:
+	for building in get_tree().get_nodes_in_group("visibility_building"):
+		var min_value: Variant = building.get_meta("visibility_min", null)
+		var max_value: Variant = building.get_meta("visibility_max", null)
+		if min_value is Vector3 and max_value is Vector3 and _position_inside_bounds(global_position, min_value, max_value):
+			return true
+	return false
+
+
+func _position_inside_bounds(position: Vector3, minimum: Vector3, maximum: Vector3) -> bool:
+	return position.x >= minimum.x and position.x <= maximum.x and position.y >= minimum.y and position.y <= maximum.y and position.z >= minimum.z and position.z <= maximum.z
 
 
 ## Encontra a porta fechada mais proxima dentro do raio de busca. Serve de
