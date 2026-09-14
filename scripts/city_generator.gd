@@ -102,6 +102,7 @@ func _create_procedural_safehouse() -> void:
 	var safehouse_min := safehouse.global_position + Vector3(-6.4, 0.0, -6.4)
 	var safehouse_max := safehouse.global_position + Vector3(6.4, 6.6, 6.4)
 	PROCEDURAL_CITY_ASSEMBLER.configure_cutout_bounds(safehouse, safehouse_min, safehouse_max)
+	PROCEDURAL_CITY_ASSEMBLER.MESH_BATCHER.merge_static_meshes(safehouse)
 
 
 func _create_roads() -> void:
