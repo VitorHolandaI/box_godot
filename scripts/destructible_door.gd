@@ -1,8 +1,11 @@
 class_name DestructibleDoor
 extends AnimatableBody3D
 
+const DEBRIS_EFFECT_SCRIPT: GDScript = preload("res://scripts/door_debris_effect.gd")
 const PANEL_SPEED := 4.5
 const OPEN_SWING := PI * 0.5
+const HIT_SHAKE_DURATION := 0.18
+const HIT_SHAKE_AMPLITUDE := 0.05
 
 var panel_size := Vector3(2.2, 2.4, 0.14)
 var panel_material: Material
@@ -12,6 +15,9 @@ var is_open := false
 var is_destroyed := false
 var target_rotation_y := 0.0
 var swing_direction := 1.0
+var hit_shake_time := 0.0
+var _hinge_offset := Vector3.ZERO
+var _received_network_state := false
 
 
 ## Configures a door before it is added to the scene tree.
@@ -32,11 +38,15 @@ func _ready() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_update_hit_shake(delta)
+	if is_destroyed:
+		return
 	target_rotation_y = OPEN_SWING * swing_direction if is_open else 0.0
 	rotation.y = move_toward(rotation.y, target_rotation_y, PANEL_SPEED * maxf(delta, 0.0))
 
 
-## Toggles the door between its two player-visible states.
+## Toggles the door between its two player-visible states. Only players call
+## this; zombies never open doors, they can only break them.
 ## Usage: door.interact()
 func interact() -> void:
 	if is_destroyed:
@@ -44,23 +54,66 @@ func interact() -> void:
 	is_open = not is_open
 
 
-## Damages a normal building door; destroyed doors remain open.
-## Usage: door.take_damage(25)
-func take_damage(amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null) -> void:
-	if amount <= 0 or is_open:
+## Damages a building door, open or closed. Zombie claws, the player's knife
+## and bullets all count; at zero health the door bursts into debris and stops
+## blocking the doorway.
+## Usage: door.take_damage(25, attacker_forward, "knife", player)
+func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null) -> void:
+	if amount <= 0 or is_destroyed:
 		return
 	health = maxi(health - amount, 0)
-	if health == 0:
-		is_destroyed = true
-		is_open = true
+	if health > 0:
+		hit_shake_time = HIT_SHAKE_DURATION
+		return
+	_break_apart(attack_direction, true)
 
 
-## Applies the authoritative state received from the multiplayer server.
+## Applies the authoritative state received from the multiplayer server. The
+## very first snapshot only mirrors state (a late joiner must not watch every
+## old door explode); later transitions play the break animation.
 ## Usage: door.apply_network_state(true, false)
 func apply_network_state(should_open: bool, destroyed: bool) -> void:
-	is_destroyed = destroyed
+	var play_animation := _received_network_state
+	_received_network_state = true
+	if destroyed and not is_destroyed:
+		_break_apart(Vector3.ZERO, play_animation)
+	if not destroyed:
+		health = max_health
 	is_open = should_open or destroyed
-	health = 0 if destroyed else max_health
+
+
+func _break_apart(attack_direction: Vector3, play_animation: bool) -> void:
+	health = 0
+	is_destroyed = true
+	is_open = true
+	hit_shake_time = 0.0
+	var collision := get_node_or_null("DoorCollision") as CollisionShape3D
+	if collision != null:
+		collision.set_deferred("disabled", true)
+	for part_name in ["DoorPanel", "DoorKnob"]:
+		var part := get_node_or_null(part_name) as Node3D
+		if part != null:
+			part.visible = false
+	# O servidor dedicado nao renderiza: pular os destrocos poupa CPU.
+	if not play_animation or not is_inside_tree() or NetworkSession.is_server():
+		return
+	var debris = DEBRIS_EFFECT_SCRIPT.new()
+	var direction := attack_direction if attack_direction.length_squared() > 0.0001 else -global_transform.basis.z
+	debris.configure(panel_size, direction, panel_material, absi(String(get_path()).hash()))
+	# Destrocos saem do angulo atual da folha, mesmo que a porta estivesse aberta.
+	debris.position = Vector3.ZERO
+	add_child(debris)
+
+
+func _update_hit_shake(delta: float) -> void:
+	var panel := get_node_or_null("DoorPanel") as Node3D
+	if panel == null:
+		return
+	hit_shake_time = maxf(hit_shake_time - delta, 0.0)
+	var strength := hit_shake_time / HIT_SHAKE_DURATION
+	var wobble := sin(hit_shake_time * 90.0) * HIT_SHAKE_AMPLITUDE * strength
+	panel.position = _hinge_offset + Vector3(wobble, 0.0, wobble)
+	panel.rotation.y = wobble * 0.6
 
 
 func _create_panel() -> void:
@@ -70,8 +123,8 @@ func _create_panel() -> void:
 	box_mesh.size = panel_size
 	box_mesh.material = panel_material
 	mesh.mesh = box_mesh
-	var hinge_offset := Vector3(panel_size.x * 0.5, panel_size.y * 0.5, 0.0) if panel_size.x > panel_size.z else Vector3(0.0, panel_size.y * 0.5, panel_size.z * 0.5)
-	mesh.position = hinge_offset
+	_hinge_offset = Vector3(panel_size.x * 0.5, panel_size.y * 0.5, 0.0) if panel_size.x > panel_size.z else Vector3(0.0, panel_size.y * 0.5, panel_size.z * 0.5)
+	mesh.position = _hinge_offset
 	add_child(mesh)
 	var knob := MeshInstance3D.new()
 	knob.name = "DoorKnob"
@@ -84,9 +137,9 @@ func _create_panel() -> void:
 	knob_mesh.material = knob_material
 	knob.mesh = knob_mesh
 	if panel_size.z < panel_size.x:
-		knob.position = hinge_offset + Vector3(panel_size.x * 0.28, 0.0, -panel_size.z)
+		knob.position = _hinge_offset + Vector3(panel_size.x * 0.28, 0.0, -panel_size.z)
 	else:
-		knob.position = hinge_offset + Vector3(-panel_size.x, 0.0, panel_size.z * 0.28)
+		knob.position = _hinge_offset + Vector3(-panel_size.x, 0.0, panel_size.z * 0.28)
 	add_child(knob)
 
 	var collision := CollisionShape3D.new()
@@ -94,5 +147,5 @@ func _create_panel() -> void:
 	var shape := BoxShape3D.new()
 	shape.size = panel_size
 	collision.shape = shape
-	collision.position = hinge_offset
+	collision.position = _hinge_offset
 	add_child(collision)

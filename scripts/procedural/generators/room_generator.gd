@@ -15,15 +15,28 @@ static func generate_apartment(apartment_seed: int, variant: int):
 	return unit
 
 
-static func generate_lobby(_lobby_seed: int, width: float, depth: float):
+## Terreo do predio: saguao na frente, nucleo da escada no fundo esquerdo e
+## deposito no fundo direito. O nucleo ocupa o mesmo retangulo em todos os
+## andares para que nenhuma parede de apartamento atravesse os lances.
+## Uso: var lobby = ProceduralRoomGenerator.generate_lobby(seed, 20.0, 16.0, Rect2(0, 8, 10, 8))
+static func generate_lobby(_lobby_seed: int, width: float, depth: float, stair_core: Rect2):
 	var lobby = UNIT_BLUEPRINT.new("Lobby_A", width, depth)
-	lobby.add_room(ROOM_BLUEPRINT.new("lobby", "lobby", Rect2(0.0, 0.0, width, depth * 0.65)))
-	lobby.add_room(ROOM_BLUEPRINT.new("stairs", "stairs", Rect2(0.0, depth * 0.65, width * 0.3, depth * 0.35)))
-	lobby.add_room(ROOM_BLUEPRINT.new("storage", "storage", Rect2(width * 0.3, depth * 0.65, width * 0.7, depth * 0.35)))
-	_add_door(lobby, "lobby", "stairs", "horizontal", Vector2(width * 0.15, depth * 0.65), 1.4)
-	_add_door(lobby, "lobby", "storage", "horizontal", Vector2(width * 0.65, depth * 0.65), 1.4)
-	_add_door(lobby, "lobby", "outside", "horizontal", Vector2(width * 0.5, 0.0), 1.4)
+	lobby.add_room(ROOM_BLUEPRINT.new("lobby", "lobby", Rect2(0.0, 0.0, width, stair_core.position.y)))
+	lobby.add_room(ROOM_BLUEPRINT.new("stair_core", "stairs", stair_core))
+	lobby.add_room(ROOM_BLUEPRINT.new("storage", "storage", Rect2(stair_core.end.x, stair_core.position.y, width - stair_core.end.x, depth - stair_core.position.y)))
+	# A porta do nucleo fica longe dos lances (x baixo) para nao bater a cabeca no primeiro lance.
+	_add_door(lobby, "lobby", "stair_core", "horizontal", Vector2(stair_core.end.x - 2.5, stair_core.position.y), 1.4)
+	_add_door(lobby, "lobby", "storage", "horizontal", Vector2(stair_core.end.x + (width - stair_core.end.x) * 0.5, stair_core.position.y), 1.4)
+	_add_door(lobby, "lobby", "outside", "horizontal", Vector2(width * 0.5, 0.0), 1.8)
 	return lobby
+
+
+## Nucleo da escada dos andares superiores: um unico comodo livre de paredes.
+## Uso: var core = ProceduralRoomGenerator.generate_stair_core(Vector2(10.0, 8.0))
+static func generate_stair_core(size: Vector2):
+	var core = UNIT_BLUEPRINT.new("StairCore_A", size.x, size.y)
+	core.add_room(ROOM_BLUEPRINT.new("stair_core", "stairs", Rect2(Vector2.ZERO, size)))
+	return core
 
 
 static func generate_store(_store_seed: int, width: float, depth: float):

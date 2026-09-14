@@ -13,6 +13,9 @@ const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedu
 const GAMEPLAY_REGRESSION_TESTS_SCRIPT := preload("res://scripts/test_gameplay_regressions.gd")
 const SURVIVAL_TESTS_SCRIPT := preload("res://scripts/test_survival_mode.gd")
 const COLLISION_BOUNDARY_TESTS_SCRIPT := preload("res://scripts/test_collision_boundaries.gd")
+const BUILDING_NAVIGATION_TESTS_SCRIPT := preload("res://scripts/test_building_navigation.gd")
+const DOOR_BREAKING_TESTS_SCRIPT := preload("res://scripts/test_door_breaking.gd")
+const NETWORK_LAG_PROBE_TESTS_SCRIPT := preload("res://scripts/test_network_lag_probe.gd")
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
 
@@ -27,6 +30,9 @@ func _ready() -> void:
 	await COLLISION_BOUNDARY_TESTS_SCRIPT.new().run(self)
 	GAMEPLAY_REGRESSION_TESTS_SCRIPT.new().run(self)
 	SURVIVAL_TESTS_SCRIPT.new().run(self)
+	await BUILDING_NAVIGATION_TESTS_SCRIPT.new().run(self)
+	await DOOR_BREAKING_TESTS_SCRIPT.new().run(self)
+	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	if bool(get_meta("unit_test_failed", false)):
 		failure_count += 1
 	_test_hit_reaction_flinch()
@@ -37,8 +43,6 @@ func _ready() -> void:
 	_test_zombie_vision_hides_entire_proxy()
 	_test_wave_restores_three_lives()
 	await _test_zombie_breaks_blocking_door()
-	_test_zombie_finds_nearest_escape_door()
-	_test_zombie_only_escapes_indoors()
 	_test_player_sonar_pulse()
 	_test_corpse_does_not_block_player()
 	_test_network_ragdoll_is_unique_per_zombie()
@@ -427,70 +431,6 @@ func _test_zombie_breaks_blocking_door() -> void:
 	door.queue_free()
 	await get_tree().process_frame
 	print("PASS: Zumbi ataca a porta fechada que bloqueia a passagem.")
-
-
-func _test_zombie_finds_nearest_escape_door() -> void:
-	print("Testando rota de fuga do zumbi pela porta mais proxima...")
-	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
-	zombie.position = Vector3(0.0, 1.0, 0.0)
-	zombie.simulation_enabled = false
-	add_child(zombie)
-	var near_door := DESTRUCTIBLE_DOOR_SCRIPT.new() as AnimatableBody3D
-	near_door.position = Vector3(0.0, 1.0, 5.0)
-	add_child(near_door)
-	var far_door := DESTRUCTIBLE_DOOR_SCRIPT.new() as AnimatableBody3D
-	far_door.position = Vector3(0.0, 1.0, 20.0)
-	add_child(far_door)
-	var found: Node3D = zombie.call("_find_nearest_door") as Node3D
-	if found != near_door:
-		push_error("FALHA: Zumbi preso deveria mirar a porta fechada mais proxima.")
-		_mark_failure()
-		zombie.queue_free()
-		near_door.queue_free()
-		far_door.queue_free()
-		return
-	near_door.set("is_open", true)
-	var next_found: Node3D = zombie.call("_find_nearest_door") as Node3D
-	if next_found != far_door:
-		push_error("FALHA: Porta aberta nao deve servir de rota de fuga.")
-		_mark_failure()
-		zombie.queue_free()
-		near_door.queue_free()
-		far_door.queue_free()
-		return
-	zombie.queue_free()
-	near_door.queue_free()
-	far_door.queue_free()
-	print("PASS: Zumbi preso busca e quebra a porta fechada mais proxima.")
-
-
-func _test_zombie_only_escapes_indoors() -> void:
-	print("Testando fuga de zumbi apenas dentro de construcoes...")
-	var building := StaticBody3D.new()
-	building.add_to_group("visibility_building")
-	building.set_meta("visibility_min", Vector3(-5.0, 0.0, -5.0))
-	building.set_meta("visibility_max", Vector3(5.0, 4.0, 5.0))
-	add_child(building)
-	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
-	zombie.simulation_enabled = false
-	zombie.position = Vector3(0.0, 1.0, 0.0)
-	add_child(zombie)
-	if not bool(zombie.call("_is_inside_building")):
-		push_error("FALHA: Zumbi dentro dos limites deveria ser considerado dentro da casa.")
-		_mark_failure()
-		zombie.queue_free()
-		building.queue_free()
-		return
-	zombie.position = Vector3(20.0, 1.0, 20.0)
-	if bool(zombie.call("_is_inside_building")):
-		push_error("FALHA: Zumbi na rua nao deveria acionar a rota de fuga interna.")
-		_mark_failure()
-		zombie.queue_free()
-		building.queue_free()
-		return
-	zombie.queue_free()
-	building.queue_free()
-	print("PASS: Rota de fuga vale somente dentro de construcoes.")
 
 
 func _test_player_sonar_pulse() -> void:

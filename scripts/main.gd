@@ -49,6 +49,7 @@ var received_zombie_names: Dictionary = {}
 var smoke_test_mode := false
 var player_vision_elapsed := 0.0
 var bot_ai := PlayerBotAI.new()
+var lag_probe := NetworkLagProbe.from_arguments(OS.get_cmdline_user_args())
 var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
 var zombie_spawn_locator = ZOMBIE_SPAWN_LOCATOR_SCRIPT.new()
 var survival_wave_controller
@@ -113,6 +114,9 @@ func _physics_process(delta: float) -> void:
 	if NetworkSession.is_client():
 		if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 			bot_ai.update(delta, get_tree())
+		if lag_probe.is_enabled() and lag_probe.tick(delta, _server_round_trip_ms()):
+			print(JSON.stringify(lag_probe.build_report()))
+			get_tree().quit(0)
 		input_elapsed += delta
 		if input_elapsed >= INPUT_INTERVAL:
 			input_elapsed = 0.0
@@ -124,6 +128,14 @@ func _physics_process(delta: float) -> void:
 			if not NetworkSession.peer_slots.is_empty() and _loaded_peers_match(NetworkSession.peer_slots, NetworkSession.loaded_peers):
 				_send_player_snapshots(_collect_player_states())
 				_send_zombie_snapshots(_collect_zombie_states())
+
+
+func _server_round_trip_ms() -> float:
+	var enet_peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if enet_peer == null or enet_peer.get_connection_status() != MultiplayerPeer.CONNECTION_CONNECTED:
+		return -1.0
+	var server_peer := enet_peer.get_peer(NetworkSession.SERVER_ID)
+	return server_peer.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME) if server_peer != null else -1.0
 
 
 func register_corpse(corpse: Node) -> void:
@@ -386,6 +398,8 @@ func _apply_zombie_snapshot(
 		received_zombie_snapshot_chunks.clear()
 		received_zombie_names.clear()
 	received_zombie_snapshot_chunks[packet_index] = true
+	if lag_probe.is_enabled():
+		lag_probe.record_zombie_packet(snapshot_sequence, packet_index, packet_count, zombie_states.size(), Time.get_ticks_usec())
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 		bot_ai.notify_zombie_states(zombie_states)
 	_apply_zombie_states(zombie_states)
