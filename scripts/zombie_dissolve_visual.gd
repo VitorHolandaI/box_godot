@@ -1,12 +1,13 @@
 class_name ZombieDissolveVisual
 extends RefCounted
 
-## Visual de desintegracao dos zumbis ao sair do campo de visao. Troca os
-## materiais das pecas por um shader de dissolucao compartilhado por cor e
-## solta uma nuvem de po quando o corpo comeca a se desfazer.
+## Visual de desintegracao de um zumbi ao sair do campo de visao. Enquanto o
+## corpo esta inteiro as pecas usam materiais compartilhados por cor (poucas
+## dezenas para o jogo todo); so durante o sumiço o zumbi troca para copias
+## proprias, onde o uniform `dissolve_amount` pode variar sem afetar os outros.
 ## Uso:
-##   var meshes := ZombieDissolveVisual.prepare_meshes(model)
-##   ZombieDissolveVisual.set_dissolve(meshes, 0.5)
+##   var dissolve := ZombieDissolveVisual.new($Model)
+##   dissolve.set_dissolve(0.5)
 ##   ZombieDissolveVisual.emit_dust(zombie, Color(0.4, 0.3, 0.2))
 
 const DISSOLVE_SHADER: Shader = preload("res://shaders/zombie_dissolve.gdshader")
@@ -15,46 +16,56 @@ const DUST_AMOUNT := 36
 const DUST_LIFETIME := 1.3
 const DISSOLVE_PARAMETER := &"dissolve_amount"
 
-# Um material por cor para todo o jogo: 600 zumbis reaproveitam poucas dezenas.
-static var _materials_by_color: Dictionary = {}
+static var _shared_by_color: Dictionary = {}
+
+var meshes: Array[GeometryInstance3D] = []
+var _shared_materials: Array[ShaderMaterial] = []
+var _own_by_color: Dictionary = {}
+var _using_own_materials := false
 
 
-## Converte todas as GeometryInstance3D do modelo para o shader de dissolucao
-## preservando a cor de cada peca, e devolve a lista para animar.
-## Uso: _fade_meshes = ZombieDissolveVisual.prepare_meshes($Model)
-static func prepare_meshes(model: Node3D) -> Array[GeometryInstance3D]:
-	var meshes: Array[GeometryInstance3D] = []
+## Converte as pecas do modelo para o shader de dissolucao preservando a cor.
+## Uso: var dissolve := ZombieDissolveVisual.new(model)
+func _init(model: Node3D) -> void:
 	if model == null:
 		push_error("Modelo nulo ao preparar dissolucao; esperado Node3D com malhas do zumbi.")
-		return meshes
+		return
 	for node in model.find_children("*", "GeometryInstance3D", true, false):
 		var geometry := node as GeometryInstance3D
-		var color := _piece_color(geometry)
-		geometry.material_override = material_for_color(color)
+		var shared := material_for_color(_piece_color(geometry))
+		geometry.material_override = shared
 		meshes.append(geometry)
-	return meshes
+		_shared_materials.append(shared)
 
 
-## Material compartilhado da cor pedida.
+## Material compartilhado (inteiro, dissolve 0) da cor pedida.
 ## Uso: var material := ZombieDissolveVisual.material_for_color(Color.RED)
 static func material_for_color(color: Color) -> ShaderMaterial:
 	var key := color.to_html(false)
-	if _materials_by_color.has(key):
-		return _materials_by_color[key]
+	if _shared_by_color.has(key):
+		return _shared_by_color[key]
 	var material := ShaderMaterial.new()
 	material.shader = DISSOLVE_SHADER
 	material.set_shader_parameter("albedo_color", color)
-	_materials_by_color[key] = material
+	material.set_shader_parameter(DISSOLVE_PARAMETER, 0.0)
+	_shared_by_color[key] = material
 	return material
 
 
-## 0 = corpo inteiro, 1 = totalmente desfeito.
-## Uso: ZombieDissolveVisual.set_dissolve(_fade_meshes, 1.0 - visual_opacity)
-static func set_dissolve(meshes: Array[GeometryInstance3D], amount: float) -> void:
+## 0 = corpo inteiro (volta aos materiais compartilhados), 1 = desfeito.
+## Uso: dissolve.set_dissolve(1.0 - visual_opacity)
+func set_dissolve(amount: float) -> void:
 	var clamped := clampf(amount, 0.0, 1.0)
-	for geometry in meshes:
-		if is_instance_valid(geometry):
-			geometry.set_instance_shader_parameter(DISSOLVE_PARAMETER, clamped)
+	if clamped <= 0.0:
+		_assign_shared_materials()
+		return
+	_assign_own_materials()
+	for material in _own_by_color.values():
+		(material as ShaderMaterial).set_shader_parameter(DISSOLVE_PARAMETER, clamped)
+
+
+func is_using_own_materials() -> bool:
+	return _using_own_materials
 
 
 ## Nuvem de po que sobe e deriva com o vento a partir do corpo.
@@ -66,6 +77,27 @@ static func emit_dust(zombie: Node3D, color: Color) -> void:
 		zombie.add_child(dust)
 	dust.color = color.darkened(0.35)
 	dust.restart()
+
+
+func _assign_shared_materials() -> void:
+	if not _using_own_materials:
+		return
+	for index in meshes.size():
+		if is_instance_valid(meshes[index]):
+			meshes[index].material_override = _shared_materials[index]
+	_using_own_materials = false
+
+
+func _assign_own_materials() -> void:
+	if _using_own_materials:
+		return
+	for index in meshes.size():
+		var shared := _shared_materials[index]
+		if not _own_by_color.has(shared):
+			_own_by_color[shared] = shared.duplicate()
+		if is_instance_valid(meshes[index]):
+			meshes[index].material_override = _own_by_color[shared]
+	_using_own_materials = true
 
 
 static func _create_dust() -> CPUParticles3D:
