@@ -127,12 +127,18 @@ func _test_procedural_city_seed(test_root: Node) -> void:
 		visual_root.free()
 		return
 	var cutout_found := false
+	var aura_radius := 0.0
 	for child in apartment_node.get_children():
 		if child is MeshInstance3D and (child as MeshInstance3D).mesh.material is ShaderMaterial:
 			cutout_found = true
+			aura_radius = float((child as MeshInstance3D).mesh.material.get_shader_parameter("cutout_radius"))
 			break
 	if not cutout_found:
 		_fail(test_root, "Predios procedurais deveriam usar o shader da aura de visibilidade.")
+		visual_root.free()
+		return
+	if aura_radius < 2.5:
+		_fail(test_root, "Aura de recorte deveria ter raio ampliado; raio=%.2f." % aura_radius)
 		visual_root.free()
 		return
 	if not apartment_node.has_node("Stair_0_0") or not apartment_node.has_node("StairRamp_0") or not apartment_node.has_node("Stair_1_0") or not apartment_node.has_node("StairRamp_1") or not apartment_node.has_node("Floor_1_Left"):
@@ -282,6 +288,11 @@ func _test_minimap_reveals_zombies_on_sonar(test_root: Node) -> void:
 
 func _test_camera_keeps_fixed_yaw(test_root: Node) -> void:
 	print("Testando camera sem giro de yaw ao mover o jogador...")
+	var building := StaticBody3D.new()
+	building.add_to_group("visibility_building")
+	building.set_meta("visibility_min", Vector3(-6.0, 0.0, -6.0))
+	building.set_meta("visibility_max", Vector3(6.0, 4.0, 6.0))
+	test_root.add_child(building)
 	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
 	player.reads_local_input = false
 	player.position = Vector3(0.0, 1.0, 0.0)
@@ -292,16 +303,25 @@ func _test_camera_keeps_fixed_yaw(test_root: Node) -> void:
 	camera.set("target", player)
 	for step in 8:
 		player.rotation.y = TAU * float(step) / 8.0
-		player.position = Vector3(step * 2.0, 1.0, step)
-		camera.call("_process", 0.1)
+		player.position = Vector3(step * 1.5, 1.0, step * 1.5)
+		for settle in 12:
+			camera.call("_process", 0.1)
 		if absf(camera.rotation.y) > 0.01:
 			_fail(test_root, "Camera deveria manter yaw fixo; yaw=%.3f no passo %d." % [camera.rotation.y, step])
 			camera.free()
 			player.free()
+			building.free()
+			return
+		if absf(camera.global_position.x - player.global_position.x) > 0.05:
+			_fail(test_root, "Camera deveria manter x alinhado ao jogador para o recorte da aura.")
+			camera.free()
+			player.free()
+			building.free()
 			return
 	camera.free()
 	player.free()
-	print("PASS: Camera segue o jogador sem girar o yaw.")
+	building.free()
+	print("PASS: Camera segue o jogador sem girar o yaw e mantendo a aura alinhada.")
 
 
 func _test_enterable_building_spawn_marker(test_root: Node) -> void:
