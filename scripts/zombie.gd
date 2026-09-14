@@ -94,6 +94,13 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if not simulation_enabled:
+		var is_far_proxy := lod_level == LodLevel.FAR
+		model.visible = not is_far_proxy
+		health_label.visible = not is_far_proxy
+		if lod_level != LodLevel.NEAR:
+			lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
+			if lod_tick_skip_counter != 0:
+				return
 		var previous_position := global_position
 		var target_pos := global_position.lerp(network_target_position, minf(delta * 14.0, 1.0))
 		var motion := target_pos - global_position
@@ -110,10 +117,13 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_dead:
 		return
-
-	if lod_level == LodLevel.FAR and alert_target == null and not is_investigating_sound:
+	var is_far_zombie := lod_level == LodLevel.FAR
+	model.visible = not is_far_zombie
+	health_label.visible = not is_far_zombie
+	var has_active_target := is_instance_valid(alert_target) or is_investigating_sound
+	if lod_level != LodLevel.NEAR and not has_active_target:
 		lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
-		if lod_tick_skip_counter != 0:
+		if not is_cluster_leader or lod_tick_skip_counter != 0:
 			global_position.x += velocity.x * delta
 			global_position.z += velocity.z * delta
 			return
@@ -145,7 +155,9 @@ func _physics_process(delta: float) -> void:
 			velocity.x = direction.x * speed
 			velocity.z = direction.z * speed
 			if is_on_wall():
-				velocity = velocity.slide(get_wall_normal())
+				var wall_normal := get_wall_normal()
+				if wall_normal.length_squared() > 0.0001:
+					velocity = velocity.slide(wall_normal)
 			rotation.y = lerp_angle(rotation.y, atan2(-direction.x, -direction.z), minf(delta * 8.0, 1.0))
 			is_walking = true
 		else:
@@ -167,7 +179,9 @@ func _physics_process(delta: float) -> void:
 			velocity.x = direction.x * slow_speed
 			velocity.z = direction.z * slow_speed
 			if is_on_wall():
-				velocity = velocity.slide(get_wall_normal())
+				var wall_normal := get_wall_normal()
+				if wall_normal.length_squared() > 0.0001:
+					velocity = velocity.slide(wall_normal)
 			rotation.y = lerp_angle(rotation.y, atan2(-direction.x, -direction.z), minf(delta * 5.0, 1.0))
 			is_walking = true
 		else:

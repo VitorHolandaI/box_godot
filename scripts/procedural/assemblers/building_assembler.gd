@@ -115,6 +115,15 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 			if door_belongs_to_edge:
 				_add_door(body, door, axis, line, along, origin, floor_y, material)
 			_add_door_header(body, door, axis, line, along, origin, floor_y, material)
+	for window in unit.windows:
+		if window.get("room_id", "") != room.id or window.get("axis", "") != axis:
+			continue
+		var window_center: Vector2 = window["center"]
+		var window_line := window_center.x if axis == "vertical" else window_center.y
+		if is_equal_approx(window_line, line):
+			var window_along := window_center.y if axis == "vertical" else window_center.x
+			var window_half_width := float(window["width"]) * 0.5
+			openings.append({"start": window_along - window_half_width, "end": window_along + window_half_width})
 	openings.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return left["start"] < right["start"])
 	var cursor := start
 	for opening in openings:
@@ -317,7 +326,7 @@ static func _cutout_material(color: Color, ceiling_cutout: bool = false, floor_h
 	material.shader = CUTOUT_SHADER
 	material.set_shader_parameter("base_color", color)
 	material.set_shader_parameter("material_roughness", 0.86)
-	material.set_shader_parameter("cutout_radius", 0.9)
+	material.set_shader_parameter("cutout_radius", 1.5)
 	material.set_shader_parameter("floor_height", floor_height)
 	material.set_shader_parameter("ceiling_cutout", ceiling_cutout)
 	return material
