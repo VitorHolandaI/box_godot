@@ -22,8 +22,9 @@ func setup(new_direction: Vector3, new_damage: int, new_causes_damage: bool = tr
 
 func _physics_process(delta: float) -> void:
 	var next_position := global_position + direction * speed * delta
-	# Mascara 7 = 1 (Mundo) | 2 (Jogador) | 4 (Zumbi) -> permite fogo amigo
-	var query := PhysicsRayQueryParameters3D.create(global_position, next_position, 7)
+	# Mascara 39 = 7 (Mundo/Jogador/Zumbi) | 32 (cadaver) -> tiro tambem
+	# limpa o corpo no chao, sem dar colisao de jogador no cadaver.
+	var query := PhysicsRayQueryParameters3D.create(global_position, next_position, 39)
 	if shooter != null:
 		query.exclude = [shooter.get_rid()]
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
@@ -33,8 +34,8 @@ func _physics_process(delta: float) -> void:
 			global_position = next_position
 			lifetime -= delta
 			return
-		if causes_damage and collider.has_method("take_damage"):
-			collider.take_damage(damage, direction, "bullet", shooter)
+		if causes_damage:
+			_apply_damage(collider)
 		queue_free()
 		return
 
@@ -42,3 +43,12 @@ func _physics_process(delta: float) -> void:
 	lifetime -= delta
 	if lifetime <= 0.0:
 		queue_free()
+
+
+func _apply_damage(collider: Object) -> void:
+	var target: Node = collider as Node
+	while target != null:
+		if target.has_method("take_damage"):
+			target.take_damage(damage, direction, "bullet", shooter)
+			return
+		target = target.get_parent()

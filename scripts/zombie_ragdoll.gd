@@ -4,6 +4,9 @@ const SKIN_COLOR := Color(0.3, 0.58, 0.24)
 const SHIRT_COLOR := Color(0.28, 0.16, 0.12)
 const PANTS_COLOR := Color(0.18, 0.2, 0.22)
 const EYE_COLOR := Color(0.75, 0.05, 0.04)
+# Camada exclusiva dos cadaveres: colide com o mundo (mascara 1) mas nao com
+# jogadores nem zumbis, para o corpo no chao nao prender ninguem dentro de casa.
+const CORPSE_COLLISION_LAYER := 32
 
 var torso_body: RigidBody3D
 
@@ -110,6 +113,14 @@ func _shorten_rigid_limb(limb_name: String) -> void:
 	limb.mass *= 0.5
 
 
+## Um tiro no cadaver remove o corpo do chao, evitando montanhas de corpos
+## presas dentro de casa. Uso: ragdoll.take_damage(35, Vector3.FORWARD, "bullet")
+func take_damage(_amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null) -> void:
+	if is_queued_for_deletion():
+		return
+	queue_free()
+
+
 func _create_torso() -> RigidBody3D:
 	var body := _create_rigid_box("Torso", Vector3(0.8, 0.84, 0.42), Vector3(0.0, 0.44, 0.0), SHIRT_COLOR, 3.0)
 	return body
@@ -130,7 +141,7 @@ func _create_rigid_box(node_name: String, box_size: Vector3, box_position: Vecto
 	var body := RigidBody3D.new()
 	body.name = node_name
 	body.mass = mass_value
-	body.collision_layer = 4
+	body.collision_layer = CORPSE_COLLISION_LAYER
 	body.collision_mask = 1
 	body.linear_damp = 1.2
 	body.angular_damp = 2.4
