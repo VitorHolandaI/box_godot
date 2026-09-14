@@ -42,6 +42,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `split_screen_manager.gd`: viewports com audio 3D, cameras, HUDs locais e minimapa com o jogador, os aliados e os zumbis dentro do raio do sonar.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_building_navigation.gd`: regressoes da escada alternada, navmesh por edificio, zumbi subindo/descendo, jogador subindo e zumbi saindo de casa arrombando portas.
+- `test_city_props.gd`: regressoes da altura/posicao dos postes e do telhado das casas.
 - `test_collision_boundaries.gd`: regressao focada para faca, tiro e ataque de zumbi bloqueados por paredes.
 - `test_door_breaking.gd`: regressoes de destrocos, vao liberado, tremida, faca do jogador e replicacao da quebra.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
