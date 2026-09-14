@@ -16,6 +16,8 @@ const VISION_ARC_SEGMENTS := 32
 const VISION_ARC_RADIUS := VISION_RANGE
 const VISION_ARC_Y := -0.85
 const VISION_OVERLAY_ALPHA := 0.18
+const SONAR_DURATION := 3.0
+const SONAR_COOLDOWN := 6.0
 
 @export var speed := 6.5
 @export var sprint_speed := 8.0
@@ -80,6 +82,9 @@ var knife_pressed := false
 var pistol_pressed := false
 var reload_pressed := false
 var interact_pressed := false
+var sonar_pressed := false
+var sonar_pulse_time := 0.0
+var sonar_cooldown := 0.0
 var network_target_position := Vector3.ZERO
 var network_target_rotation := 0.0
 var remote_buttons: Dictionary = {}
@@ -112,6 +117,8 @@ func _physics_process(delta: float) -> void:
 	pistol_recoil_time = maxf(pistol_recoil_time - delta, 0.0)
 	knife_attack_time = maxf(knife_attack_time - delta, 0.0)
 	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
+	sonar_pulse_time = maxf(sonar_pulse_time - delta, 0.0)
+	sonar_cooldown = maxf(sonar_cooldown - delta, 0.0)
 	muzzle_flash.visible = muzzle_flash_time > 0.0
 	if not simulation_enabled:
 		var previous_position := global_position
@@ -132,6 +139,8 @@ func _physics_process(delta: float) -> void:
 		if remote_input_age > 0.3:
 			move_input = Vector2.ZERO
 			aim_input = Vector2.ZERO
+	if sonar_pressed:
+		trigger_sonar()
 	_handle_interaction_input()
 	_handle_weapon_input()
 
@@ -454,6 +463,30 @@ func configure_vision_overlay(layer: int) -> void:
 	vision_overlay.visible = not is_eliminated
 
 
+## Dispara o pulso sonar que revela os zumbis proximos no minimapa.
+## Respeita o cooldown para nao virar um radar permanente.
+## Uso: player.trigger_sonar()
+func trigger_sonar() -> void:
+	if sonar_cooldown > 0.0 or is_eliminated:
+		return
+	sonar_pulse_time = SONAR_DURATION
+	sonar_cooldown = SONAR_COOLDOWN
+
+
+## Informa se o pulso sonar esta ativo para desenhar os pontos de zumbi.
+## Uso: if player.is_sonar_active(): ...
+func is_sonar_active() -> bool:
+	return sonar_pulse_time > 0.0
+
+
+func get_sonar_text() -> String:
+	if is_sonar_active():
+		return "Sonar: ativo"
+	if sonar_cooldown > 0.0:
+		return "Sonar: %.1fs" % sonar_cooldown
+	return "Sonar: pronto"
+
+
 func can_see_position(target_position: Vector3) -> bool:
 	if is_eliminated:
 		return false
@@ -562,6 +595,7 @@ func _poll_input() -> void:
 	pistol_pressed = Input.is_action_just_pressed(input_action_prefix + "pistol")
 	reload_pressed = Input.is_action_just_pressed(input_action_prefix + "reload")
 	interact_pressed = Input.is_action_just_pressed(input_action_prefix + "interact")
+	sonar_pressed = Input.is_action_just_pressed(input_action_prefix + "sonar")
 
 
 func _network_button_just_pressed(action: String, pressed: bool) -> bool:
@@ -577,6 +611,7 @@ func _clear_transient_input() -> void:
 	pistol_pressed = false
 	reload_pressed = false
 	interact_pressed = false
+	sonar_pressed = false
 
 
 ## Define o indice de cor do uniforme do jogador.

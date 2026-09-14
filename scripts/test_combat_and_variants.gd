@@ -38,6 +38,8 @@ func _ready() -> void:
 	_test_wave_restores_three_lives()
 	await _test_zombie_breaks_blocking_door()
 	_test_zombie_finds_nearest_escape_door()
+	_test_zombie_only_escapes_indoors()
+	_test_player_sonar_pulse()
 	_test_network_ragdoll_is_unique_per_zombie()
 	_test_safehouse_structure_and_spawns()
 	_test_gunshot_sound_echolocation()
@@ -459,6 +461,62 @@ func _test_zombie_finds_nearest_escape_door() -> void:
 	near_door.queue_free()
 	far_door.queue_free()
 	print("PASS: Zumbi preso busca e quebra a porta fechada mais proxima.")
+
+
+func _test_zombie_only_escapes_indoors() -> void:
+	print("Testando fuga de zumbi apenas dentro de construcoes...")
+	var building := StaticBody3D.new()
+	building.add_to_group("visibility_building")
+	building.set_meta("visibility_min", Vector3(-5.0, 0.0, -5.0))
+	building.set_meta("visibility_max", Vector3(5.0, 4.0, 5.0))
+	add_child(building)
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.simulation_enabled = false
+	zombie.position = Vector3(0.0, 1.0, 0.0)
+	add_child(zombie)
+	if not bool(zombie.call("_is_inside_building")):
+		push_error("FALHA: Zumbi dentro dos limites deveria ser considerado dentro da casa.")
+		_mark_failure()
+		zombie.queue_free()
+		building.queue_free()
+		return
+	zombie.position = Vector3(20.0, 1.0, 20.0)
+	if bool(zombie.call("_is_inside_building")):
+		push_error("FALHA: Zumbi na rua nao deveria acionar a rota de fuga interna.")
+		_mark_failure()
+		zombie.queue_free()
+		building.queue_free()
+		return
+	zombie.queue_free()
+	building.queue_free()
+	print("PASS: Rota de fuga vale somente dentro de construcoes.")
+
+
+func _test_player_sonar_pulse() -> void:
+	print("Testando pulso sonar que revela zumbis...")
+	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
+	player.reads_local_input = false
+	add_child(player)
+	if player.is_sonar_active() or player.get_sonar_text() != "Sonar: pronto":
+		push_error("FALHA: Sonar deveria iniciar inativo e pronto.")
+		_mark_failure()
+		player.queue_free()
+		return
+	player.trigger_sonar()
+	if not player.is_sonar_active() or player.get_sonar_text() != "Sonar: ativo":
+		push_error("FALHA: Sonar deveria ativar ao ser disparado.")
+		_mark_failure()
+		player.queue_free()
+		return
+	player.set("sonar_pulse_time", 0.0)
+	player.trigger_sonar()
+	if player.is_sonar_active():
+		push_error("FALHA: Cooldown deveria impedir um novo pulso imediato.")
+		_mark_failure()
+		player.queue_free()
+		return
+	player.queue_free()
+	print("PASS: Sonar ativa, revela e respeita cooldown.")
 
 
 func _test_network_ragdoll_is_unique_per_zombie() -> void:
