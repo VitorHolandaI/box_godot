@@ -4,6 +4,7 @@ extends RefCounted
 const WALL_HEIGHT := 3.2
 const WALL_THICKNESS := 0.12
 const DOOR_HEIGHT := 2.75
+const AURA_CUTOUT_RADIUS := 3.0
 const WINDOW_SILL := 1.05
 const WINDOW_HEIGHT := 0.9
 const WINDOW_FRAME_THICKNESS := 0.08
@@ -393,7 +394,7 @@ static func _cutout_material(color: Color, ceiling_cutout: bool = false, floor_h
 	material.shader = CUTOUT_SHADER
 	material.set_shader_parameter("base_color", color)
 	material.set_shader_parameter("material_roughness", 0.86)
-	material.set_shader_parameter("cutout_radius", 1.5)
+	material.set_shader_parameter("cutout_radius", AURA_CUTOUT_RADIUS)
 	material.set_shader_parameter("floor_height", floor_height)
 	material.set_shader_parameter("ceiling_cutout", ceiling_cutout)
 	return material

@@ -5,7 +5,7 @@ uniform sampler2D albedo_texture : source_color, filter_linear_mipmap;
 uniform bool use_texture = false;
 uniform float material_roughness : hint_range(0.0, 1.0) = 0.9;
 uniform float material_metallic : hint_range(0.0, 1.0) = 0.0;
-uniform float cutout_radius : hint_range(0.3, 3.0) = 1.5;
+uniform float cutout_radius : hint_range(0.3, 6.0) = 3.0;
 uniform float occlusion_epsilon : hint_range(0.1, 2.0) = 0.5;
 uniform float floor_height : hint_range(1.0, 6.0) = 2.8;
 uniform bool ceiling_cutout = false;
@@ -44,11 +44,17 @@ void fragment() {
 
 	float player_floor_base = floor(player_position.y / floor_height) * floor_height;
 	bool player_floor = world_position.y >= player_floor_base - 0.12 && world_position.y <= player_floor_base + floor_height + 0.12;
-	bool player_inside_building = !use_building_bounds || (
+	bool bounds_known = use_building_bounds;
+	bool player_inside_building = !bounds_known || (
 		player_position.x >= building_min.x && player_position.x <= building_max.x &&
 		player_position.y >= building_min.y && player_position.y <= building_max.y &&
 		player_position.z >= building_min.z && player_position.z <= building_max.z
 	);
+	// Dentro do predio, somente o andar atual fica visivel: os demais andares
+	// (paredes, lajes e telhado) sao ocultados por completo.
+	if (bounds_known && player_inside_building && !player_floor) {
+		discard;
+	}
 	bool upper_floor = ceiling_cutout && world_position.y >= player_floor_base + floor_height - 0.12;
 	bool can_cutout = !player_inside_building || player_floor || upper_floor;
 	if (within_tube && occluding && can_cutout) {
