@@ -5,7 +5,7 @@ uniform sampler2D albedo_texture : source_color, filter_linear_mipmap;
 uniform bool use_texture = false;
 uniform float material_roughness : hint_range(0.0, 1.0) = 0.9;
 uniform float material_metallic : hint_range(0.0, 1.0) = 0.0;
-uniform float cutout_radius : hint_range(0.3, 3.0) = 0.9;
+uniform float cutout_radius : hint_range(0.3, 3.0) = 1.5;
 uniform float occlusion_epsilon : hint_range(0.1, 2.0) = 0.5;
 uniform float floor_height : hint_range(1.0, 6.0) = 2.8;
 uniform bool ceiling_cutout = false;
@@ -21,8 +21,11 @@ void vertex() {
 }
 
 void fragment() {
-	vec3 camera_to_player = -camera_offset;
-	vec3 player_position = CAMERA_POSITION_WORLD - camera_offset;
+	float player_height = CAMERA_POSITION_WORLD.y - camera_offset.y;
+	float camera_ray_y = min(CAMERA_DIRECTION_WORLD.y, -0.001);
+	float camera_to_floor = (player_height - CAMERA_POSITION_WORLD.y) / camera_ray_y;
+	vec3 camera_to_player = CAMERA_DIRECTION_WORLD * camera_to_floor;
+	vec3 player_position = CAMERA_POSITION_WORLD + camera_to_player;
 	float player_distance = length(camera_to_player);
 	vec3 camera_direction = camera_to_player / player_distance;
 

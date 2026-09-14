@@ -449,6 +449,11 @@ func _test_zombie_flock_coordinator() -> void:
 		push_error("FALHA: LOD de distancia incorreto: z1=%s, z_far=%s" % [z1.get("lod_level"), z_far.get("lod_level")])
 		_mark_failure()
 		return
+	z_far._physics_process(0.2)
+	if (z_far.get_node("Model") as Node3D).visible or (z_far.get_node("HealthLabel") as Label3D).visible:
+		push_error("FALHA: Proxy distante deveria ocultar modelo e etiqueta no cliente.")
+		_mark_failure()
+		return
 
 	# Alerta o lider e valida replicacao para seguidor
 	leader.set("alert_target", p)
