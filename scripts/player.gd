@@ -10,6 +10,11 @@ const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const KNIFE_ATTACK_DURATION := 0.4
 const MAX_LIVES := 3
 const MAX_RESERVE_AMMO := 96
+const VISION_RANGE := 24.0
+const VISION_HALF_ANGLE := deg_to_rad(55.0)
+const VISION_ARC_SEGMENTS := 32
+const VISION_ARC_RADIUS := 24.0
+const VISION_ARC_Y := -1.12
 
 @export var speed := 6.5
 @export var sprint_speed := 8.0
@@ -64,6 +69,7 @@ var hit_reaction_time := 0.0
 var hit_direction := Vector3.ZERO
 var walk_time := 0.0
 var spawn_position := Vector3.ZERO
+var vision_overlay: MeshInstance3D
 var move_input := Vector2.ZERO
 var aim_input := Vector2.ZERO
 var jump_pressed := false
@@ -91,6 +97,7 @@ func _ready() -> void:
 	network_target_rotation = rotation.y
 	_apply_player_color()
 	_update_weapon_models()
+	_create_vision_overlay()
 
 
 func _physics_process(delta: float) -> void:
@@ -412,11 +419,38 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 func respawn() -> void:
 	global_position = spawn_position
 	velocity = Vector3.ZERO
+	is_eliminated = false
+	visible = true
+	collision_layer = 2
+	collision_mask = 23
 	health = max_health
 	stamina = max_stamina
 	hit_reaction_time = 0.0
 	pistol_ammo = 12
 	reserve_ammo = 48
+
+
+func set_spawn_position(position: Vector3) -> void:
+	spawn_position = position
+
+
+func configure_vision_overlay(layer: int) -> void:
+	if vision_overlay == null or layer < 1 or layer > 20:
+		return
+	vision_overlay.set_layer_mask_value(1, false)
+	vision_overlay.set_layer_mask_value(layer, true)
+	vision_overlay.visible = not is_eliminated
+
+
+func can_see_position(target_position: Vector3) -> bool:
+	if is_eliminated:
+		return false
+	var offset := target_position - global_position
+	offset.y = 0.0
+	var distance := offset.length()
+	if distance <= 0.01 or distance > VISION_RANGE:
+		return false
+	return -global_transform.basis.z.dot(offset / distance) >= cos(VISION_HALF_ANGLE)
 
 
 func get_lives_text() -> String:
@@ -444,6 +478,37 @@ func get_stamina_text() -> String:
 func _update_weapon_models() -> void:
 	knife_model.visible = current_weapon == Weapon.KNIFE
 	pistol_model.visible = current_weapon == Weapon.PISTOL
+
+
+func _create_vision_overlay() -> void:
+	vision_overlay = MeshInstance3D.new()
+	vision_overlay.name = "VisionArc"
+	vision_overlay.visible = false
+	vision_overlay.position.y = VISION_ARC_Y
+	vision_overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	vision_overlay.mesh = _build_vision_arc_mesh()
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color.WHITE
+	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
+	vision_overlay.material_override = material
+	add_child(vision_overlay)
+
+
+func _build_vision_arc_mesh() -> ArrayMesh:
+	var surface := SurfaceTool.new()
+	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
+	for segment in VISION_ARC_SEGMENTS:
+		var first_angle := lerpf(-VISION_HALF_ANGLE, VISION_HALF_ANGLE, float(segment) / VISION_ARC_SEGMENTS)
+		var second_angle := lerpf(-VISION_HALF_ANGLE, VISION_HALF_ANGLE, float(segment + 1) / VISION_ARC_SEGMENTS)
+		surface.add_vertex(Vector3.ZERO)
+		surface.add_vertex(_vision_arc_point(first_angle))
+		surface.add_vertex(_vision_arc_point(second_angle))
+	return surface.commit()
+
+
+func _vision_arc_point(angle: float) -> Vector3:
+	return Vector3(sin(angle) * VISION_ARC_RADIUS, 0.02, -cos(angle) * VISION_ARC_RADIUS)
 
 
 func _update_noise(delta: float, direction: Vector3) -> void:
