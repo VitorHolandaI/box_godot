@@ -26,6 +26,7 @@ func run(test_root: Node) -> void:
 	_test_nearest_target_and_melee(test_root)
 	_test_survival_city_layout(test_root)
 	_test_house_gable_roof(test_root)
+	_test_house_windows_are_glazed_openings(test_root)
 	_test_building_door_states(test_root)
 	_test_building_door_network_state(test_root)
 
@@ -303,6 +304,53 @@ func _test_house_gable_roof(test_root: Node) -> void:
 		return
 	house.free()
 	print("PASS: Telhado, porta, interior mobiliado e limites de recorte validados.")
+
+
+func _test_house_windows_are_glazed_openings(test_root: Node) -> void:
+	print("Testando janelas de vidro com parede acima e abaixo...")
+	var house_blueprint = BUILDING_GENERATOR_SCRIPT.generate(240912, "house")
+	var house: StaticBody3D = BUILDING_ASSEMBLER_SCRIPT.assemble(house_blueprint)
+	test_root.add_child(house)
+	var glass_nodes := house.find_children("WindowGlass_*", "MeshInstance3D", true, false)
+	if glass_nodes.is_empty():
+		_fail(test_root, "Casa procedural deveria possuir janelas de vidro.")
+		house.free()
+		return
+	var glass := glass_nodes[0] as MeshInstance3D
+	var glass_box := glass.mesh as BoxMesh
+	var material := glass_box.material as StandardMaterial3D if glass_box != null else null
+	if material == null or material.transparency != BaseMaterial3D.TRANSPARENCY_ALPHA or material.albedo_color.a >= 0.5:
+		_fail(test_root, "Vidro da janela deveria ser translucido, nao um bloco solido.")
+		house.free()
+		return
+	if glass_box.size.y >= 1.0:
+		_fail(test_root, "Janela nao deveria ocupar a altura total da parede; altura=%.2f." % glass_box.size.y)
+		house.free()
+		return
+	var glass_top := glass.position.y + glass_box.size.y * 0.5
+	var glass_bottom := glass.position.y - glass_box.size.y * 0.5
+	var has_wall_below := false
+	var has_wall_above := false
+	for node in house.find_children("*", "MeshInstance3D", true, false):
+		var wall := node as MeshInstance3D
+		if String(wall.name).begins_with("Window") or String(wall.name).begins_with("Floor"):
+			continue
+		var wall_box := wall.mesh as BoxMesh
+		if wall_box == null or wall_box.size.y < 0.5:
+			continue
+		var aligned := absf(wall.position.z - glass.position.z) < 0.2 or absf(wall.position.x - glass.position.x) < 0.2
+		if not aligned:
+			continue
+		if wall.position.y + wall_box.size.y * 0.5 <= glass_bottom + 0.05:
+			has_wall_below = true
+		if wall.position.y - wall_box.size.y * 0.5 >= glass_top - 0.05:
+			has_wall_above = true
+	if not has_wall_below or not has_wall_above:
+		_fail(test_root, "Janela deveria ter parede abaixo e acima; abaixo=%s acima=%s." % [has_wall_below, has_wall_above])
+		house.free()
+		return
+	house.free()
+	print("PASS: Janelas tem vidro translucido e parede acima e abaixo.")
 
 
 func _test_building_door_network_state(test_root: Node) -> void:
