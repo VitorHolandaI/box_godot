@@ -40,6 +40,7 @@ func _ready() -> void:
 	_test_zombie_finds_nearest_escape_door()
 	_test_zombie_only_escapes_indoors()
 	_test_player_sonar_pulse()
+	_test_corpse_does_not_block_player()
 	_test_network_ragdoll_is_unique_per_zombie()
 	_test_safehouse_structure_and_spawns()
 	_test_gunshot_sound_echolocation()
@@ -517,6 +518,38 @@ func _test_player_sonar_pulse() -> void:
 		return
 	player.queue_free()
 	print("PASS: Sonar ativa, revela e respeita cooldown.")
+
+
+func _test_corpse_does_not_block_player() -> void:
+	print("Testando cadaver que nao prende o jogador e some ao ser atingido...")
+	var ragdoll := RAGDOLL_SCENE.instantiate() as Node3D
+	add_child(ragdoll)
+	ragdoll.call("setup", Vector3.ZERO, 0, 12345)
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.reads_local_input = false
+	add_child(player)
+	var torso := ragdoll.get_node("Torso") as RigidBody3D
+	if torso.collision_layer != 32:
+		push_error("FALHA: Cadaver deveria usar camada exclusiva 32; camada=%d." % torso.collision_layer)
+		_mark_failure()
+		ragdoll.queue_free()
+		player.queue_free()
+		return
+	if torso.collision_layer & player.collision_mask != 0:
+		push_error("FALHA: Cadaver nao deveria colidir com o jogador; mascara do jogador=%d." % player.collision_mask)
+		_mark_failure()
+		ragdoll.queue_free()
+		player.queue_free()
+		return
+	ragdoll.call("take_damage", 35, Vector3.FORWARD, "bullet")
+	if not ragdoll.is_queued_for_deletion():
+		push_error("FALHA: Tiro no cadaver deveria remover o corpo do chao.")
+		_mark_failure()
+		ragdoll.queue_free()
+		player.queue_free()
+		return
+	player.queue_free()
+	print("PASS: Cadaver nao bloqueia o jogador e e removido a tiro.")
 
 
 func _test_network_ragdoll_is_unique_per_zombie() -> void:
