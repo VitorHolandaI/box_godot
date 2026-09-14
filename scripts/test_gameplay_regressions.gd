@@ -9,6 +9,7 @@ const ZOMBIE_SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator
 const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const PERFORMANCE_HUD_SCRIPT := preload("res://scripts/performance_hud.gd")
+const LOCAL_CAMERA_SCRIPT := preload("res://scripts/local_camera.gd")
 const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/generators/city_generator.gd")
 const PROCEDURAL_BUILDING_GENERATOR: GDScript = preload("res://scripts/procedural/generators/building_generator.gd")
 const PROCEDURAL_BUILDING_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/building_assembler.gd")
@@ -27,6 +28,8 @@ func run(test_root: Node) -> void:
 	_test_procedural_city_seed(test_root)
 	_test_latency_hud(test_root)
 	_test_hud_alive_zombie_count(test_root)
+	_test_minimap_reveals_zombies_on_sonar(test_root)
+	_test_camera_keeps_fixed_yaw(test_root)
 	_test_enterable_building_spawn_marker(test_root)
 	_test_no_street_zombie_starts(test_root)
 	_test_spawn_locations_stay_in_forest(test_root)
@@ -232,6 +235,73 @@ func _test_hud_alive_zombie_count(test_root: Node) -> void:
 	zombie_a.free()
 	zombie_b.free()
 	print("PASS: Contador de zumbis vivos no HUD validado.")
+
+
+func _test_minimap_reveals_zombies_on_sonar(test_root: Node) -> void:
+	print("Testando revelacao de zumbis no minimapa pelo sonar...")
+	var split_screen := SPLIT_SCREEN_MANAGER_SCRIPT.new()
+	test_root.add_child(split_screen)
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.reads_local_input = false
+	player.position = Vector3(0.0, 1.0, 0.0)
+	test_root.add_child(player)
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.simulation_enabled = false
+	zombie.position = Vector3(4.0, 1.0, 4.0)
+	test_root.add_child(zombie)
+	var local_players: Array[Node] = [player]
+	split_screen.call("configure", local_players)
+	split_screen.call("_process", 0.016)
+	var minimaps: Array = split_screen.get("minimaps")
+	if minimaps.is_empty():
+		_fail(test_root, "Configure deveria criar um minimapa por jogador local.")
+		split_screen.free()
+		player.free()
+		zombie.free()
+		return
+	var minimap: Control = minimaps[0]
+	if not (minimap.get("tracked_zombies") as Array).is_empty():
+		_fail(test_root, "Sonar inativo nao deveria revelar zumbis no minimapa.")
+		split_screen.free()
+		player.free()
+		zombie.free()
+		return
+	player.call("trigger_sonar")
+	split_screen.call("_process", 0.016)
+	if (minimap.get("tracked_zombies") as Array).is_empty():
+		_fail(test_root, "Sonar ativo deveria revelar os zumbis no minimapa.")
+		split_screen.free()
+		player.free()
+		zombie.free()
+		return
+	split_screen.free()
+	player.free()
+	zombie.free()
+	print("PASS: Sonar revela os zumbis no minimapa e limpa ao expirar.")
+
+
+func _test_camera_keeps_fixed_yaw(test_root: Node) -> void:
+	print("Testando camera sem giro de yaw ao mover o jogador...")
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.reads_local_input = false
+	player.position = Vector3(0.0, 1.0, 0.0)
+	test_root.add_child(player)
+	var camera := Camera3D.new()
+	camera.set_script(LOCAL_CAMERA_SCRIPT)
+	test_root.add_child(camera)
+	camera.set("target", player)
+	for step in 8:
+		player.rotation.y = TAU * float(step) / 8.0
+		player.position = Vector3(step * 2.0, 1.0, step)
+		camera.call("_process", 0.1)
+		if absf(camera.rotation.y) > 0.01:
+			_fail(test_root, "Camera deveria manter yaw fixo; yaw=%.3f no passo %d." % [camera.rotation.y, step])
+			camera.free()
+			player.free()
+			return
+	camera.free()
+	player.free()
+	print("PASS: Camera segue o jogador sem girar o yaw.")
 
 
 func _test_enterable_building_spawn_marker(test_root: Node) -> void:
