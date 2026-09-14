@@ -8,6 +8,7 @@ extends RefCounted
 
 const AMMO_PICKUP_SCENE: PackedScene = preload("res://scenes/ammo_pickup.tscn")
 const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
+const AURA_CUTOUT_RADIUS: float = 3.0
 const WATERTOWER_MODEL: String = "res://assets/models/city/watertower.gltf"
 const DUMPSTER_MODEL: String = "res://assets/models/city/dumpster.gltf"
 const PALLET_MODEL: String = "res://assets/models/modular_urban/pallet.glb"
@@ -70,7 +71,7 @@ static func build_procedural_building(kind: String, rng: RandomNumberGenerator) 
 	cutout_wall_mat.shader = CUTOUT_SHADER
 	cutout_wall_mat.set_shader_parameter("base_color", Color(wall_color.r, wall_color.g, wall_color.b, 1.0))
 	cutout_wall_mat.set_shader_parameter("material_roughness", 0.85)
-	cutout_wall_mat.set_shader_parameter("cutout_radius", 1.5)
+	cutout_wall_mat.set_shader_parameter("cutout_radius", AURA_CUTOUT_RADIUS)
 	cutout_wall_mat.set_shader_parameter("floor_height", TILE_SCALE)
 
 	var cutout_trim_mat := ShaderMaterial.new()
@@ -78,7 +79,7 @@ static func build_procedural_building(kind: String, rng: RandomNumberGenerator) 
 	var trim_c := wall_color.darkened(0.28)
 	cutout_trim_mat.set_shader_parameter("base_color", Color(trim_c.r, trim_c.g, trim_c.b, 1.0))
 	cutout_trim_mat.set_shader_parameter("material_roughness", 0.75)
-	cutout_trim_mat.set_shader_parameter("cutout_radius", 1.5)
+	cutout_trim_mat.set_shader_parameter("cutout_radius", AURA_CUTOUT_RADIUS)
 	cutout_trim_mat.set_shader_parameter("floor_height", TILE_SCALE)
 
 	var door_x := rng.randi_range(1, grid_w - 2)
@@ -132,7 +133,7 @@ static func _create_floor_and_ceiling(body: StaticBody3D, w: int, d: int, floors
 	cutout_slab_mat.shader = CUTOUT_SHADER
 	cutout_slab_mat.set_shader_parameter("base_color", Color(0.24, 0.22, 0.20, 1.0))
 	cutout_slab_mat.set_shader_parameter("material_roughness", 0.9)
-	cutout_slab_mat.set_shader_parameter("cutout_radius", 1.5)
+	cutout_slab_mat.set_shader_parameter("cutout_radius", AURA_CUTOUT_RADIUS)
 	cutout_slab_mat.set_shader_parameter("floor_height", TILE_SCALE)
 	cutout_slab_mat.set_shader_parameter("ceiling_cutout", true)
 
