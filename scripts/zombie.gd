@@ -22,7 +22,9 @@ const DOOR_ATTACK_HEIGHT := 0.9
 const FEET_OFFSET := 1.1
 const FLOCK_PUSH_GAIN := 1.5
 const FLOCK_PUSH_MAX_SPEED_RATIO := 0.5
-const VISUAL_FADE_TIME := 0.6
+const DISSOLVE_OUT_TIME := 1.4
+const REASSEMBLE_TIME := 0.5
+const DISSOLVE_VISUAL_SCRIPT: GDScript = preload("res://scripts/zombie_dissolve_visual.gd")
 
 @export var speed := 2.2
 @export var gravity := 22.0
@@ -552,14 +554,16 @@ func set_vision_visible(is_visible: bool) -> void:
 	vision_visible = is_visible
 
 
-## Esvaece (ou restaura) o proxy visual ao entrar/sair do FOV, do LOD distante
-## ou apos a morte. O corpo so some por completo quando a opacidade chega a 0.
+## Desintegra (ou remonta) o proxy visual ao entrar/sair do FOV, do LOD
+## distante ou apos a morte. Ao sair da visao o corpo vira po aos poucos, como
+## um estalo do Thanos; ao voltar ele se remonta mais rapido e sem po.
 ## Uso: chamado a cada tick de fisica.
 func _update_visual_fade(delta: float) -> void:
 	var should_show := vision_visible and not is_dead and lod_level != LodLevel.FAR
 	var target_opacity := 1.0 if should_show else 0.0
-	var fade_step := delta / VISUAL_FADE_TIME
-	visual_opacity = move_toward(visual_opacity, target_opacity, fade_step)
+	var fade_time := REASSEMBLE_TIME if should_show else DISSOLVE_OUT_TIME
+	var was_whole := visual_opacity >= 0.999
+	visual_opacity = move_toward(visual_opacity, target_opacity, delta / fade_time)
 	if visual_opacity <= 0.02:
 		visible = false
 		model.visible = false
@@ -568,16 +572,15 @@ func _update_visual_fade(delta: float) -> void:
 	visible = true
 	model.visible = true
 	health_label.visible = true
-	var transparency := 1.0 - visual_opacity
-	for mesh in _fade_meshes:
-		mesh.transparency = transparency
+	# Po so quando a desintegracao comeca por perda de visao, e nunca no servidor.
+	if was_whole and visual_opacity < 0.999 and not vision_visible and not is_dead and not NetworkSession.is_server():
+		DISSOLVE_VISUAL_SCRIPT.emit_dust(self, ZombieMutator.appearance_colors(appearance_hash)[1])
+	DISSOLVE_VISUAL_SCRIPT.set_dissolve(_fade_meshes, 1.0 - visual_opacity)
 	health_label.modulate.a = visual_opacity
 
 
 func _collect_fade_meshes() -> void:
-	_fade_meshes.clear()
-	for node in model.find_children("*", "GeometryInstance3D", true, false):
-		_fade_meshes.append(node as GeometryInstance3D)
+	_fade_meshes = DISSOLVE_VISUAL_SCRIPT.prepare_meshes(model)
 
 
 func _spawn_ragdoll() -> void:
@@ -661,6 +664,7 @@ func apply_network_state(state: Dictionary) -> void:
 		if net_type != int(zombie_type):
 			zombie_type = net_type as ZombieType
 			ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
+			_collect_fade_meshes()
 	var received_attack_sequence := int(state.get("attack_sequence", last_applied_attack_sequence))
 	if last_applied_attack_sequence < 0:
 		last_applied_attack_sequence = received_attack_sequence
