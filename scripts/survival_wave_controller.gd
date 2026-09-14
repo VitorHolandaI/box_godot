@@ -2,6 +2,7 @@ class_name SurvivalWaveController
 extends RefCounted
 
 signal state_changed
+signal wave_started(wave_index: int)
 
 const SURVIVAL_WAVE_SCHEDULE_SCRIPT := preload("res://scripts/survival_wave_schedule.gd")
 const SPAWN_INTERVAL := 0.18
@@ -40,6 +41,7 @@ func tick(delta: float) -> void:
 		wave_index += 1
 		spawned_in_wave = 0
 		_spawn_elapsed = 0.0
+		wave_started.emit(wave_index)
 	state_changed.emit()
 
 

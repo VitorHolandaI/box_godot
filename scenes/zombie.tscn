@@ -36,7 +36,7 @@ material = SubResource("PantsMaterial")
 size = Vector3(0.34, 0.84, 0.36)
 
 [sub_resource type="CapsuleShape3D" id="ZombieShape"]
-radius = 0.4
+radius = 0.56
 height = 2.2
 
 [node name="Zombie" type="CharacterBody3D" groups=["zombies"]]

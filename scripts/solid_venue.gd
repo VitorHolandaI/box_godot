@@ -81,7 +81,7 @@ func _create_hollow_building(dimensions: Vector3) -> void:
 		_create_box_with_collision("DoorHeader", Vector3(door_w, header_h, thickness), Vector3(0.0, door_h + header_h * 0.5, -half_z), wall_mat)
 	var door = DESTRUCTIBLE_DOOR_SCRIPT.new()
 	door.name = "BuildingDoor"
-	door.configure(Vector3(door_w, door_h, thickness), wall_mat)
+	door.configure(Vector3(door_w, door_h, thickness), _cutout_material(Color(0.24, 0.12, 0.055), 0.88))
 	door.position = Vector3(0.0, 0.0, -half_z)
 	add_child(door)
 

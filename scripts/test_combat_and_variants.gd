@@ -12,6 +12,7 @@ const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinato
 const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
 const GAMEPLAY_REGRESSION_TESTS_SCRIPT := preload("res://scripts/test_gameplay_regressions.gd")
 const SURVIVAL_TESTS_SCRIPT := preload("res://scripts/test_survival_mode.gd")
+const COLLISION_BOUNDARY_TESTS_SCRIPT := preload("res://scripts/test_collision_boundaries.gd")
 
 var failure_count := 0
 
@@ -21,6 +22,7 @@ func _ready() -> void:
 	_test_friendly_fire_knife()
 	_test_friendly_fire_bullet()
 	_test_pistol_fixed_trajectory()
+	await COLLISION_BOUNDARY_TESTS_SCRIPT.new().run(self)
 	GAMEPLAY_REGRESSION_TESTS_SCRIPT.new().run(self)
 	SURVIVAL_TESTS_SCRIPT.new().run(self)
 	if bool(get_meta("unit_test_failed", false)):

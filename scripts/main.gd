@@ -4,11 +4,13 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const ZOMBIE_RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
-const AMMO_PICKUP_SCENE := preload("res://scenes/ammo_pickup.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
 const ZOMBIE_SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator.gd")
 const SURVIVAL_WAVE_CONTROLLER_SCRIPT := preload("res://scripts/survival_wave_controller.gd")
+const DOOR_NETWORK_STATE_SCRIPT := preload("res://scripts/door_network_state.gd")
+const WAVE_SUPPLY_CONTROLLER_SCRIPT := preload("res://scripts/wave_supply_controller.gd")
+const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state.gd")
 const MAX_LOCAL_PLAYERS := 4
 const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
 const MAX_CORPSES := 20
@@ -47,10 +49,15 @@ var bot_ai := PlayerBotAI.new()
 var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
 var zombie_spawn_locator = ZOMBIE_SPAWN_LOCATOR_SCRIPT.new()
 var survival_wave_controller
+var wave_supply_controller
 
 
 func _ready() -> void:
 	survival_wave_controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(Callable(self, "_spawn_zombie"))
+	if not NetworkSession.is_client():
+		wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
+		survival_wave_controller.wave_started.connect(wave_supply_controller.refresh_wave)
+		wave_supply_controller.refresh_wave(0)
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
 	coordinator.name = "ZombieFlockCoordinator"
 	add_child(coordinator)
@@ -135,30 +142,6 @@ func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3,
 		var oldest_ragdoll: Node = ragdolls.pop_front()
 		if is_instance_valid(oldest_ragdoll):
 			oldest_ragdoll.queue_free()
-	if (NetworkSession.is_server() or NetworkSession.is_offline()) and randf() < 0.25:
-		_spawn_world_ammo(position + Vector3.UP * 0.15)
-
-
-func _spawn_world_ammo(spawn_position: Vector3) -> void:
-	var pickup := AMMO_PICKUP_SCENE.instantiate() as Node3D
-	pickup.set("respawns", false)
-	pickup.set("ammo_amount", 18)
-	add_child(pickup)
-	pickup.global_position = spawn_position
-	if NetworkSession.is_server():
-		for peer_id in NetworkSession.loaded_peers:
-			_replicate_ammo_drop.rpc_id(int(peer_id), spawn_position)
-
-
-@rpc("authority", "call_remote", "reliable")
-func _replicate_ammo_drop(spawn_position: Vector3) -> void:
-	if not NetworkSession.is_client():
-		return
-	var pickup := AMMO_PICKUP_SCENE.instantiate() as Node3D
-	pickup.set("respawns", false)
-	pickup.set("ammo_amount", 18)
-	add_child(pickup)
-	pickup.global_position = spawn_position
 
 
 func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3) -> void:
@@ -326,6 +309,8 @@ func _collect_zombie_states() -> Array:
 func _send_player_snapshots(states: Array) -> void:
 	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
 	var door_open := safehouse_door != null and bool(safehouse_door.call("is_open_requested"))
+	var building_door_states := DOOR_NETWORK_STATE_SCRIPT.collect(get_tree())
+	var supply_states := SUPPLY_NETWORK_STATE_SCRIPT.collect(get_tree())
 	for packet_index in packet_count:
 		var packet_states: Array = []
 		var first_state := packet_index * MAX_PLAYERS_PER_SNAPSHOT_PACKET
@@ -333,7 +318,7 @@ func _send_player_snapshots(states: Array) -> void:
 		for state_index in range(first_state, state_limit):
 			packet_states.append(states[state_index])
 		for peer_id in NetworkSession.loaded_peers:
-			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open)
+			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open, building_door_states, supply_states)
 
 
 func _send_zombie_snapshots(states: Array) -> void:
@@ -350,11 +335,13 @@ func _send_zombie_snapshots(states: Array) -> void:
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func _apply_player_snapshot(player_states: Array, door_open: bool) -> void:
+func _apply_player_snapshot(player_states: Array, door_open: bool, building_door_states: Dictionary, supply_states: Dictionary) -> void:
 	if not NetworkSession.is_client():
 		return
 	if safehouse_door != null:
 		safehouse_door.call("apply_network_open_state", door_open)
+	DOOR_NETWORK_STATE_SCRIPT.apply(get_tree(), building_door_states)
+	SUPPLY_NETWORK_STATE_SCRIPT.apply(get_tree(), supply_states)
 	for state_value in player_states:
 		if not state_value is Dictionary:
 			continue

@@ -297,6 +297,11 @@ func _find_knife_target() -> Node3D:
 		offset.y = 0.0
 		var distance := offset.length()
 		if distance <= best_distance and forward.dot(offset.normalized()) > 0.6:
+			var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.6, target.global_position + Vector3.UP * 0.6, 1)
+			query.exclude = [get_rid()]
+			var hit := get_world_3d().direct_space_state.intersect_ray(query)
+			if not hit.is_empty():
+				continue
 			best_distance = distance
 			best_target = target
 	return best_target
@@ -313,7 +318,8 @@ func _fire_pistol() -> Node3D:
 	gunshot_noise_time = 0.6
 	pistol_stance_time = 8.0
 	pistol_recoil_time = 0.12
-	var origin := muzzle_flash.global_position
+	# Nasce dentro do colisor para uma arma atravessando a parede nao disparar do lado de fora.
+	var origin := global_position + Vector3.UP * 0.55
 	var bullet_direction := Vector3(aim_input.x, 0.0, aim_input.y).normalized()
 	if bullet_direction.is_zero_approx():
 		bullet_direction = -global_transform.basis.z
@@ -360,6 +366,22 @@ func add_ammo(amount: int) -> int:
 ##   if player.can_pickup_ammo():
 func can_pickup_ammo() -> bool:
 	return reserve_ammo < MAX_RESERVE_AMMO
+
+
+## Recupera vida sem ultrapassar o maximo e retorna o total recebido.
+## Uso: var recovered := player.add_health(30)
+func add_health(amount: int) -> int:
+	if amount <= 0 or health <= 0 or is_eliminated or health >= max_health:
+		return 0
+	var recovered := mini(amount, max_health - health)
+	health += recovered
+	return recovered
+
+
+## Informa se o jogador pode consumir um suprimento de vida.
+## Uso: if player.can_pickup_health():
+func can_pickup_health() -> bool:
+	return health > 0 and health < max_health and not is_eliminated
 
 
 ## Aplica dano ao jogador, acionando flinch de impacto e empurrao fisico.
