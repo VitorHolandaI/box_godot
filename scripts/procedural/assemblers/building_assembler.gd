@@ -3,8 +3,16 @@ extends RefCounted
 
 const WALL_HEIGHT := 2.6
 const WALL_THICKNESS := 0.12
+const DOOR_HEIGHT := 2.15
 const CUTOUT_SHADER: Shader = preload("res://shaders/building_cutout.gdshader")
 const DESTRUCTIBLE_DOOR_SCRIPT: GDScript = preload("res://scripts/destructible_door.gd")
+const WAVE_SUPPLY_SCENE: PackedScene = preload("res://scenes/wave_supply_pickup.tscn")
+const WOOD := 0
+const DARK_WOOD := 1
+const FABRIC := 2
+const CERAMIC := 3
+const METAL := 4
+const GLASS := 5
 
 
 static func assemble(building) -> StaticBody3D:
@@ -12,14 +20,17 @@ static func assemble(building) -> StaticBody3D:
 	body.name = building.archetype
 	var facade_color := _facade_color(building.seed)
 	var wall_material := _cutout_material(facade_color)
-	var floor_material := _cutout_material(Color(0.27, 0.29, 0.31))
+	var floor_material := _cutout_material(Color(0.27, 0.29, 0.31), true)
 	var trim_material := _cutout_material(facade_color.darkened(0.45))
 	var ceiling_material := _cutout_material(facade_color.darkened(0.45), true)
+	var furniture_materials: Array[Material] = []
+	if building.archetype.begins_with("House"):
+		furniture_materials = _furniture_materials(building.seed)
 	for floor_blueprint in building.floor_blueprints:
 		var floor_y: float = float(floor_blueprint.floor_index) * building.floor_height
 		_add_floor_slab(body, building, floor_blueprint.floor_index, floor_y, floor_material)
 		for placement in floor_blueprint.units:
-			_draw_unit(body, placement["blueprint"], placement["position"], floor_y + 0.08, wall_material, trim_material)
+			_draw_unit(body, placement["blueprint"], placement["position"], floor_y + 0.08, wall_material, trim_material, furniture_materials)
 	if building.floors > 1:
 		_add_stairs(body, building)
 	if building.archetype.begins_with("House"):
@@ -28,17 +39,16 @@ static func assemble(building) -> StaticBody3D:
 		_add_box(body, "Roof", Vector3(building.width, 0.18, building.depth), Vector3(building.width * 0.5, building.floors * building.floor_height, building.depth * 0.5), ceiling_material, true)
 	if building.archetype == "Shop_A" or building.archetype == "Grocery_A":
 		_add_commercial_front(body, building)
+	_add_wave_supply(body, building)
 	return body
 
 
-static func _draw_unit(body: StaticBody3D, unit, origin: Vector2, floor_y: float, wall_material: Material, trim_material: Material) -> void:
+static func _draw_unit(body: StaticBody3D, unit, origin: Vector2, floor_y: float, wall_material: Material, trim_material: Material, furniture_materials: Array[Material]) -> void:
 	for room in unit.rooms:
 		var room_center := Vector3(origin.x + room.bounds.position.x + room.bounds.size.x * 0.5, floor_y + 0.07, origin.y + room.bounds.position.y + room.bounds.size.y * 0.5)
 		_add_box(body, "Room_%s" % room.id, Vector3(room.bounds.size.x, 0.04, room.bounds.size.y), room_center, trim_material, false)
-		if is_zero_approx(room.bounds.position.x):
-			_draw_wall_edge(body, unit, room, "vertical", room.bounds.position.x, room.bounds.position.y, room.bounds.end.y, origin, floor_y, wall_material)
-		if is_zero_approx(room.bounds.position.y):
-			_draw_wall_edge(body, unit, room, "horizontal", room.bounds.position.y, room.bounds.position.x, room.bounds.end.x, origin, floor_y, wall_material)
+		_draw_wall_edge(body, unit, room, "vertical", room.bounds.position.x, room.bounds.position.y, room.bounds.end.y, origin, floor_y, wall_material)
+		_draw_wall_edge(body, unit, room, "horizontal", room.bounds.position.y, room.bounds.position.x, room.bounds.end.x, origin, floor_y, wall_material)
 		if is_zero_approx(room.bounds.end.x - unit.width):
 			_draw_wall_edge(body, unit, room, "vertical", room.bounds.end.x, room.bounds.position.y, room.bounds.end.y, origin, floor_y, wall_material)
 		if is_zero_approx(room.bounds.end.y - unit.depth):
@@ -46,6 +56,9 @@ static func _draw_unit(body: StaticBody3D, unit, origin: Vector2, floor_y: float
 	for window in unit.windows:
 		if not _window_overlaps_door(unit, window):
 			_draw_window(body, window, origin, floor_y, trim_material)
+	if not furniture_materials.is_empty():
+		for room in unit.rooms:
+			_draw_room_furniture(body, room, origin, floor_y, furniture_materials)
 
 
 static func _add_floor_slab(body: StaticBody3D, building, floor_index: int, floor_y: float, material: Material) -> void:
@@ -98,8 +111,9 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 		if is_equal_approx(door_line, line):
 			var along := center.y if axis == "vertical" else center.x
 			openings.append({"start": along - float(door["width"]) * 0.5, "end": along + float(door["width"]) * 0.5})
-			if door.get("room_a", "") == room.id:
+			if door.get("room_b", "") == "outside":
 				_add_door(body, door, axis, line, along, origin, floor_y, material)
+			_add_door_header(body, door, axis, line, along, origin, floor_y, material)
 	openings.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return left["start"] < right["start"])
 	var cursor := start
 	for opening in openings:
@@ -108,14 +122,22 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 	_add_wall_segment(body, axis, line, cursor, finish, origin, floor_y, material)
 
 
-static func _add_door(body: StaticBody3D, _door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, material: Material) -> void:
+static func _add_door(body: StaticBody3D, door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, _material: Material) -> void:
 	var door = DESTRUCTIBLE_DOOR_SCRIPT.new()
 	door.name = "Door_%s_%.1f" % [axis, along]
-	var width := 1.4
-	var size := Vector3(WALL_THICKNESS, WALL_HEIGHT, width) if axis == "vertical" else Vector3(width, WALL_HEIGHT, WALL_THICKNESS)
-	door.configure(size, material)
+	var width := float(door_data.get("width", 1.4))
+	var size := Vector3(WALL_THICKNESS, DOOR_HEIGHT, width) if axis == "vertical" else Vector3(width, DOOR_HEIGHT, WALL_THICKNESS)
+	door.configure(size, _cutout_material(Color(0.24, 0.12, 0.055)))
 	door.position = Vector3(origin.x + line, floor_y, origin.y + along) if axis == "vertical" else Vector3(origin.x + along, floor_y, origin.y + line)
 	body.add_child(door)
+
+
+static func _add_door_header(body: StaticBody3D, door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, material: Material) -> void:
+	var width := float(door_data.get("width", 1.4))
+	var header_height := WALL_HEIGHT - DOOR_HEIGHT
+	var size := Vector3(WALL_THICKNESS, header_height, width) if axis == "vertical" else Vector3(width, header_height, WALL_THICKNESS)
+	var position := Vector3(origin.x + line, floor_y + DOOR_HEIGHT + header_height * 0.5, origin.y + along) if axis == "vertical" else Vector3(origin.x + along, floor_y + DOOR_HEIGHT + header_height * 0.5, origin.y + line)
+	_add_box(body, "DoorHeader", size, position, material, true)
 
 
 static func _add_wall_segment(body: StaticBody3D, axis: String, line: float, start: float, finish: float, origin: Vector2, floor_y: float, material: Material) -> void:
@@ -138,6 +160,102 @@ static func _draw_window(body: StaticBody3D, window: Dictionary, origin: Vector2
 	var size := Vector3(float(window["width"]), 0.85, 0.05) if axis == "horizontal" else Vector3(0.05, 0.85, float(window["width"]))
 	var position := Vector3(origin.x + center.x, floor_y + 1.45, origin.y + center.y)
 	_add_box(body, "Window_%s" % window["room_id"], size, position, material, false)
+
+
+static func _draw_room_furniture(body: StaticBody3D, room, origin: Vector2, floor_y: float, materials: Array[Material]) -> void:
+	var left: float = origin.x + room.bounds.position.x
+	var top: float = origin.y + room.bounds.position.y
+	var right: float = origin.x + room.bounds.end.x
+	var bottom: float = origin.y + room.bounds.end.y
+	match room.room_type:
+		"living_room":
+			_add_table(body, Vector3(left + 1.0, floor_y, top + room.bounds.size.y * 0.5), materials)
+			_add_room_light(body, Vector3((left + right) * 0.5, floor_y + 2.35, (top + bottom) * 0.5))
+		"kitchen":
+			_add_kitchen(body, Vector3(right - 0.45, floor_y, top + room.bounds.size.y * 0.5), Vector3(right - 0.5, floor_y, top + 0.5), materials)
+		"bathroom":
+			_add_bathroom(body, Vector3(left, floor_y, top), Vector2(room.bounds.size.x, room.bounds.size.y), materials)
+		"bedroom":
+			_add_bedroom(body, room.id, Vector3(left, floor_y, top), Vector2(room.bounds.size.x, room.bounds.size.y), materials)
+
+
+static func _add_table(body: StaticBody3D, position: Vector3, materials: Array[Material]) -> void:
+	_add_box(body, "FurnitureLivingTable", Vector3(1.25, 0.12, 0.75), position + Vector3.UP * 0.72, materials[WOOD], true)
+	_add_box(body, "FurnitureLivingTableBase", Vector3(0.22, 0.66, 0.22), position + Vector3.UP * 0.36, materials[DARK_WOOD], false)
+
+
+static func _add_kitchen(body: StaticBody3D, counter_position: Vector3, fridge_position: Vector3, materials: Array[Material]) -> void:
+	_add_box(body, "FurnitureKitchenCounter", Vector3(0.7, 0.9, 1.8), counter_position + Vector3.UP * 0.45, materials[DARK_WOOD], true)
+	_add_box(body, "FurnitureKitchenTop", Vector3(0.76, 0.08, 1.86), counter_position + Vector3.UP * 0.94, materials[METAL], false)
+	_add_box(body, "FurnitureKitchenSink", Vector3(0.42, 0.04, 0.55), counter_position + Vector3(0.0, 1.0, 0.38), materials[GLASS], false)
+	_add_box(body, "FurnitureKitchenFridge", Vector3(0.78, 1.85, 0.78), fridge_position + Vector3.UP * 0.925, materials[METAL], true)
+
+
+static func _add_bathroom(body: StaticBody3D, corner: Vector3, size: Vector2, materials: Array[Material]) -> void:
+	_add_box(body, "FurnitureBathroomSink", Vector3(0.5, 0.82, 0.58), corner + Vector3(0.35, 0.41, 0.75), materials[CERAMIC], true)
+	_add_box(body, "FurnitureBathroomMirror", Vector3(0.04, 0.72, 0.62), corner + Vector3(0.07, 1.45, 0.75), materials[GLASS], false)
+	_add_box(body, "FurnitureBathroomToilet", Vector3(0.58, 0.48, 0.72), corner + Vector3(0.4, 0.24, size.y - 0.55), materials[CERAMIC], true)
+	_add_box(body, "FurnitureBathroomShower", Vector3(0.72, 0.12, 0.82), corner + Vector3(size.x - 0.48, 0.06, size.y - 0.55), materials[GLASS], true)
+
+
+static func _add_bedroom(body: StaticBody3D, room_id: String, corner: Vector3, size: Vector2, materials: Array[Material]) -> void:
+	var bed_width := minf(1.15, size.x - 0.35)
+	var bed_depth := minf(1.8, size.y * 0.48)
+	var bed_position := corner + Vector3(size.x - bed_width * 0.5 - 0.14, 0.28, size.y - bed_depth * 0.5 - 0.14)
+	_add_box(body, "FurnitureBed_%s" % room_id, Vector3(bed_width, 0.48, bed_depth), bed_position, materials[FABRIC], true)
+	_add_box(body, "FurniturePillow_%s" % room_id, Vector3(bed_width * 0.72, 0.14, 0.38), bed_position + Vector3(0.0, 0.3, -bed_depth * 0.3), materials[CERAMIC], false)
+	_add_box(body, "FurnitureWardrobe_%s" % room_id, Vector3(0.58, 1.8, 0.82), corner + Vector3(0.36, 0.9, 0.55), materials[DARK_WOOD], true)
+
+
+static func _add_room_light(body: StaticBody3D, position: Vector3) -> void:
+	var light := OmniLight3D.new()
+	light.name = "InteriorLight"
+	light.position = position
+	light.light_color = Color(1.0, 0.78, 0.52)
+	light.light_energy = 0.72
+	light.omni_range = 5.5
+	light.shadow_enabled = false
+	body.add_child(light)
+
+
+static func _add_wave_supply(body: StaticBody3D, building) -> void:
+	if building.floor_blueprints.is_empty() or building.floor_blueprints[0].units.is_empty():
+		return
+	var placement: Dictionary = building.floor_blueprints[0].units[0]
+	var unit = placement["blueprint"]
+	if unit.rooms.is_empty():
+		return
+	var room = unit.rooms[0]
+	var unit_origin: Vector2 = placement["position"]
+	var room_center: Vector2 = unit_origin + room.bounds.position + room.bounds.size * 0.5
+	var supply := WAVE_SUPPLY_SCENE.instantiate() as Area3D
+	var is_health := posmod(int(building.seed), 2) == 0
+	supply.name = "InteriorHealthSupply" if is_health else "InteriorAmmoSupply"
+	supply.set("supply_kind", 0 if is_health else 1)
+	supply.set("supply_amount", 30 if is_health else 24)
+	supply.position = Vector3(room_center.x, 0.2, room_center.y)
+	supply.add_to_group("building_supply_points")
+	body.add_child(supply)
+
+
+static func _furniture_materials(seed: int) -> Array[Material]:
+	var wood_shift := float(absi(seed) % 4) * 0.025
+	return [
+		_material(Color(0.40 + wood_shift, 0.25, 0.13)),
+		_material(Color(0.24 + wood_shift, 0.14, 0.08)),
+		_material(Color(0.31, 0.36, 0.27)),
+		_material(Color(0.84, 0.85, 0.81)),
+		_metal_material(Color(0.48, 0.51, 0.52), 0.5, 0.32),
+		_metal_material(Color(0.50, 0.72, 0.78), 0.75, 0.08),
+	]
+
+
+static func _metal_material(color: Color, metallic: float, roughness: float) -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.metallic = metallic
+	material.roughness = roughness
+	return material
 
 
 static func _add_stairs(body: StaticBody3D, building) -> void:

@@ -8,22 +8,39 @@ const LOT_BLUEPRINT: GDScript = preload("res://scripts/procedural/blueprints/lot
 const BUILDING_GENERATOR: GDScript = preload("res://scripts/procedural/generators/building_generator.gd")
 
 const ROAD_LINES := [-72.0, -24.0, 24.0, 72.0]
+const ROAD_ANCHORS := [-96.0, -72.0, -24.0, 24.0, 72.0, 96.0]
+const ROAD_BEND_LIMIT := 0.9
 const BLOCK_SIZE := Vector2(42.0, 42.0)
 const LOT_SIZE := Vector2(19.0, 19.0)
 
 
 static func generate_world(world_seed: int, survival_mode: bool = false):
 	var city = CITY_BLUEPRINT.new(world_seed)
-	_generate_roads(city)
+	_generate_roads(city, world_seed)
 	_generate_blocks(city, world_seed, survival_mode)
 	return city
 
 
-static func _generate_roads(city) -> void:
-	for x in ROAD_LINES:
-		city.add_road(ROAD_BLUEPRINT.new("local", Vector2(x, -96.0), Vector2(x, 96.0), 6.0))
-	for z in ROAD_LINES:
-		city.add_road(ROAD_BLUEPRINT.new("collector", Vector2(-96.0, z), Vector2(96.0, z), 7.0))
+static func _generate_roads(city, world_seed: int) -> void:
+	for line_index in ROAD_LINES.size():
+		_add_curved_road(city, ROAD_LINES[line_index], true, 6.0, world_seed + line_index * 173)
+		_add_curved_road(city, ROAD_LINES[line_index], false, 7.0, world_seed + 1009 + line_index * 211)
+
+
+static func _add_curved_road(city, axis_position: float, vertical: bool, width: float, road_seed: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = road_seed
+	var road_type := "local" if vertical else "collector"
+	for anchor_index in range(ROAD_ANCHORS.size() - 1):
+		var start_value: float = ROAD_ANCHORS[anchor_index]
+		var finish_value: float = ROAD_ANCHORS[anchor_index + 1]
+		var midpoint_value := (start_value + finish_value) * 0.5
+		var bend := rng.randf_range(-ROAD_BEND_LIMIT, ROAD_BEND_LIMIT)
+		var start := Vector2(axis_position, start_value) if vertical else Vector2(start_value, axis_position)
+		var midpoint := Vector2(axis_position + bend, midpoint_value) if vertical else Vector2(midpoint_value, axis_position + bend)
+		var finish := Vector2(axis_position, finish_value) if vertical else Vector2(finish_value, axis_position)
+		city.add_road(ROAD_BLUEPRINT.new(road_type, start, midpoint, width))
+		city.add_road(ROAD_BLUEPRINT.new(road_type, midpoint, finish, width))
 
 
 static func _generate_blocks(city, world_seed: int, survival_mode: bool) -> void:
@@ -53,6 +70,7 @@ static func _generate_lots(block, block_seed: int, survival_mode: bool) -> void:
 				var urban_variant := absi(block_seed + lot_index) % (16 if survival_mode else 8)
 				archetype = "store" if urban_variant == 0 else "grocery" if urban_variant == 1 else "apartment" if urban_variant == 2 else "house"
 			var lot = LOT_BLUEPRINT.new("%s_Lot_%d" % [block.id, lot_index], lot_seed, block.district, lot_position, LOT_SIZE)
+			lot.building_rotation_y = 0.0 if z_index == 0 else PI
 			if not is_safehouse_lot:
 				lot.building = BUILDING_GENERATOR.generate(lot_seed, archetype)
 			block.add_lot(lot)
