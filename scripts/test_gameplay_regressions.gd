@@ -255,6 +255,10 @@ func _test_minimap_reveals_zombies_on_sonar(test_root: Node) -> void:
 	zombie.simulation_enabled = false
 	zombie.position = Vector3(4.0, 1.0, 4.0)
 	test_root.add_child(zombie)
+	var far_zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	far_zombie.simulation_enabled = false
+	far_zombie.position = Vector3(200.0, 1.0, 200.0)
+	test_root.add_child(far_zombie)
 	var local_players: Array[Node] = [player]
 	split_screen.call("configure", local_players)
 	split_screen.call("_process", 0.016)
@@ -264,6 +268,7 @@ func _test_minimap_reveals_zombies_on_sonar(test_root: Node) -> void:
 		split_screen.free()
 		player.free()
 		zombie.free()
+		far_zombie.free()
 		return
 	var minimap: Control = minimaps[0]
 	if not (minimap.get("tracked_zombies") as Array).is_empty():
@@ -271,19 +276,30 @@ func _test_minimap_reveals_zombies_on_sonar(test_root: Node) -> void:
 		split_screen.free()
 		player.free()
 		zombie.free()
+		far_zombie.free()
 		return
 	player.call("trigger_sonar")
 	split_screen.call("_process", 0.016)
-	if (minimap.get("tracked_zombies") as Array).is_empty():
-		_fail(test_root, "Sonar ativo deveria revelar os zumbis no minimapa.")
+	var revealed: Array = minimap.get("tracked_zombies") as Array
+	if not revealed.has(zombie):
+		_fail(test_root, "Sonar ativo deveria revelar o zumbi dentro do raio.")
 		split_screen.free()
 		player.free()
 		zombie.free()
+		far_zombie.free()
+		return
+	if revealed.has(far_zombie):
+		_fail(test_root, "Sonar nao deveria revelar zumbi fora do raio de revelacao.")
+		split_screen.free()
+		player.free()
+		zombie.free()
+		far_zombie.free()
 		return
 	split_screen.free()
 	player.free()
 	zombie.free()
-	print("PASS: Sonar revela os zumbis no minimapa e limpa ao expirar.")
+	far_zombie.free()
+	print("PASS: Sonar revela no minimapa apenas zumbis dentro do raio.")
 
 
 func _test_camera_keeps_fixed_yaw(test_root: Node) -> void:

@@ -71,9 +71,11 @@ func _process(_delta: float) -> void:
 	var all_zombies := get_tree().get_nodes_in_group("zombies")
 	for index in minimaps.size():
 		var view_player: Node = players[index] if index < players.size() else null
-		var show_zombies: bool = view_player != null and is_instance_valid(view_player) and view_player.has_method("is_sonar_active") and view_player.is_sonar_active()
+		var reveal_zombies: Array = []
+		if view_player != null and is_instance_valid(view_player) and view_player.has_method("is_sonar_active") and view_player.is_sonar_active():
+			reveal_zombies = _zombies_near(view_player as Node3D, all_zombies, float(view_player.get_sonar_reveal_radius()))
 		minimaps[index].tracked_players = all_players
-		minimaps[index].tracked_zombies = all_zombies if show_zombies else []
+		minimaps[index].tracked_zombies = reveal_zombies
 		minimaps[index].queue_redraw()
 	for index in players.size():
 		var player := players[index]
@@ -93,6 +95,22 @@ func _process(_delta: float) -> void:
 			player.get_sonar_text(),
 			get_tree().current_scene.get_survival_hud_text() if get_tree().current_scene.has_method("get_survival_hud_text") else "",
 		]
+
+
+## Filtra os zumbis dentro do raio de revelacao do pulso sonar.
+## Uso: var revelados := _zombies_near(player, todos, 45.0)
+func _zombies_near(origin: Node3D, zombies: Array, radius: float) -> Array:
+	var found: Array = []
+	if origin == null or not is_instance_valid(origin):
+		return found
+	var radius_squared := radius * radius
+	for zombie_node in zombies:
+		var zombie := zombie_node as Node3D
+		if zombie == null or not is_instance_valid(zombie):
+			continue
+		if origin.global_position.distance_squared_to(zombie.global_position) <= radius_squared:
+			found.append(zombie)
+	return found
 
 
 func _notification(what: int) -> void:

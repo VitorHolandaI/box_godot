@@ -20,7 +20,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
 - `network_session.gd`: sessao ENet, roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
-- `player.gd`: personagem jogavel militar com 3 vidas restauradas a cada onda, pulso sonar, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede.
+- `player.gd`: personagem jogavel militar com 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede.
 - `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
 - `procedural/`: blueprints, geradores e assemblers da cidade procedural experimental ativada por `--procedural-city`.
@@ -36,7 +36,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `server_ping_probe.gd`: mede RTT usando o ping nativo do ENet na porta do jogo.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores, indestrutivel e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
-- `split_screen_manager.gd`: viewports com audio 3D, cameras, HUDs locais e minimapa com o jogador, os aliados e os zumbis revelados pelo sonar.
+- `split_screen_manager.gd`: viewports com audio 3D, cameras, HUDs locais e minimapa com o jogador, os aliados e os zumbis dentro do raio do sonar.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_collision_boundaries.gd`: regressao focada para faca, tiro e ataque de zumbi bloqueados por paredes.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.

@@ -524,8 +524,8 @@ func _test_player_sonar_pulse() -> void:
 	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
 	player.reads_local_input = false
 	add_child(player)
-	if player.is_sonar_active() or player.get_sonar_text() != "Sonar: pronto":
-		push_error("FALHA: Sonar deveria iniciar inativo e pronto.")
+	if player.is_sonar_active() or not player.get_sonar_text().begins_with("Sonar: "):
+		push_error("FALHA: Sonar deveria iniciar inativo com contagem para o proximo pulso.")
 		_mark_failure()
 		player.queue_free()
 		return
@@ -536,14 +536,15 @@ func _test_player_sonar_pulse() -> void:
 		player.queue_free()
 		return
 	player.set("sonar_pulse_time", 0.0)
-	player.trigger_sonar()
-	if player.is_sonar_active():
-		push_error("FALHA: Cooldown deveria impedir um novo pulso imediato.")
+	player.set("sonar_interval_timer", 0.01)
+	player.call("_physics_process", 0.05)
+	if not player.is_sonar_active():
+		push_error("FALHA: Pulso passivo deveria disparar sozinho apos o intervalo.")
 		_mark_failure()
 		player.queue_free()
 		return
 	player.queue_free()
-	print("PASS: Sonar ativa, revela e respeita cooldown.")
+	print("PASS: Sonar dispara passivamente a cada intervalo e tambem manual.")
 
 
 func _test_corpse_does_not_block_player() -> void:
