@@ -325,17 +325,18 @@ func _test_player_three_lives_and_elimination() -> void:
 
 
 func _test_player_vision_cone() -> void:
-	print("Testando cone de visao do jogador e overlay opaco...")
+	print("Testando cone de visao ampliado e overlay translucido...")
 	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
 	player.reads_local_input = false
 	player.position = Vector3.ZERO
 	add_child(player)
-	if not player.can_see_position(Vector3(0.0, 1.0, -12.0)):
-		push_error("FALHA: Jogador deveria enxergar zumbi dentro do cone frontal.")
+	var wide_target := Vector3(sin(deg_to_rad(60.0)) * 20.0, 1.0, -cos(deg_to_rad(60.0)) * 20.0)
+	if not player.can_see_position(Vector3(0.0, 1.0, -28.0)) or not player.can_see_position(wide_target):
+		push_error("FALHA: Jogador deveria enxergar ate 28m e 60 graus do centro.")
 		_mark_failure()
 		player.queue_free()
 		return
-	if player.can_see_position(Vector3(0.0, 1.0, 12.0)) or player.can_see_position(Vector3(25.0, 1.0, -12.0)):
+	if player.can_see_position(Vector3(0.0, 1.0, 12.0)) or player.can_see_position(Vector3(0.0, 1.0, -33.0)):
 		push_error("FALHA: Jogador nao deveria enxergar zumbi atras ou fora do alcance.")
 		_mark_failure()
 		player.queue_free()
@@ -343,13 +344,13 @@ func _test_player_vision_cone() -> void:
 	var overlay := player.get_node_or_null("VisionArc") as MeshInstance3D
 	var material := overlay.material_override as StandardMaterial3D if overlay != null else null
 	player.configure_vision_overlay(17)
-	if overlay == null or overlay.mesh == null or material == null or not overlay.visible or material.albedo_color != Color.WHITE or material.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
-		push_error("FALHA: Overlay de visao deveria ser uma malha branca opaca.")
+	if overlay == null or overlay.mesh == null or material == null or not overlay.visible or material.transparency != BaseMaterial3D.TRANSPARENCY_ALPHA or material.albedo_color.a >= 0.5:
+		push_error("FALHA: Overlay de visao deveria ser branco translucido e manter o mapa legivel.")
 		_mark_failure()
 		player.queue_free()
 		return
 	player.queue_free()
-	print("PASS: Cone frontal, alcance e overlay branco opaco validados.")
+	print("PASS: Cone ampliado e overlay branco translucido validados.")
 
 
 func _test_zombie_vision_hides_entire_proxy() -> void:
