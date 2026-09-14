@@ -385,13 +385,31 @@ func _test_zombie_vision_hides_entire_proxy() -> void:
 		zombie.queue_free()
 		return
 	var torso := zombie.get_node("Model/Torso") as GeometryInstance3D
-	var dissolve := float(torso.get_instance_shader_parameter(&"dissolve_amount"))
+	var torso_material := torso.material_override as ShaderMaterial
+	var dissolve := float(torso_material.get_shader_parameter(&"dissolve_amount")) if torso_material != null else 0.0
 	var dust := zombie.get_node_or_null("DissolveDust") as CPUParticles3D
-	if not torso.material_override is ShaderMaterial or dissolve <= 0.0 or dissolve >= 1.0 or dust == null:
+	# Regressao: instance uniform estourava o limite de 4096 instancias do renderer Compatibility.
+	var shader_code := (load("res://shaders/zombie_dissolve.gdshader") as Shader).code
+	if shader_code.contains("instance uniform"):
+		push_error("FALHA: Shader de dissolucao nao pode usar instance uniform (limite de 4096 no Compatibility).")
+		_mark_failure()
+		zombie.queue_free()
+		return
+	if torso_material == null or dissolve <= 0.0 or dissolve >= 1.0 or dust == null:
 		push_error("FALHA: Saida do FOV deveria desintegrar em po (shader dissolve=%.2f, po=%s)." % [dissolve, dust])
 		_mark_failure()
 		zombie.queue_free()
 		return
+	var sharing_while_fading := torso.material_override == ZombieDissolveVisual.material_for_color(torso_material.get_shader_parameter("albedo_color"))
+	zombie.set_vision_visible(true)
+	zombie.call("_update_visual_fade", 1.0)
+	var shares_when_whole := torso.material_override == ZombieDissolveVisual.material_for_color(torso_material.get_shader_parameter("albedo_color"))
+	if sharing_while_fading or not shares_when_whole:
+		push_error("FALHA: Zumbi inteiro deveria usar material compartilhado e so o zumbi sumindo usar copia propria.")
+		_mark_failure()
+		zombie.queue_free()
+		return
+	zombie.set_vision_visible(false)
 	zombie.call("_update_visual_fade", float(zombie.get("DISSOLVE_OUT_TIME")))
 	if zombie.visible or zombie.get_node("Model").visible or zombie.get_node("HealthLabel").visible:
 		push_error("FALHA: Fade concluido deveria ocultar proxy, modelo e barra de vida do zumbi.")
