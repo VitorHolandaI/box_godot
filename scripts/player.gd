@@ -17,7 +17,8 @@ const VISION_ARC_RADIUS := VISION_RANGE
 const VISION_ARC_Y := -0.85
 const VISION_OVERLAY_ALPHA := 0.18
 const SONAR_DURATION := 4.0
-const SONAR_COOLDOWN := 6.0
+const SONAR_INTERVAL := 10.0
+const SONAR_REVEAL_RADIUS := 45.0
 
 @export var speed := 6.5
 @export var sprint_speed := 8.0
@@ -84,7 +85,7 @@ var pistol_pressed := false
 var reload_pressed := false
 var interact_pressed := false
 var sonar_pulse_time := 0.0
-var sonar_cooldown := 0.0
+var sonar_interval_timer := SONAR_INTERVAL
 var network_target_position := Vector3.ZERO
 var network_target_rotation := 0.0
 var remote_buttons: Dictionary = {}
@@ -118,7 +119,9 @@ func _physics_process(delta: float) -> void:
 	knife_attack_time = maxf(knife_attack_time - delta, 0.0)
 	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
 	sonar_pulse_time = maxf(sonar_pulse_time - delta, 0.0)
-	sonar_cooldown = maxf(sonar_cooldown - delta, 0.0)
+	sonar_interval_timer = maxf(sonar_interval_timer - delta, 0.0)
+	if sonar_interval_timer <= 0.0:
+		trigger_sonar()
 	_poll_local_sonar()
 	muzzle_flash.visible = muzzle_flash_time > 0.0
 	if not simulation_enabled:
@@ -462,14 +465,14 @@ func configure_vision_overlay(layer: int) -> void:
 	vision_overlay.visible = not is_eliminated
 
 
-## Dispara o pulso sonar que revela os zumbis proximos no minimapa.
-## Respeita o cooldown para nao virar um radar permanente.
-## Uso: player.trigger_sonar()
+## Dispara o pulso sonar que revela os zumbis proximos no minimapa. O pulso e
+## passivo (automatico a cada SONAR_INTERVAL) mas tambem pode ser antecipado
+## manualmente. Uso: player.trigger_sonar()
 func trigger_sonar() -> void:
-	if sonar_cooldown > 0.0 or is_eliminated:
+	if is_eliminated or sonar_pulse_time > 0.0:
 		return
 	sonar_pulse_time = SONAR_DURATION
-	sonar_cooldown = SONAR_COOLDOWN
+	sonar_interval_timer = SONAR_INTERVAL
 
 
 ## Informa se o pulso sonar esta ativo para desenhar os pontos de zumbi.
@@ -478,12 +481,14 @@ func is_sonar_active() -> bool:
 	return sonar_pulse_time > 0.0
 
 
+func get_sonar_reveal_radius() -> float:
+	return SONAR_REVEAL_RADIUS
+
+
 func get_sonar_text() -> String:
 	if is_sonar_active():
 		return "Sonar: ativo"
-	if sonar_cooldown > 0.0:
-		return "Sonar: %.1fs" % sonar_cooldown
-	return "Sonar: pronto"
+	return "Sonar: %ds" % ceili(sonar_interval_timer)
 
 
 func can_see_position(target_position: Vector3) -> bool:
