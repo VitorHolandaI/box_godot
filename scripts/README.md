@@ -8,7 +8,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `benchmark_zombies.sh`: script de execucao automatizada do benchmark de zumbis em modo headless.
 - `building.gd`: cor individual dos apartamentos.
 - `building_assembler_3d.gd`: montador procedural de lotes e edificios com muros perimetrais, rampas de garagem subterranea, cercas, toldos e props urbanos.
-- `build_exports.sh`: gera clientes release autocontidos para Linux e Windows e seus checksums.
+- `build_exports.sh`: gera clientes release autocontidos para Linux e Windows, zips para download (~31/40 MB) e checksums.
 - `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis com mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
 - `corpse_cleanup_policy.gd`: escolhe quais ragdolls somem: so os longe de todos os jogadores, com teto que remove o mais distante.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
