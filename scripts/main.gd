@@ -78,7 +78,7 @@ func _ready() -> void:
 	_reconcile_network_players()
 	smoke_test_mode = NetworkSession.is_server() and "--smoke-test-zombie" in OS.get_cmdline_user_args()
 	if smoke_test_mode:
-		_spawn_zombie(Vector3(-11.5, 1.0, 9.5))
+		_spawn_zombie(Vector3(-8.5, 1.0, 9.5))
 		var smoke_zombie := zombies.get_child(-1) as CharacterBody3D
 		smoke_zombie.set("health", 35)
 		smoke_zombie.set("speed", 0.0)
@@ -335,7 +335,7 @@ func _send_zombie_snapshots(states: Array) -> void:
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func _apply_player_snapshot(player_states: Array, door_open: bool, building_door_states: Dictionary, supply_states: Dictionary) -> void:
+func _apply_player_snapshot(player_states: Array, door_open: bool, building_door_states: Dictionary, supply_states: Array) -> void:
 	if not NetworkSession.is_client():
 		return
 	if safehouse_door != null:
