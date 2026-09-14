@@ -16,6 +16,11 @@ const TARGET_SWITCH_COOLDOWN := 1.0
 const TARGET_SWITCH_DISTANCE_MARGIN := 2.0
 const MELEE_RANGE := 1.25
 const MELEE_VERTICAL_RANGE := 1.4
+const DOOR_ATTACK_RANGE := 1.9
+const DOOR_ATTACK_HEIGHT := 0.9
+const STUCK_ESCAPE_TIME := 0.35
+const STUCK_DOOR_SEARCH_RADIUS := 30.0
+const VISUAL_FADE_TIME := 0.6
 
 @export var speed := 2.2
 @export var gravity := 22.0
@@ -80,6 +85,10 @@ var sound_investigate_timer := 0.0
 var is_investigating_sound := false
 var groan_audio_cooldown := 2.0
 var vision_visible := true
+var visual_opacity := 1.0
+var wall_contact_time := 0.0
+var escape_door: Node3D = null
+var _fade_meshes: Array[GeometryInstance3D] = []
 
 
 func _ready() -> void:
@@ -91,11 +100,12 @@ func _ready() -> void:
 	network_target_position = global_position
 	network_target_rotation = rotation.y
 	health_label.text = "%d/%d" % [health, max_health]
+	_collect_fade_meshes()
 
 
 func _physics_process(delta: float) -> void:
 	if not simulation_enabled:
-		_apply_visual_visibility()
+		_update_visual_fade(delta)
 		if lod_level != LodLevel.NEAR:
 			lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
 			if lod_tick_skip_counter != 0:
@@ -116,7 +126,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_dead:
 		return
-	_apply_visual_visibility()
+	_update_visual_fade(delta)
 	var has_active_target := is_instance_valid(alert_target) or is_investigating_sound
 	if lod_level != LodLevel.NEAR and not has_active_target:
 		lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
@@ -149,12 +159,33 @@ func _physics_process(delta: float) -> void:
 		var same_level := absf(target_offset.y) <= MELEE_VERTICAL_RANGE
 		if distance > MELEE_RANGE or not same_level:
 			var direction := horizontal_offset.normalized()
-			velocity.x = direction.x * speed
-			velocity.z = direction.z * speed
 			if is_on_wall():
+				wall_contact_time += delta
 				var wall_normal := get_wall_normal()
 				if wall_normal.length_squared() > 0.0001:
-					velocity = velocity.slide(wall_normal)
+					direction = direction.slide(wall_normal).normalized()
+				if wall_contact_time >= STUCK_ESCAPE_TIME and not is_instance_valid(escape_door):
+					escape_door = _find_nearest_door()
+			else:
+				wall_contact_time = maxf(wall_contact_time - delta, 0.0)
+				if wall_contact_time <= 0.0:
+					escape_door = null
+			if is_instance_valid(escape_door) and bool(escape_door.get("is_open")):
+				escape_door = null
+			if is_instance_valid(escape_door):
+				var to_door := escape_door.global_position - global_position
+				to_door.y = 0.0
+				if to_door.length() <= DOOR_ATTACK_RANGE:
+					_attack_door(escape_door)
+					velocity = Vector3.ZERO
+				else:
+					var door_direction := to_door.normalized()
+					direction = door_direction
+					velocity.x = door_direction.x * speed
+					velocity.z = door_direction.z * speed
+			else:
+				velocity.x = direction.x * speed
+				velocity.z = direction.z * speed
 			rotation.y = lerp_angle(rotation.y, atan2(-direction.x, -direction.z), minf(delta * 8.0, 1.0))
 			is_walking = true
 		else:
@@ -248,33 +279,11 @@ func _find_visible_player() -> CharacterBody3D:
 	return null
 
 
+## Todo zumbi sabe a posicao do jogador vivo mais proximo, mesmo sem visao:
+## a horda persegue continuamente e quebra as portas que bloqueiam o caminho.
+## Uso: var alvo := zombie._find_nearest_detectable_player()
 func _find_nearest_detectable_player() -> CharacterBody3D:
-	var nearest: CharacterBody3D = null
-	var nearest_distance := INF
-	for player_node in get_tree().get_nodes_in_group("player"):
-		var player := player_node as CharacterBody3D
-		if not _is_living_player(player) or not _can_detect_player(player):
-			continue
-		var distance := global_position.distance_to(player.global_position)
-		if distance < nearest_distance:
-			nearest = player
-			nearest_distance = distance
-	return nearest
-
-
-func _can_detect_player(player: CharacterBody3D) -> bool:
-	var distance := global_position.distance_to(player.global_position)
-	if distance <= SMELL_RANGE:
-		return true
-	var noise_radius := float(player.get("noise_radius"))
-	if noise_radius > 0.0 and distance <= noise_radius:
-		return true
-	var offset := player.global_position - global_position
-	offset.y = 0.0
-	if offset.length() > VISION_RANGE:
-		return false
-	var forward := -global_transform.basis.z
-	return forward.angle_to(offset.normalized()) <= VISION_HALF_ANGLE and _has_line_of_sight(player)
+	return _find_closest_living_player()
 
 
 func _is_living_player(player: Variant) -> bool:
@@ -338,6 +347,55 @@ func _attack_target_or_door(target: CharacterBody3D) -> void:
 				parent.take_damage(attack_damage, (target.global_position - global_position).normalized())
 			return
 		collider = collider.get_parent()
+
+
+## Um zumbi bloqueado por uma porta fechada no caminho ate o jogador ataca a
+## porta ate destrui-la, em vez de ficar preso dentro da casa.
+## Uso: _try_attack_blocking_door(direction)
+func _try_attack_blocking_door(direction: Vector3) -> void:
+	var door := _find_door_ahead(direction)
+	if door != null:
+		_attack_door(door)
+
+
+## Encontra a porta fechada mais proxima dentro do raio de busca. Serve de
+## rota de fuga tanto para zumbis presos dentro de casas quanto para os que
+## ficam travados na parede externa sem a porta exatamente a frente.
+## Uso: var porta := zombie._find_nearest_door()
+func _find_nearest_door() -> Node3D:
+	var nearest: Node3D = null
+	var nearest_distance := STUCK_DOOR_SEARCH_RADIUS
+	for door_node in get_tree().get_nodes_in_group("destructible_door"):
+		var door := door_node as Node3D
+		if door == null or not is_instance_valid(door) or bool(door.get("is_open")):
+			continue
+		var distance := global_position.distance_to(door.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = door
+	return nearest
+
+
+func _attack_door(door: Node) -> void:
+	if attack_cooldown > 0.0:
+		return
+	door.take_damage(attack_damage, (door.global_position - global_position).normalized(), "melee", self)
+	attack_cooldown = 0.9
+	attack_animation_time = ATTACK_ANIMATION_DURATION
+	attack_sequence += 1
+
+
+func _find_door_ahead(direction: Vector3) -> Node:
+	var from := global_position + Vector3.UP * DOOR_ATTACK_HEIGHT
+	var to := from + direction.normalized() * DOOR_ATTACK_RANGE
+	var query := PhysicsRayQueryParameters3D.create(from, to, 1, [get_rid()])
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	var collider: Node = hit.get("collider")
+	while collider != null:
+		if collider.is_in_group("destructible_door") and not bool(collider.get("is_open")):
+			return collider
+		collider = collider.get_parent()
+	return null
 
 
 func _find_heard_player() -> CharacterBody3D:
@@ -473,6 +531,8 @@ func _die(killer: Node = null) -> void:
 	velocity = Vector3.ZERO
 	remove_from_group("zombies")
 	visible = false
+	vision_visible = false
+	visual_opacity = 0.0
 	health_label.visible = false
 	collision_shape.set_deferred("disabled", true)
 	model.visible = false
@@ -486,16 +546,39 @@ func _die(killer: Node = null) -> void:
 		_spawn_ragdoll()
 
 
+## Marca se o zumbi deve estar visivel para o FOV do jogador. A transicao
+## nao e instantanea: _update_visual_fade interpola a opacidade do proxy.
+## Uso: zombie.set_vision_visible(false)
 func set_vision_visible(is_visible: bool) -> void:
 	vision_visible = is_visible
-	_apply_visual_visibility()
 
 
-func _apply_visual_visibility() -> void:
+## Esvaece (ou restaura) o proxy visual ao entrar/sair do FOV, do LOD distante
+## ou apos a morte. O corpo so some por completo quando a opacidade chega a 0.
+## Uso: chamado a cada tick de fisica.
+func _update_visual_fade(delta: float) -> void:
 	var should_show := vision_visible and not is_dead and lod_level != LodLevel.FAR
-	visible = should_show
-	model.visible = should_show
-	health_label.visible = should_show
+	var target_opacity := 1.0 if should_show else 0.0
+	var fade_step := delta / VISUAL_FADE_TIME
+	visual_opacity = move_toward(visual_opacity, target_opacity, fade_step)
+	if visual_opacity <= 0.02:
+		visible = false
+		model.visible = false
+		health_label.visible = false
+		return
+	visible = true
+	model.visible = true
+	health_label.visible = true
+	var transparency := 1.0 - visual_opacity
+	for mesh in _fade_meshes:
+		mesh.transparency = transparency
+	health_label.modulate.a = visual_opacity
+
+
+func _collect_fade_meshes() -> void:
+	_fade_meshes.clear()
+	for node in model.find_children("*", "GeometryInstance3D", true, false):
+		_fade_meshes.append(node as GeometryInstance3D)
 
 
 func _spawn_ragdoll() -> void:
@@ -595,6 +678,9 @@ func apply_network_state(state: Dictionary) -> void:
 		death_velocity = death_velocity_value if death_velocity_value is Vector3 else Vector3.ZERO
 		velocity = Vector3.ZERO
 		remove_from_group("zombies")
+		visible = false
+		vision_visible = false
+		visual_opacity = 0.0
 		health_label.visible = false
 		collision_shape.set_deferred("disabled", true)
 		model.visible = false

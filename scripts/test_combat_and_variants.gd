@@ -14,6 +14,7 @@ const GAMEPLAY_REGRESSION_TESTS_SCRIPT := preload("res://scripts/test_gameplay_r
 const SURVIVAL_TESTS_SCRIPT := preload("res://scripts/test_survival_mode.gd")
 const COLLISION_BOUNDARY_TESTS_SCRIPT := preload("res://scripts/test_collision_boundaries.gd")
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
+const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
 
 var failure_count := 0
 
@@ -34,6 +35,9 @@ func _ready() -> void:
 	_test_player_three_lives_and_elimination()
 	_test_player_vision_cone()
 	_test_zombie_vision_hides_entire_proxy()
+	_test_wave_restores_three_lives()
+	await _test_zombie_breaks_blocking_door()
+	_test_zombie_finds_nearest_escape_door()
 	_test_network_ragdoll_is_unique_per_zombie()
 	_test_safehouse_structure_and_spawns()
 	_test_gunshot_sound_echolocation()
@@ -354,18 +358,107 @@ func _test_player_vision_cone() -> void:
 
 
 func _test_zombie_vision_hides_entire_proxy() -> void:
-	print("Testando ocultacao completa do proxy de zumbi...")
+	print("Testando esvaecimento do proxy de zumbi no FOV...")
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	zombie.simulation_enabled = false
 	add_child(zombie)
 	zombie.set_vision_visible(false)
+	zombie.call("_update_visual_fade", 0.3)
+	if not zombie.visible or float(zombie.get("visual_opacity")) >= 1.0:
+		push_error("FALHA: Ao sair do FOV o zumbi deveria esvaecer em vez de sumir na hora.")
+		_mark_failure()
+		zombie.queue_free()
+		return
+	zombie.call("_update_visual_fade", 1.0)
 	if zombie.visible or zombie.get_node("Model").visible or zombie.get_node("HealthLabel").visible:
-		push_error("FALHA: FOV deveria ocultar proxy, modelo e barra de vida do zumbi.")
+		push_error("FALHA: Fade concluido deveria ocultar proxy, modelo e barra de vida do zumbi.")
 		_mark_failure()
 		zombie.queue_free()
 		return
 	zombie.queue_free()
-	print("PASS: FOV oculta todo o proxy visual do zumbi.")
+	print("PASS: FOV esvaece e por fim oculta todo o proxy visual do zumbi.")
+
+
+func _test_wave_restores_three_lives() -> void:
+	print("Testando reset de 3 vidas em nova onda...")
+	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
+	player.reads_local_input = false
+	add_child(player)
+	player.take_damage(100, Vector3.FORWARD, "bullet")
+	player.take_damage(100, Vector3.FORWARD, "bullet")
+	player.take_damage(100, Vector3.FORWARD, "bullet")
+	if not player.is_eliminated or player.lives != 0:
+		push_error("FALHA: Jogador deveria estar eliminado antes da nova onda.")
+		_mark_failure()
+		player.queue_free()
+		return
+	player.restore_wave_lives()
+	if player.lives != 3 or player.is_eliminated or not player.visible or player.health != player.max_health:
+		push_error("FALHA: Nova onda deveria devolver 3 vidas e reanimar o jogador.")
+		_mark_failure()
+		player.queue_free()
+		return
+	player.queue_free()
+	print("PASS: Nova onda restaura 3 vidas e reanima o jogador.")
+
+
+func _test_zombie_breaks_blocking_door() -> void:
+	print("Testando zumbi quebrando porta que bloqueia o caminho...")
+	var door := DESTRUCTIBLE_DOOR_SCRIPT.new() as AnimatableBody3D
+	door.position = Vector3(-1.1, 1.0, 0.3)
+	add_child(door)
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.position = Vector3(0.0, 1.0, 1.2)
+	zombie.simulation_enabled = false
+	add_child(zombie)
+	await get_tree().physics_frame
+	zombie.call("_try_attack_blocking_door", Vector3(0.0, 0.0, -1.0))
+	zombie.call("_try_attack_blocking_door", Vector3(0.0, 0.0, -1.0))
+	if int(door.get("health")) >= int(door.get("max_health")):
+		push_error("FALHA: Zumbi bloqueado deveria atacar a porta a frente; vida=%d." % int(door.get("health")))
+		_mark_failure()
+		zombie.queue_free()
+		door.queue_free()
+		return
+	zombie.queue_free()
+	door.queue_free()
+	await get_tree().process_frame
+	print("PASS: Zumbi ataca a porta fechada que bloqueia a passagem.")
+
+
+func _test_zombie_finds_nearest_escape_door() -> void:
+	print("Testando rota de fuga do zumbi pela porta mais proxima...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.position = Vector3(0.0, 1.0, 0.0)
+	zombie.simulation_enabled = false
+	add_child(zombie)
+	var near_door := DESTRUCTIBLE_DOOR_SCRIPT.new() as AnimatableBody3D
+	near_door.position = Vector3(0.0, 1.0, 5.0)
+	add_child(near_door)
+	var far_door := DESTRUCTIBLE_DOOR_SCRIPT.new() as AnimatableBody3D
+	far_door.position = Vector3(0.0, 1.0, 20.0)
+	add_child(far_door)
+	var found: Node3D = zombie.call("_find_nearest_door") as Node3D
+	if found != near_door:
+		push_error("FALHA: Zumbi preso deveria mirar a porta fechada mais proxima.")
+		_mark_failure()
+		zombie.queue_free()
+		near_door.queue_free()
+		far_door.queue_free()
+		return
+	near_door.set("is_open", true)
+	var next_found: Node3D = zombie.call("_find_nearest_door") as Node3D
+	if next_found != far_door:
+		push_error("FALHA: Porta aberta nao deve servir de rota de fuga.")
+		_mark_failure()
+		zombie.queue_free()
+		near_door.queue_free()
+		far_door.queue_free()
+		return
+	zombie.queue_free()
+	near_door.queue_free()
+	far_door.queue_free()
+	print("PASS: Zumbi preso busca e quebra a porta fechada mais proxima.")
 
 
 func _test_network_ragdoll_is_unique_per_zombie() -> void:
@@ -515,8 +608,9 @@ func _test_zombie_flock_coordinator() -> void:
 		_mark_failure()
 		return
 	z_far._physics_process(0.2)
+	z_far.call("_update_visual_fade", 1.0)
 	if (z_far.get_node("Model") as Node3D).visible or (z_far.get_node("HealthLabel") as Label3D).visible:
-		push_error("FALHA: Proxy distante deveria ocultar modelo e etiqueta no cliente.")
+		push_error("FALHA: Proxy distante deveria esvaecer e ocultar modelo e etiqueta no cliente.")
 		_mark_failure()
 		return
 

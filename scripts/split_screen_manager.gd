@@ -2,11 +2,45 @@ extends Control
 
 const LOCAL_CAMERA_SCRIPT := preload("res://scripts/local_camera.gd")
 const VISION_OVERLAY_LAYER_START := 17
+const MINIMAP_SIZE := 150.0
+const MINIMAP_WORLD_EXTENT := 160.0
+const MINIMAP_PLAYER_COLORS := [
+	Color(0.4, 1.0, 0.4),
+	Color(1.0, 0.85, 0.2),
+	Color(0.4, 0.85, 1.0),
+	Color(1.0, 0.4, 0.85),
+]
+
+
+## Desenha um minimapa com o jogador local e todos os aliados do quadro.
+## O mapa e centrado na origem do mundo, cobrindo cidade e floresta.
+class MinimapView extends Control:
+	var tracked_players: Array = []
+	var own_player: Node = null
+	var world_extent := 160.0
+	var colors: Array = []
+
+	func _draw() -> void:
+		var rect := Rect2(Vector2.ZERO, size)
+		draw_rect(rect, Color(0.05, 0.06, 0.08, 0.6))
+		draw_rect(rect, Color(0.9, 0.9, 0.9, 0.5), false, 1.0)
+		var center := size * 0.5
+		var scale_value := (minf(size.x, size.y) * 0.5) / world_extent
+		for index in tracked_players.size():
+			var node := tracked_players[index] as Node3D
+			if node == null or not is_instance_valid(node):
+				continue
+			var point := center + Vector2(node.global_position.x, node.global_position.z) * scale_value
+			var color: Color = colors[index % colors.size()] if not colors.is_empty() else Color.WHITE
+			if node == own_player:
+				draw_circle(point, 6.0, Color(1, 1, 1, 0.95))
+			draw_circle(point, 4.0, color)
 
 var players: Array[Node] = []
 var view_panels: Array[Control] = []
 var viewports: Array[SubViewport] = []
 var hud_labels: Array[Label] = []
+var minimaps: Array[Control] = []
 
 
 func configure(local_players: Array[Node]) -> void:
@@ -16,6 +50,7 @@ func configure(local_players: Array[Node]) -> void:
 	view_panels.clear()
 	viewports.clear()
 	hud_labels.clear()
+	minimaps.clear()
 
 	for index in players.size():
 		_create_player_view(index)
@@ -24,6 +59,10 @@ func configure(local_players: Array[Node]) -> void:
 
 func _process(_delta: float) -> void:
 	var alive_zombies := get_tree().get_nodes_in_group("zombies").size()
+	var all_players := get_tree().get_nodes_in_group("player")
+	for index in minimaps.size():
+		minimaps[index].tracked_players = all_players
+		minimaps[index].queue_redraw()
 	for index in players.size():
 		var player := players[index]
 		if not is_instance_valid(player):
@@ -90,6 +129,22 @@ func _create_player_view(index: int) -> void:
 	hud.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	panel.add_child(hud)
 	hud_labels.append(hud)
+
+	var minimap := MinimapView.new()
+	minimap.own_player = players[index]
+	minimap.world_extent = MINIMAP_WORLD_EXTENT
+	minimap.colors = MINIMAP_PLAYER_COLORS
+	minimap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	minimap.anchor_left = 1.0
+	minimap.anchor_top = 1.0
+	minimap.anchor_right = 1.0
+	minimap.anchor_bottom = 1.0
+	minimap.offset_left = -MINIMAP_SIZE - 12.0
+	minimap.offset_top = -MINIMAP_SIZE - 12.0
+	minimap.offset_right = -12.0
+	minimap.offset_bottom = -12.0
+	panel.add_child(minimap)
+	minimaps.append(minimap)
 
 
 func _layout_views() -> void:
