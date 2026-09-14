@@ -8,6 +8,7 @@ const BUILDING_GENERATOR_SCRIPT := preload("res://scripts/procedural/generators/
 const BUILDING_ASSEMBLER_SCRIPT := preload("res://scripts/procedural/assemblers/building_assembler.gd")
 const ROOF_ASSEMBLER_SCRIPT := preload("res://scripts/procedural/assemblers/house_roof_assembler.gd")
 const STREET_LIGHT_ASSEMBLER_SCRIPT := preload("res://scripts/procedural/assemblers/street_light_assembler.gd")
+const MESH_BATCHER_SCRIPT := preload("res://scripts/procedural/assemblers/mesh_batcher.gd")
 const PLAYER_HEIGHT := 2.34
 
 
@@ -15,6 +16,7 @@ func run(test_root: Node) -> void:
 	_test_street_lights_tower_over_player_on_sidewalks(test_root)
 	_test_house_roof_is_closed_and_pitched(test_root)
 	_test_house_rooms_fit_player_size(test_root)
+	_test_building_meshes_merge_without_touching_doors(test_root)
 
 
 func _test_street_lights_tower_over_player_on_sidewalks(test_root: Node) -> void:
@@ -89,6 +91,31 @@ func _test_house_rooms_fit_player_size(test_root: Node) -> void:
 					_fail(test_root, "Porta %s com %.2f m e estreita para o boneco." % [door["center"], float(door["width"])])
 					return
 	print("PASS: Casa de %.0fx%.0f m com comodos e portas proporcionais ao boneco." % [blueprint.width, blueprint.depth])
+
+
+func _test_building_meshes_merge_without_touching_doors(test_root: Node) -> void:
+	print("Testando fusao de malhas estaticas do predio (draw calls)...")
+	var blueprint = BUILDING_GENERATOR_SCRIPT.generate(240912, "house")
+	var house: StaticBody3D = BUILDING_ASSEMBLER_SCRIPT.assemble(blueprint)
+	var doors_before := house.find_children("Door_*", "AnimatableBody3D", true, false).size()
+	var shapes_before := house.find_children("*", "CollisionShape3D", false, false).size()
+	var merged_count: int = MESH_BATCHER_SCRIPT.merge_static_meshes(house)
+	var loose_meshes := 0
+	for child in house.get_children():
+		if child is MeshInstance3D and child.name != MESH_BATCHER_SCRIPT.MERGED_NODE_NAME:
+			loose_meshes += 1
+	var merged := house.get_node_or_null(MESH_BATCHER_SCRIPT.MERGED_NODE_NAME) as MeshInstance3D
+	var surfaces := merged.mesh.get_surface_count() if merged != null else 0
+	var doors_after := house.find_children("Door_*", "AnimatableBody3D", true, false).size()
+	var shapes_after := house.find_children("*", "CollisionShape3D", false, false).size()
+	house.free()
+	if merged_count < 50 or loose_meshes != 0 or surfaces == 0 or surfaces > 20:
+		_fail(test_root, "Casa deveria virar 1 malha com poucas superficies; fundidas=%d soltas=%d superficies=%d." % [merged_count, loose_meshes, surfaces])
+		return
+	if doors_after != doors_before or shapes_after != shapes_before:
+		_fail(test_root, "Fusao nao pode mexer em portas nem colisoes; portas %d->%d colisoes %d->%d." % [doors_before, doors_after, shapes_before, shapes_after])
+		return
+	print("PASS: %d malhas da casa viraram 1 no com %d superficies." % [merged_count, surfaces])
 
 
 func _fail(test_root: Node, message: String) -> void:
