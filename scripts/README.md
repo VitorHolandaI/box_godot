@@ -8,7 +8,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `building.gd`: cor individual dos apartamentos.
 - `building_assembler_3d.gd`: montador procedural de lotes e edificios com muros perimetrais, rampas de garagem subterranea, cercas, toldos e props urbanos.
 - `build_exports.sh`: gera clientes release autocontidos para Linux e Windows e seus checksums.
-- `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis com mascara para fogo amigo e exclusao do atirador.
+- `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis com mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
 - `destructible_door.gd`: porta comum visivel com macaneta, estados aberta/fechada, interacao e destruicao por zumbis.
 - `door_network_state.gd`: coleta e aplica estados autoritativos das portas comuns por caminho deterministico.
@@ -46,6 +46,6 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie.gd`: IA de zumbi com perseguicao global do jogador, fuga pela porta apenas quando preso dentro de uma casa, esvaecimento por FOV, sentidos, combate bloqueado por paredes, knockback e variantes anatomicas.
 - `zombie_flock_coordinator.gd`: hordas persistentes com um cerebro, drones, fusao aleatoria de lideres, Boids e LOD.
 - `zombie_mutator.gd`: configurador procedural de 9 variantes anatomicas (pedaco de braco, sem 1 braco, pedaco de perna, sem 1 perna, cabeca pela metade com cerebro exposto, rastejante, manco, corredor e classico) e animacoes de marcha e flinch.
-- `zombie_ragdoll.gd`: ragdoll articulado com pescoco limitado e suporte as amputacoes das 9 variantes.
+- `zombie_ragdoll.gd`: ragdoll articulado com pescoco limitado, camada propria de cadaver (nao prende o jogador) que some ao ser atingido, e suporte as amputacoes das 9 variantes.
 - `zombie_spawn_locator.gd`: escolhe pontos desocupados exclusivamente na floresta distante, entre as arvores.
 - `zombie_spawn_schedule.gd`: relogio de spawn gradual com alvo global de 600 zumbis vivos.
