@@ -46,7 +46,7 @@ func interact() -> void:
 
 ## Damages a normal building door; destroyed doors remain open.
 ## Usage: door.take_damage(25)
-func take_damage(amount: int, _attack_direction: Vector3 = Vector3.ZERO) -> void:
+func take_damage(amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null) -> void:
 	if amount <= 0 or is_open:
 		return
 	health = maxi(health - amount, 0)

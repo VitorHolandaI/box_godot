@@ -50,6 +50,9 @@ static func _configure_building_cutout(building: StaticBody3D, blueprint) -> voi
 
 
 static func configure_cutout_bounds(building: StaticBody3D, building_min: Vector3, building_max: Vector3) -> void:
+	building.add_to_group("visibility_building")
+	building.set_meta("visibility_min", building_min)
+	building.set_meta("visibility_max", building_max)
 	for mesh_node in building.find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := mesh_node as MeshInstance3D
 		if mesh_instance == null or not mesh_instance.mesh is PrimitiveMesh:

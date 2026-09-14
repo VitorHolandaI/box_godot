@@ -249,7 +249,7 @@ func _test_building_door_states(test_root: Node) -> void:
 	if door.is_open:
 		_fail(test_root, "Segunda interacao deveria fechar a porta comum.")
 		return
-	door.take_damage(door.max_health)
+	door.take_damage(door.max_health, Vector3.FORWARD, "bullet", null)
 	if not door.is_open or not door.is_destroyed:
 		_fail(test_root, "Dano de zumbi deveria destruir e abrir a porta comum.")
 		return
