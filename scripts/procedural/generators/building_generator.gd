@@ -5,6 +5,10 @@ const ROOM_GENERATOR: GDScript = preload("res://scripts/procedural/generators/ro
 const BUILDING_BLUEPRINT: GDScript = preload("res://scripts/procedural/blueprints/building_blueprint.gd")
 const FLOOR_BLUEPRINT: GDScript = preload("res://scripts/procedural/blueprints/floor_blueprint.gd")
 const APARTMENT_UNIT_SIZE := Vector2(10.0, 8.0)
+# O boneco tem 2.34 m de altura e 1.16 m de largura: com a planta base de 10x8 m
+# os comodos ficavam apertados. Casas usam a mesma planta ampliada na horizontal.
+const HOUSE_FOOTPRINT_SCALE := 1.5
+const HOUSE_MAX_DOOR_WIDTH := 2.0
 const STAIR_CORE := Rect2(0.0, 8.0, 10.0, 8.0)
 const STAIR_CORE_UNIT_INDEX := 2
 # Lances alternam de coluna e de sentido a cada andar: quem chega no topo de um
@@ -29,11 +33,13 @@ static func generate(building_seed: int, archetype: String):
 static func _generate_house(building_seed: int, rng: RandomNumberGenerator):
 	var floors := 1
 	var house_variant := String.chr(65 + rng.randi_range(0, 2))
-	var building = BUILDING_BLUEPRINT.new("House_%s" % house_variant, building_seed, 10.0, 8.0, floors)
+	var house_size := APARTMENT_UNIT_SIZE * HOUSE_FOOTPRINT_SCALE
+	var building = BUILDING_BLUEPRINT.new("House_%s" % house_variant, building_seed, house_size.x, house_size.y, floors)
 	for floor_index in floors:
 		var floor = FLOOR_BLUEPRINT.new("HouseFloor_A", floor_index)
 		var unit = ROOM_GENERATOR.generate_apartment(building_seed + floor_index, floor_index % 2)
-		_add_entrance(unit, "top")
+		unit.scale_layout(HOUSE_FOOTPRINT_SCALE, HOUSE_MAX_DOOR_WIDTH)
+		_add_entrance(unit, "top", HOUSE_MAX_DOOR_WIDTH)
 		floor.add_unit(unit, Vector2.ZERO)
 		building.add_floor(floor)
 	return building
@@ -123,7 +129,7 @@ static func _generate_store(building_seed: int, archetype: String):
 	return building
 
 
-static func _add_entrance(unit, edge: String) -> void:
+static func _add_entrance(unit, edge: String, door_width: float = 1.4) -> void:
 	for room in unit.rooms:
 		var center := Vector2.ZERO
 		var axis := ""
@@ -140,5 +146,5 @@ static func _add_entrance(unit, edge: String) -> void:
 			center = Vector2(unit.width, room.bounds.position.y + room.bounds.size.y * 0.5)
 			axis = "vertical"
 		if not axis.is_empty():
-			unit.add_door({"room_a": room.id, "room_b": "outside", "axis": axis, "center": center, "width": 1.4})
+			unit.add_door({"room_a": room.id, "room_b": "outside", "axis": axis, "center": center, "width": door_width})
 			return
