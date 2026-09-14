@@ -29,9 +29,9 @@ func run(test_root: Node) -> void:
 	_test_hud_alive_zombie_count(test_root)
 	_test_enterable_building_spawn_marker(test_root)
 	_test_no_street_zombie_starts(test_root)
-	_test_spawn_locations_avoid_streets(test_root)
+	_test_spawn_locations_stay_in_forest(test_root)
 	_test_network_zombie_starts_at_snapshot(test_root)
-	_test_main_uses_mixed_spawn_policy(test_root)
+	_test_main_spawns_zombies_in_forest(test_root)
 	_test_ragdoll_neck_limits(test_root)
 	_test_hordes_merge_under_one_brain(test_root)
 	_test_horde_drones_follow_brain(test_root)
@@ -267,31 +267,18 @@ func _test_no_street_zombie_starts(test_root: Node) -> void:
 	print("PASS: Cena principal inicia sem zumbis nas ruas.")
 
 
-func _test_spawn_locations_avoid_streets(test_root: Node) -> void:
-	print("Testando selecao de spawn interno ou na floresta distante...")
-	var marker := Marker3D.new()
-	marker.position = Vector3(60.0, 1.0, 60.0)
-	marker.add_to_group("zombie_interior_spawn")
-	test_root.add_child(marker)
+func _test_spawn_locations_stay_in_forest(test_root: Node) -> void:
+	print("Testando selecao de spawn apenas na floresta distante...")
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 424242
 	var locator := ZOMBIE_SPAWN_LOCATOR_SCRIPT.new(rng)
-	var saw_interior := false
 	for _attempt in 40:
 		var spawn_position: Vector3 = locator.pick_spawn_position(test_root.get_tree())
-		if spawn_position.distance_to(marker.global_position) < 0.01:
-			saw_interior = true
-			continue
 		var radius := Vector2(spawn_position.x, spawn_position.z).length()
 		if radius < 100.0 or radius > 112.0:
-			_fail(test_root, "Spawn fora de interior autorizado e floresta; posicao=%s." % spawn_position)
+			_fail(test_root, "Spawn de zumbi deve ficar apenas na floresta entre arvores; posicao=%s." % spawn_position)
 			return
-	if not saw_interior:
-		_fail(test_root, "Politica mista deve utilizar interiores autorizados quando estao livres.")
-		return
-
-	marker.free()
-	print("PASS: Spawns restritos a interiores autorizados ou floresta.")
+	print("PASS: Spawns restritos a floresta distante.")
 
 
 func _test_network_zombie_starts_at_snapshot(test_root: Node) -> void:
@@ -311,28 +298,23 @@ func _test_network_zombie_starts_at_snapshot(test_root: Node) -> void:
 	print("PASS: Replica nasce diretamente na posicao autoritativa.")
 
 
-func _test_main_uses_mixed_spawn_policy(test_root: Node) -> void:
-	print("Testando integracao da politica mista na partida...")
+func _test_main_spawns_zombies_in_forest(test_root: Node) -> void:
+	print("Testando integracao do spawn de floresta na partida...")
 	var main_world := MAIN_SCENE.instantiate() as Node3D
 	main_world.set_process(false)
 	main_world.set_physics_process(false)
 	test_root.add_child(main_world)
-	var saw_interior := false
 	for _attempt in 40:
 		main_world.call("_spawn_zombie")
 		var spawned := main_world.get_node("Zombies").get_child(-1) as CharacterBody3D
 		var radius := Vector2(spawned.global_position.x, spawned.global_position.z).length()
-		if radius < 100.0:
-			saw_interior = true
-		elif radius > 112.0:
-			_fail(test_root, "Partida criou zumbi fora de interior e floresta; posicao=%s." % spawned.global_position)
+		if radius < 100.0 or radius > 112.0:
+			_fail(test_root, "Partida criou zumbi fora da floresta; posicao=%s." % spawned.global_position)
+			main_world.free()
 			return
-	if not saw_interior:
-		_fail(test_root, "Partida deve usar marcadores internos alem da floresta.")
-		return
 
 	main_world.free()
-	print("PASS: Partida usa apenas interiores autorizados e floresta.")
+	print("PASS: Partida cria todos os zumbis na floresta distante.")
 
 
 func _test_ragdoll_neck_limits(test_root: Node) -> void:
