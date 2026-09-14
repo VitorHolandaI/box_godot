@@ -31,6 +31,7 @@ func _ready() -> void:
 	_test_zombie_mutilation_variants()
 	_test_ragdoll_mutilation_variants()
 	_test_player_three_lives_and_elimination()
+	_test_player_vision_cone()
 	_test_safehouse_structure_and_spawns()
 	_test_gunshot_sound_echolocation()
 	_test_zombie_flock_coordinator()
@@ -282,8 +283,10 @@ func _test_player_three_lives_and_elimination() -> void:
 		return
 
 	# 1a morte: vidas caem de 3 para 2 e respawna
+	var expected_spawn := player.global_position
+	player.global_position = Vector3(4.0, 0.5, 4.0)
 	player.take_damage(100, Vector3.FORWARD, "bullet")
-	if player.lives != 2 or player.health != 100 or player.is_eliminated:
+	if player.lives != 2 or player.health != 100 or player.is_eliminated or player.global_position.distance_to(expected_spawn) > 0.01:
 		push_error("FALHA: Apos 1a morte, jogador deve ter 2 vidas e renascer com 100 de vida.")
 		_mark_failure()
 		return
@@ -316,6 +319,34 @@ func _test_player_three_lives_and_elimination() -> void:
 
 	player.queue_free()
 	print("PASS: Sistema de 3 vidas e eliminacao validado com sucesso.")
+
+
+func _test_player_vision_cone() -> void:
+	print("Testando cone de visao do jogador e overlay opaco...")
+	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
+	player.reads_local_input = false
+	player.position = Vector3.ZERO
+	add_child(player)
+	if not player.can_see_position(Vector3(0.0, 1.0, -12.0)):
+		push_error("FALHA: Jogador deveria enxergar zumbi dentro do cone frontal.")
+		_mark_failure()
+		player.queue_free()
+		return
+	if player.can_see_position(Vector3(0.0, 1.0, 12.0)) or player.can_see_position(Vector3(25.0, 1.0, -12.0)):
+		push_error("FALHA: Jogador nao deveria enxergar zumbi atras ou fora do alcance.")
+		_mark_failure()
+		player.queue_free()
+		return
+	var overlay := player.get_node_or_null("VisionArc") as MeshInstance3D
+	var material := overlay.material_override as StandardMaterial3D if overlay != null else null
+	player.configure_vision_overlay(17)
+	if overlay == null or overlay.mesh == null or material == null or not overlay.visible or material.albedo_color != Color.WHITE or material.transparency != BaseMaterial3D.TRANSPARENCY_DISABLED:
+		push_error("FALHA: Overlay de visao deveria ser uma malha branca opaca.")
+		_mark_failure()
+		player.queue_free()
+		return
+	player.queue_free()
+	print("PASS: Cone frontal, alcance e overlay branco opaco validados.")
 
 
 func _test_safehouse_structure_and_spawns() -> void:

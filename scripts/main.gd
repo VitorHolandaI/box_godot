@@ -19,6 +19,7 @@ const INPUT_INTERVAL := 1.0 / 30.0
 const SNAPSHOT_INTERVAL := 1.0 / 10.0
 const MAX_ZOMBIES_PER_SNAPSHOT_PACKET := 4
 const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 2
+const PLAYER_VISION_UPDATE_INTERVAL := 0.12
 const PLAYER_SPAWN_POINTS := [
 	Vector3(-13.0, 1.18, 9.5),
 	Vector3(-11.0, 1.18, 9.5),
@@ -45,6 +46,7 @@ var received_zombie_snapshot_sequence := -1
 var received_zombie_snapshot_chunks: Dictionary = {}
 var received_zombie_names: Dictionary = {}
 var smoke_test_mode := false
+var player_vision_elapsed := 0.0
 var bot_ai := PlayerBotAI.new()
 var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
 var zombie_spawn_locator = ZOMBIE_SPAWN_LOCATOR_SCRIPT.new()
@@ -92,6 +94,7 @@ func _notify_scene_loaded() -> void:
 
 
 func _process(delta: float) -> void:
+	_update_player_vision(delta)
 	if NetworkSession.is_client() or smoke_test_mode:
 		return
 	if NetworkSession.survival_mode:
@@ -174,6 +177,7 @@ func _spawn_offline_player(slot: int, config: Dictionary) -> void:
 	player.position = _get_player_spawn_position(slot)
 	player.set_color_index(slot)
 	players_node.add_child(player)
+	player.set_spawn_position(player.global_position)
 	local_players.append(player)
 
 
@@ -219,6 +223,7 @@ func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
 		player.input_device_name = "Rede"
 
 	players_node.add_child(player, true)
+	player.set_spawn_position(player.global_position)
 	network_players[key] = player
 
 
@@ -438,6 +443,35 @@ func _get_player_spawn_position(slot: int) -> Vector3:
 	var marker_path := "GeneratedCity/CentralSafehouse/PlayerSpawn%d" % (spawn_slot + 1)
 	var marker := get_node_or_null(marker_path) as Marker3D
 	return marker.global_position if marker != null else PLAYER_SPAWN_POINTS[spawn_slot]
+
+
+func _update_player_vision(delta: float) -> void:
+	if NetworkSession.is_server() or local_players.is_empty():
+		return
+	player_vision_elapsed += delta
+	if player_vision_elapsed < PLAYER_VISION_UPDATE_INTERVAL:
+		return
+	player_vision_elapsed = 0.0
+	for zombie_node in get_tree().get_nodes_in_group("zombies"):
+		var zombie := zombie_node as CharacterBody3D
+		if zombie == null or not is_instance_valid(zombie) or bool(zombie.get("is_dead")):
+			continue
+		var visible_to_player := false
+		for player_node in local_players:
+			var player := player_node as CharacterBody3D
+			if player == null or not is_instance_valid(player) or not player.can_see_position(zombie.global_position):
+				continue
+			if _has_clear_player_vision(player, zombie):
+				visible_to_player = true
+				break
+		zombie.set_vision_visible(visible_to_player)
+
+
+func _has_clear_player_vision(player: CharacterBody3D, zombie: CharacterBody3D) -> bool:
+	var start := player.global_position + Vector3.UP * 1.1
+	var end := zombie.global_position + Vector3.UP * 1.1
+	var query := PhysicsRayQueryParameters3D.create(start, end, 1, [player, zombie])
+	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
 
 
 func _player_key(peer_id: int, slot: int) -> String:

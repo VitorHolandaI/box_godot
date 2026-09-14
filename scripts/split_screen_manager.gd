@@ -1,6 +1,7 @@
 extends Control
 
 const LOCAL_CAMERA_SCRIPT := preload("res://scripts/local_camera.gd")
+const VISION_OVERLAY_LAYER_START := 17
 
 var players: Array[Node] = []
 var view_panels: Array[Control] = []
@@ -74,6 +75,10 @@ func _create_player_view(index: int) -> void:
 	viewport.add_child(camera)
 	camera.set("target", players[index])
 	camera.make_current()
+	for layer in range(VISION_OVERLAY_LAYER_START, VISION_OVERLAY_LAYER_START + 4):
+		camera.set_cull_mask_value(layer, layer == VISION_OVERLAY_LAYER_START + index)
+	if players[index].has_method("configure_vision_overlay"):
+		players[index].configure_vision_overlay(VISION_OVERLAY_LAYER_START + index)
 
 	var hud := Label.new()
 	hud.position = Vector2(14, 12)

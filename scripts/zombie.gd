@@ -79,6 +79,7 @@ var sound_investigate_position := Vector3.ZERO
 var sound_investigate_timer := 0.0
 var is_investigating_sound := false
 var groan_audio_cooldown := 2.0
+var vision_visible := true
 
 
 func _ready() -> void:
@@ -94,9 +95,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	if not simulation_enabled:
-		var is_far_proxy := lod_level == LodLevel.FAR
-		model.visible = not is_far_proxy
-		health_label.visible = not is_far_proxy
+		_apply_visual_visibility()
 		if lod_level != LodLevel.NEAR:
 			lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
 			if lod_tick_skip_counter != 0:
@@ -117,9 +116,7 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_dead:
 		return
-	var is_far_zombie := lod_level == LodLevel.FAR
-	model.visible = not is_far_zombie
-	health_label.visible = not is_far_zombie
+	_apply_visual_visibility()
 	var has_active_target := is_instance_valid(alert_target) or is_investigating_sound
 	if lod_level != LodLevel.NEAR and not has_active_target:
 		lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
@@ -486,6 +483,17 @@ func _die(killer: Node = null) -> void:
 		scene.register_corpse(self)
 	if not NetworkSession.is_server():
 		_spawn_ragdoll()
+
+
+func set_vision_visible(is_visible: bool) -> void:
+	vision_visible = is_visible
+	_apply_visual_visibility()
+
+
+func _apply_visual_visibility() -> void:
+	var should_show := vision_visible and not is_dead and lod_level != LodLevel.FAR
+	model.visible = should_show
+	health_label.visible = should_show
 
 
 func _spawn_ragdoll() -> void:
