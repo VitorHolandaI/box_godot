@@ -4,11 +4,13 @@ const OUTDOOR_OFFSET := Vector3(0.0, 19.0, 17.1)
 const INDOOR_OFFSET := Vector3(0.0, 19.0, 3.0)
 const CAMERA_MARGIN := 1.0
 const INSIDE_CHECK_INTERVAL := 0.15
+const CAMERA_SMOOTH_SPEED := 7.0
 
 var target: Node3D
 var camera_offset := OUTDOOR_OFFSET
 var containing_building: Node3D
 var inside_check_elapsed := 0.0
+var camera_initialized := false
 
 
 func _ready() -> void:
@@ -27,8 +29,14 @@ func _process(delta: float) -> void:
 	var desired_position := target.global_position + camera_offset
 	if is_instance_valid(containing_building):
 		desired_position = _clamp_inside_building(desired_position, containing_building)
-	global_position = desired_position
-	look_at(target.global_position, Vector3.UP)
+	var desired_transform := Transform3D(Basis.IDENTITY, desired_position).looking_at(target.global_position, Vector3.UP)
+	if not camera_initialized:
+		global_transform = desired_transform
+		camera_initialized = true
+		return
+	var blend := minf(delta * CAMERA_SMOOTH_SPEED, 1.0)
+	global_position = global_position.lerp(desired_position, blend)
+	quaternion = quaternion.slerp(desired_transform.basis.get_rotation_quaternion(), blend)
 
 
 func _find_containing_building() -> Node3D:
