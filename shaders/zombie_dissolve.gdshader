@@ -1,11 +1,12 @@
 shader_type spatial;
 // Desintegracao estilo "estalo do Thanos": o corpo some em graos de voxel, de
-// cima para baixo, com borda de cinza. `dissolve_amount` e por instancia para
-// que todos os zumbis da mesma cor compartilhem um unico material.
+// cima para baixo, com borda de cinza. Nao usar uniforms por instancia: no renderer
+// Compatibility o limite e 4096 instancias e 600 zumbis x ~10 pecas estouram
+// ("Too many instances using shader instance variables").
 
 uniform vec4 albedo_color : source_color = vec4(0.5, 0.5, 0.5, 1.0);
 uniform float roughness_value : hint_range(0.0, 1.0) = 0.9;
-instance uniform float dissolve_amount : hint_range(0.0, 1.0) = 0.0;
+uniform float dissolve_amount : hint_range(0.0, 1.0) = 0.0;
 
 const float GRAIN_SIZE = 0.07;
 const float EDGE_WIDTH = 0.09;
