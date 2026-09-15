@@ -375,15 +375,24 @@ func _fire_pellets(weapon_kind: int) -> void:
 		if pellet_count > 1:
 			angle_offset = deg_to_rad(spread_deg) * (float(pellet_index) - float(pellet_count - 1) / 2.0) / (float(pellet_count) / 2.0)
 		var pellet_direction := base_direction.rotated(Vector3.UP, angle_offset)
-		var bullet := BULLET_SCENE.instantiate() as Node3D
-		get_tree().current_scene.add_child(bullet)
-		bullet.global_position = origin + pellet_direction * 0.12
-		bullet.setup(pellet_direction, int(stats["damage"]), true, self)
+		# Hitscan: 1 ray por pellet, dano na hora; sem node por pellet.
+		Bullet.hitscan_damage(origin + pellet_direction * 0.12, pellet_direction, int(stats["damage"]), self)
+		if NetworkSession.is_offline():
+			_spawn_pellet_visual(origin + pellet_direction * 0.12, pellet_direction)
 	ZombieFlockCoordinator.relay_sound(get_tree(), origin, float(stats["noise_radius"]))
 	if NetworkSession.is_offline():
 		AudioFeedback.play_gunshot(origin)
 	if NetworkSession.is_server():
 		get_tree().current_scene.replicate_bullet_visual(origin, base_direction, pellet_count)
+
+
+## Tracer local da escopeta (offline): visual puro, sem dano.
+func _spawn_pellet_visual(origin: Vector3, direction: Vector3) -> void:
+	var bullet := BULLET_SCENE.instantiate() as Node3D
+	get_tree().current_scene.add_child(bullet)
+	bullet.global_position = origin
+	bullet.setup(direction, 0, false)
+	bullet.add_to_group("network_bullet_visuals")
 
 
 ## Arma de crate quebrou: sai do slot, cai o braco para a faca e quebra em
@@ -551,7 +560,11 @@ func _find_knife_target() -> Node3D:
 	var best_target: Node3D = null
 	var best_distance := 1.7
 	var forward := -global_transform.basis.z
+	# No maximo 4 rays por facada: cercado, os 4 mais proximos bastam.
+	var rays_used := 0
 	for target in _get_combat_targets():
+		if rays_used >= 4:
+			break
 		var offset := target.global_position - global_position
 		offset.y = 0.0
 		var distance := offset.length()
@@ -559,6 +572,7 @@ func _find_knife_target() -> Node3D:
 			var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.6, target.global_position + Vector3.UP * 0.6, 1)
 			query.exclude = [get_rid()]
 			var hit := get_world_3d().direct_space_state.intersect_ray(query)
+			rays_used += 1
 			if not hit.is_empty():
 				continue
 			best_distance = distance
