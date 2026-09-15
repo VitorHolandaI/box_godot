@@ -21,10 +21,12 @@ const CORPSE_CLEANUP_TESTS_SCRIPT := preload("res://scripts/test_corpse_cleanup.
 const ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT := preload("res://scripts/test_zombie_snapshot_codec.gd")
 const APARTMENT_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_apartment_layout.gd")
 const ZOMBIE_UNSTUCK_TESTS_SCRIPT := preload("res://scripts/test_zombie_unstuck.gd")
+const PLAYER_UNSTUCK_TESTS_SCRIPT := preload("res://scripts/test_player_unstuck.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
 	"zombie_unstuck": ZOMBIE_UNSTUCK_TESTS_SCRIPT,
+	"player_unstuck": PLAYER_UNSTUCK_TESTS_SCRIPT,
 	"building_navigation": BUILDING_NAVIGATION_TESTS_SCRIPT,
 	"door_breaking": DOOR_BREAKING_TESTS_SCRIPT,
 	"city_props": CITY_PROPS_TESTS_SCRIPT,
@@ -55,6 +57,7 @@ func _ready() -> void:
 	await DOOR_BREAKING_TESTS_SCRIPT.new().run(self)
 	await APARTMENT_LAYOUT_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_UNSTUCK_TESTS_SCRIPT.new().run(self)
+	await PLAYER_UNSTUCK_TESTS_SCRIPT.new().run(self)
 	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)

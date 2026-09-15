@@ -10,7 +10,7 @@ Cenas reutilizaveis e composicao principal do jogo.
 - `bush.tscn`: arbusto verde para floresta e ruinas.
 - `car.tscn`: carro voxel decorativo.
 - `grass_tuft.tscn`: tufo de grama decorativo.
-- `in_game_menu.tscn`: menu sobreposto durante a partida.
+- `in_game_menu.tscn`: menu sobreposto durante a partida (continuar, destravar personagem, menu principal, sair).
 - `main.tscn`: mundo sem zumbis autorados nas ruas; entidades surgem pela politica da partida.
 - `menu.tscn`: menu inicial, multiplayer e configuracoes.
 - `player.tscn`: personagem militar jogavel com colisao que contem o modelo visual.
