@@ -14,6 +14,7 @@ func run(test_root: Node) -> void:
 	await _test_pistol_bullet_damages_zombie_ahead(test_root)
 	await _test_hit_tolerates_network_offset(test_root)
 	_test_safehouse_door_accepts_bullet_damage_call(test_root)
+	_test_tab_cycles_owned_weapons(test_root)
 
 
 func _test_crate_hitscan_damages_zombie_ahead(test_root: Node) -> void:
@@ -83,6 +84,24 @@ func _test_safehouse_door_accepts_bullet_damage_call(test_root: Node) -> void:
 	door.take_damage(35, Vector3.FORWARD, "bullet", null)
 	door.free()
 	print("PASS: Porta da casa segura aceita a chamada de dano da bala.")
+
+
+func _test_tab_cycles_owned_weapons(test_root: Node) -> void:
+	print("Testando Tab ciclando as armas...")
+	var with_uzi: Array[int] = [WeaponStats.Kind.UZI]
+	var none: Array[int] = []
+	var sequence: Array[int] = []
+	var current: int = PlayerCharacter.Weapon.KNIFE
+	for _step in 3:
+		current = PlayerCharacter.next_weapon_in_cycle(current, with_uzi)
+		sequence.append(current)
+	var without_crate := PlayerCharacter.next_weapon_in_cycle(PlayerCharacter.Weapon.PISTOL, none)
+	var tab_event := GameConfig.create_keyboard_config(0)["bindings"].get("cycle_weapon") as InputEventKey
+	var expected: Array[int] = [PlayerCharacter.Weapon.PISTOL, PlayerCharacter.Weapon.UZI, PlayerCharacter.Weapon.KNIFE]
+	if sequence != expected or without_crate != PlayerCharacter.Weapon.KNIFE or tab_event == null or tab_event.physical_keycode != KEY_TAB:
+		_fail(test_root, "Tab: faca->pistola->uzi->faca e sem crate pistola->faca, na tecla Tab; ciclo=%s sem_crate=%d tecla=%s." % [sequence, without_crate, tab_event])
+		return
+	print("PASS: Tab cicla faca, pistola e a arma de crate.")
 
 
 func _add_player(test_root: Node, position: Vector3) -> CharacterBody3D:
