@@ -167,11 +167,6 @@ func _physics_process(delta: float) -> void:
 		trigger_sonar()
 	_poll_local_sonar()
 	muzzle_flash.visible = muzzle_flash_time > 0.0
-	if is_downed:
-		# Caido: sem acao; o aliado segurando interagir reanima em ~3s.
-		velocity = Vector3.ZERO
-		_update_revive_by_others(delta)
-		return
 	if not simulation_enabled:
 		var previous_position := global_position
 		var target_pos := global_position.lerp(network_target_position, minf(delta * 16.0, 1.0))
@@ -182,6 +177,14 @@ func _physics_process(delta: float) -> void:
 				move_and_collide(col.get_remainder().slide(col.get_normal()))
 		rotation.y = lerp_angle(rotation.y, network_target_rotation, minf(delta * 16.0, 1.0))
 		PlayerAnimator.animate_pose(self, delta, previous_position.distance_squared_to(global_position) > 0.0001)
+		return
+
+	if is_downed:
+		# Caido (so onde e simulado: offline/servidor): sem acao; o aliado
+		# segurando interagir reanima em ~3s. O proxy do cliente apenas
+		# interpola, para nao brigar com o progresso sincronizado.
+		velocity = Vector3.ZERO
+		_update_revive_by_others(delta)
 		return
 
 	if reads_local_input:
@@ -761,7 +764,8 @@ func can_pickup_health() -> bool:
 ## Uso:
 ##   player.take_damage(25, Vector3.FORWARD, "bullet")
 func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _source: Node = null) -> void:
-	if is_eliminated:
+	if is_eliminated or is_downed:
+		# Caido fica fora do combate ate ser reanimado (ou virar a rodada).
 		return
 	health = maxi(health - amount, 0)
 	hit_reaction_time = 0.35
