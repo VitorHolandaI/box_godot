@@ -261,6 +261,8 @@ func _test_minimap_reveals_zombies_on_sonar(test_root: Node) -> void:
 	test_root.add_child(far_zombie)
 	var local_players: Array[Node] = [player]
 	split_screen.call("configure", local_players)
+	# So 2 zumbis na cena: sem isto a revelacao de fim de onda mostraria ambos.
+	split_screen.set("straggler_reveal_count", 0)
 	split_screen.call("_process", 0.016)
 	var minimaps: Array = split_screen.get("minimaps")
 	if minimaps.is_empty():
@@ -378,12 +380,17 @@ func _test_spawn_locations_stay_in_forest(test_root: Node) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 424242
 	var locator := ZOMBIE_SPAWN_LOCATOR_SCRIPT.new(rng)
+	# Floresta e o modo classico; o padrao do NetworkSession virou sobrevivencia.
+	var previous_survival_mode := NetworkSession.survival_mode
+	NetworkSession.survival_mode = false
 	for _attempt in 40:
 		var spawn_position: Vector3 = locator.pick_spawn_position(test_root.get_tree())
 		var radius := Vector2(spawn_position.x, spawn_position.z).length()
 		if radius < 100.0 or radius > 112.0:
+			NetworkSession.survival_mode = previous_survival_mode
 			_fail(test_root, "Spawn de zumbi deve ficar apenas na floresta entre arvores; posicao=%s." % spawn_position)
 			return
+	NetworkSession.survival_mode = previous_survival_mode
 	print("PASS: Spawns restritos a floresta distante.")
 
 
@@ -410,15 +417,19 @@ func _test_main_spawns_zombies_in_forest(test_root: Node) -> void:
 	main_world.set_process(false)
 	main_world.set_physics_process(false)
 	test_root.add_child(main_world)
+	var previous_survival_mode := NetworkSession.survival_mode
+	NetworkSession.survival_mode = false
 	for _attempt in 40:
 		main_world.call("_spawn_zombie")
 		var spawned := main_world.get_node("Zombies").get_child(-1) as CharacterBody3D
 		var radius := Vector2(spawned.global_position.x, spawned.global_position.z).length()
 		if radius < 100.0 or radius > 112.0:
+			NetworkSession.survival_mode = previous_survival_mode
 			_fail(test_root, "Partida criou zumbi fora da floresta; posicao=%s." % spawned.global_position)
 			main_world.free()
 			return
 
+	NetworkSession.survival_mode = previous_survival_mode
 	main_world.free()
 	print("PASS: Partida cria todos os zumbis na floresta distante.")
 

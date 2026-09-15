@@ -8,6 +8,9 @@ const HIT_SHAKE_DURATION := 0.18
 const HIT_SHAKE_AMPLITUDE := 0.05
 const KNOB_COLOR := Color(0.72, 0.56, 0.18)
 
+## Emitido quando a porta abre, fecha ou quebra; o servidor replica so isso.
+signal network_state_changed(door: Node)
+
 var panel_size := Vector3(2.2, 2.4, 0.14)
 var panel_material: Material
 var max_health := 75
@@ -53,6 +56,7 @@ func interact() -> void:
 	if is_destroyed:
 		return
 	is_open = not is_open
+	network_state_changed.emit(self)
 
 
 ## Damages a building door, open or closed. Zombie claws, the player's knife
@@ -88,6 +92,7 @@ func _break_apart(attack_direction: Vector3, play_animation: bool) -> void:
 	is_destroyed = true
 	is_open = true
 	hit_shake_time = 0.0
+	network_state_changed.emit(self)
 	var collision := get_node_or_null("DoorCollision") as CollisionShape3D
 	if collision != null:
 		collision.set_deferred("disabled", true)
