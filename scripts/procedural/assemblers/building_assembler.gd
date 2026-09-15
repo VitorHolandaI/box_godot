@@ -9,6 +9,8 @@ const WINDOW_HEIGHT := 0.9
 const WINDOW_FRAME_THICKNESS := 0.08
 const BOX_BUILDER: GDScript = preload("res://scripts/procedural/assemblers/box_builder.gd")
 const HOUSE_ROOF_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/house_roof_assembler.gd")
+## Meta do corpo estatico com os filhos de luz cacheados (G7-fase1).
+const LIGHT_CACHE_META := "light_cache"
 const ROOF_TERRACE_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/roof_terrace_assembler.gd")
 const STAIR_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/stair_assembler.gd")
 const BUILDING_NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation/building_navigation.gd")
@@ -303,6 +305,20 @@ static func _add_room_light(body: StaticBody3D, position: Vector3) -> void:
 	light.omni_range = 5.5
 	light.shadow_enabled = false
 	body.add_child(light)
+
+
+## Liga/desliga as luzes de interior de um predio (G7-fase1): visible=false
+## pula o custo de forward no Compatibility sem destruir a cena. Cache de
+## filhos em meta evita find_children a cada toggle. Uso:
+##   ProceduralBuildingAssembler.set_building_lights_enabled(predio, false)
+static func set_building_lights_enabled(building: Node, enabled: bool) -> void:
+	if not building.has_meta(LIGHT_CACHE_META):
+		building.set_meta(LIGHT_CACHE_META, building.find_children("*InteriorLight*", "OmniLight3D", true, false))
+	var lights: Variant = building.get_meta(LIGHT_CACHE_META)
+	for light_value in lights:
+		var light := light_value as OmniLight3D
+		if light != null and is_instance_valid(light):
+			light.visible = enabled
 
 
 static func _add_wave_supply(body: StaticBody3D, building) -> void:
