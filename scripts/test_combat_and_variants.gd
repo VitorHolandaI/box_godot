@@ -27,6 +27,7 @@ const NETWORK_JOIN_SYNC_TESTS_SCRIPT := preload("res://scripts/test_network_join
 const AMMO_LOOT_TESTS_SCRIPT := preload("res://scripts/test_ammo_loot.gd")
 const ZOMBIE_NEW_VARIANTS_TESTS_SCRIPT := preload("res://scripts/test_zombie_new_variants.gd")
 const ZOMBIE_BOSS_TESTS_SCRIPT := preload("res://scripts/test_zombie_boss.gd")
+const WEAPON_DAMAGE_TESTS_SCRIPT := preload("res://scripts/test_weapon_damage.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -36,6 +37,7 @@ const FOCUSED_TEST_GROUPS := {
 	"ammo_loot": AMMO_LOOT_TESTS_SCRIPT,
 	"zombie_new_variants": ZOMBIE_NEW_VARIANTS_TESTS_SCRIPT,
 	"zombie_boss": ZOMBIE_BOSS_TESTS_SCRIPT,
+	"weapon_damage": WEAPON_DAMAGE_TESTS_SCRIPT,
 	"survival_mode": SURVIVAL_TESTS_SCRIPT,
 	"zombie_snapshot_codec": ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT,
 	"building_navigation": BUILDING_NAVIGATION_TESTS_SCRIPT,
@@ -73,6 +75,7 @@ func _ready() -> void:
 	AMMO_LOOT_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_NEW_VARIANTS_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_BOSS_TESTS_SCRIPT.new().run(self)
+	await WEAPON_DAMAGE_TESTS_SCRIPT.new().run(self)
 	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
