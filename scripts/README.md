@@ -2,7 +2,7 @@
 
 Logica de jogo, rede, interface e testes automatizados.
 
-- `ammo_loot_director.gd`: municao farta por classe: queda ao matar (arma de quem matou) e reposicao a cada 30 s ate 5 itens de cada classe.
+- `ammo_loot_director.gd`: municao farta por classe: reposicao a cada 30 s ate 5 itens de cada classe e queda ocasional (8%, meia carga, classe sorteada) ao matar zumbi.
 - `ammo_pickup.gd`: caixa de municao militar coletavel, recarga de reserva e sincronizacao de rede.
 - `benchmark_indoor_escape.gd`: benchmark de zumbis presos em casas (`--benchmark-indoor-escape`, `--closed-doors`, `--sample-frames=N`) com tempo de script por frame e contagem de fugas.
 - `benchmark_zombies.gd`: suite de estresse e perfilamento de consumo de RAM (Heap e RSS SO), tempo de CPU de fisica e capacidade maxima de zumbis do servidor.
