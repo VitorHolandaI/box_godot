@@ -19,6 +19,19 @@ const LEAP_SPEED := 8.5
 const LEAP_UP_SPEED := 3.2
 const LEAP_DURATION := 0.35
 const LEAP_COOLDOWN := 3.5
+const CHARGE_MIN_RANGE := 5.0
+const CHARGE_MAX_RANGE := 14.0
+const CHARGE_SPEED := 9.0
+const CHARGE_DURATION := 1.1
+const CHARGE_COOLDOWN := 6.0
+const CHARGE_HIT_DAMAGE := 25
+const CHARGE_KNOCKBACK := 11.0
+const CHARGE_HIT_RADIUS := 1.7
+const SPIT_MIN_RANGE := 4.0
+const SPIT_MAX_RANGE := 12.0
+const SPIT_COOLDOWN := 5.0
+## Cuspidor para de andar a esta distancia do alvo para cuspir de longe.
+const SPITTER_KEEP_DISTANCE := 8.0
 
 
 ## Dano de tiro no armored cai pela metade; faca e golpes batem cheio.
@@ -56,32 +69,85 @@ static func area_damage(tree: SceneTree, origin: Vector3, radius: float, player_
 			node.take_damage(roundi(float(base_damage) * falloff), direction, "explosion", source)
 
 
-## Estado do bote do leaper: perto do alvo, no chao e fora da recarga, salta
-## para frente. Enquanto salta, a perseguicao nao sobrescreve a velocidade.
+## Arrancada generica: perto do alvo (entre min e max), no chao e fora da
+## recarga, dispara para frente; enquanto dura, a perseguicao nao sobrescreve a
+## velocidade. Leaper e charger sao arrancadas com parametros diferentes.
 ## Uso:
-##   var boost := leap.update(delta, velocity, direction, distance, is_on_floor())
-##   if leap.is_leaping(): velocity = boost
-class LeapState extends RefCounted:
-	var _cooldown := 0.0
+##   var boost := dash.update(delta, velocity, direction, distance, is_on_floor())
+##   if dash.is_leaping(): velocity = boost
+class DashState extends RefCounted:
+	var min_range := 0.0
+	var max_range := 4.5
+	var dash_speed := 8.5
+	var up_speed := 3.2
+	var duration := 0.35
+	var cooldown := 3.5
+	var _cooldown_left := 0.0
 	var _time_left := 0.0
 	var _velocity := Vector3.ZERO
 
-	## Velocidade do bote neste tick, ou Vector3.ZERO quando nao salta.
+	func _init(range_min: float = 0.0, range_max: float = 4.5, speed: float = 8.5, up: float = 3.2, dash_duration: float = 0.35, dash_cooldown: float = 3.5) -> void:
+		min_range = range_min
+		max_range = range_max
+		dash_speed = speed
+		up_speed = up
+		duration = dash_duration
+		cooldown = dash_cooldown
+
+	## Velocidade da arrancada neste tick, ou Vector3.ZERO quando nao arranca.
 	func update(delta: float, current_velocity: Vector3, direction: Vector3, distance: float, on_floor: bool) -> Vector3:
 		var step := maxf(delta, 0.0)
-		_cooldown = maxf(_cooldown - step, 0.0)
+		_cooldown_left = maxf(_cooldown_left - step, 0.0)
 		if _time_left > 0.0:
 			_time_left -= step
 			return Vector3(_velocity.x, current_velocity.y, _velocity.z) if _time_left > 0.0 else Vector3.ZERO
-		if _cooldown > 0.0 or not on_floor or distance > ZombieVariantAbilities.LEAP_RANGE:
+		if _cooldown_left > 0.0 or not on_floor or distance > max_range or distance < min_range:
 			return Vector3.ZERO
 		var flat := Vector3(direction.x, 0.0, direction.z).normalized()
 		if flat.is_zero_approx():
 			return Vector3.ZERO
-		_velocity = flat * ZombieVariantAbilities.LEAP_SPEED + Vector3.UP * ZombieVariantAbilities.LEAP_UP_SPEED
-		_time_left = ZombieVariantAbilities.LEAP_DURATION
-		_cooldown = ZombieVariantAbilities.LEAP_COOLDOWN
+		_velocity = flat * dash_speed + Vector3.UP * up_speed
+		_time_left = duration
+		_cooldown_left = cooldown
 		return _velocity
 
 	func is_leaping() -> bool:
 		return _time_left > 0.0
+
+
+## Bote do leaper: curto, rapido e com pulo.
+class LeapState extends DashState:
+	func _init() -> void:
+		super(0.0, ZombieVariantAbilities.LEAP_RANGE, ZombieVariantAbilities.LEAP_SPEED, ZombieVariantAbilities.LEAP_UP_SPEED, ZombieVariantAbilities.LEAP_DURATION, ZombieVariantAbilities.LEAP_COOLDOWN)
+
+
+## Investida do charger: arranca de longe, rente ao chao, por mais tempo.
+class ChargeState extends DashState:
+	func _init() -> void:
+		super(ZombieVariantAbilities.CHARGE_MIN_RANGE, ZombieVariantAbilities.CHARGE_MAX_RANGE, ZombieVariantAbilities.CHARGE_SPEED, 0.0, ZombieVariantAbilities.CHARGE_DURATION, ZombieVariantAbilities.CHARGE_COOLDOWN)
+
+
+## Cuspe do cuspidor: dispara no alcance, com linha de visao e fora da recarga.
+## Uso: if spit.update(delta, distance, _has_line_of_sight(target)): cuspir()
+class SpitState extends RefCounted:
+	var _cooldown_left := 0.0
+
+	func update(delta: float, distance: float, has_line_of_sight: bool) -> bool:
+		_cooldown_left = maxf(_cooldown_left - maxf(delta, 0.0), 0.0)
+		if _cooldown_left > 0.0 or not has_line_of_sight:
+			return false
+		if distance < ZombieVariantAbilities.SPIT_MIN_RANGE or distance > ZombieVariantAbilities.SPIT_MAX_RANGE:
+			return false
+		_cooldown_left = ZombieVariantAbilities.SPIT_COOLDOWN
+		return true
+
+
+## Charger acertou o jogador: dano e arremesso na direcao da corrida.
+## Uso: ZombieVariantAbilities.charge_impact(player, direction)
+static func charge_impact(player: Node, direction: Vector3) -> void:
+	if not is_instance_valid(player) or not player.has_method("take_damage"):
+		return
+	var flat := Vector3(direction.x, 0.0, direction.z).normalized()
+	player.take_damage(CHARGE_HIT_DAMAGE, flat, "melee", null)
+	if player is CharacterBody3D:
+		(player as CharacterBody3D).velocity += flat * CHARGE_KNOCKBACK + Vector3.UP * 4.0

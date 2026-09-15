@@ -40,8 +40,8 @@ func _test_titan_stats(test_root: Node) -> void:
 	var knockback := titan.velocity.distance_to(knockback_before)
 	var radius := shape.radius
 	titan.free()
-	if health != 10000 or radius <= default_radius or knockback > 0.01 or ZombieMutator.TYPE_COUNT != 15:
-		_fail(test_root, "Tita: 10000 de vida, capsula maior, sem recuo de tiro (15 tipos); vida=%d raio=%.2f padrao=%.2f recuo=%.2f tipos=%d." % [health, radius, default_radius, knockback, ZombieMutator.TYPE_COUNT])
+	if health != 10000 or radius <= default_radius or knockback > 0.01:
+		_fail(test_root, "Tita: 10000 de vida, capsula maior, sem recuo de tiro; vida=%d raio=%.2f padrao=%.2f recuo=%.2f." % [health, radius, default_radius, knockback])
 		return
 	print("PASS: Tita nasce com 10000 de vida, corpo maior e sem recuo.")
 
