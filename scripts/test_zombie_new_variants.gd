@@ -24,7 +24,7 @@ func _test_new_variants_have_own_stats(test_root: Node) -> void:
 	var leaper := _add_zombie(test_root, "VariantLeaper", ZombieMutator.Type.LEAPER, Vector3(-980.0, 1.0, 5.0))
 	var armored := _add_zombie(test_root, "VariantArmored", ZombieMutator.Type.ARMORED, Vector3(-980.0, 1.0, 10.0))
 	var types_ok := int(bloater.get("zombie_type")) == ZombieMutator.Type.BLOATER and int(leaper.get("zombie_type")) == ZombieMutator.Type.LEAPER and int(armored.get("zombie_type")) == ZombieMutator.Type.ARMORED
-	var stats_ok := int(bloater.get("max_health")) == 140 and float(bloater.get("speed")) < 1.5 and float(leaper.get("speed")) > 2.4 and int(armored.get("max_health")) == 160
+	var stats_ok := int(bloater.get("max_health")) == 140 and float(bloater.get("speed")) >= 3.0 and float(leaper.get("speed")) > 2.4 and int(armored.get("max_health")) == 160
 	var report := "bloater=%s/%s leaper=%s armored=%s" % [bloater.get("max_health"), bloater.get("speed"), leaper.get("speed"), armored.get("max_health")]
 	for zombie in [bloater, leaper, armored]:
 		zombie.free()

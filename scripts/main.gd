@@ -307,7 +307,7 @@ func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3,
 func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1, spread_deg: float = 0.0, weapon_kind: int = -1) -> void:
 	if not NetworkSession.is_client():
 		return
-	AudioFeedback.play_gunshot(spawn_position)
+	AudioFeedback.play_gunshot(spawn_position, weapon_kind)
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 		bot_ai.notify_bullet()
 	# Pellets recebem a MESMA matematica de leque do servidor: tracers
