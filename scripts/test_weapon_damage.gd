@@ -13,6 +13,7 @@ func run(test_root: Node) -> void:
 	await _test_crate_hitscan_damages_zombie_ahead(test_root)
 	await _test_pistol_bullet_damages_zombie_ahead(test_root)
 	await _test_hit_tolerates_network_offset(test_root)
+	_test_safehouse_door_accepts_bullet_damage_call(test_root)
 
 
 func _test_crate_hitscan_damages_zombie_ahead(test_root: Node) -> void:
@@ -72,6 +73,16 @@ func _test_hit_tolerates_network_offset(test_root: Node) -> void:
 		_fail(test_root, "Tiro passando a 0.8 m do centro do zumbi deveria acertar com a tolerancia; vida %d->%d." % [before, after])
 		return
 	print("PASS: Tiro tolera o atraso de rede (0.8 m fora da linha).")
+
+
+## Bala/explosao chamam take_damage com 4 argumentos; a porta da casa segura so
+## aceitava 2 e gerava erro de script a cada tiro (achado na partida com bots).
+func _test_safehouse_door_accepts_bullet_damage_call(test_root: Node) -> void:
+	print("Testando tiro na porta da casa segura...")
+	var door = preload("res://scripts/safehouse_door.gd").new()
+	door.take_damage(35, Vector3.FORWARD, "bullet", null)
+	door.free()
+	print("PASS: Porta da casa segura aceita a chamada de dano da bala.")
 
 
 func _add_player(test_root: Node, position: Vector3) -> CharacterBody3D:
