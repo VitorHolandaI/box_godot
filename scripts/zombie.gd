@@ -1,6 +1,9 @@
 extends CharacterBody3D
 
 signal died(killer: Node)
+## Perseguindo ha STRANDED_SECONDS sem chegar perto e longe do alvo: o servidor
+## realoca em vez de deixar o zumbi escondido segurando o fim da onda.
+signal stranded(zombie: Node)
 
 const FlockCoordinatorClass = preload("res://scripts/zombie_flock_coordinator.gd")
 const INDOOR_ROUTER_SCRIPT: GDScript = preload("res://scripts/zombie_indoor_router.gd")
@@ -25,6 +28,14 @@ const FLOCK_PUSH_MAX_SPEED_RATIO := 0.5
 const DISSOLVE_OUT_TIME := 1.4
 const REASSEMBLE_TIME := 0.5
 const DISSOLVE_VISUAL_SCRIPT: GDScript = preload("res://scripts/zombie_dissolve_visual.gd")
+const PROGRESS_WATCH_SCRIPT: GDScript = preload("res://scripts/zombie_progress_watch.gd")
+const WALL_DETOUR_SCRIPT: GDScript = preload("res://scripts/zombie_wall_detour.gd")
+const NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation/building_navigation.gd")
+const STUCK_LOG_SECONDS := 15.0
+const STRANDED_SECONDS := 40.0
+const STRANDED_MIN_TARGET_DISTANCE := 30.0
+# Maior que qualquer passo entre snapshots: salto assim e realocacao, nao corrida.
+const NETWORK_SNAP_DISTANCE := 8.0
 
 @export var speed := 2.2
 @export var gravity := 22.0
@@ -91,6 +102,10 @@ var groan_audio_cooldown := 2.0
 var vision_visible := true
 var visual_opacity := 1.0
 var indoor_router = INDOOR_ROUTER_SCRIPT.new()
+var progress_watch = PROGRESS_WATCH_SCRIPT.new()
+var wall_detour = WALL_DETOUR_SCRIPT.new()
+var _watched_target: Node = null
+var _stuck_logged := false
 var _dissolve_visual = null
 
 
@@ -161,7 +176,12 @@ func _physics_process(delta: float) -> void:
 		var distance := horizontal_offset.length()
 		var same_level := absf(target_offset.y) <= MELEE_VERTICAL_RANGE
 		if distance > MELEE_RANGE or not same_level:
+			_watch_chase_progress(target, delta)
 			var direction := _chase_direction(target, horizontal_offset, delta)
+			# Na rua nao ha navmesh: contorna muros e predios pela tangente.
+			if not indoor_router.has_route:
+				var line_clear: bool = wall_detour.is_active() and _has_line_of_sight(target)
+				direction = wall_detour.steer(delta, global_position, direction, progress_watch.blocked_seconds, get_wall_normal() if is_on_wall() else Vector3.ZERO, line_clear)
 			if is_on_wall() and _try_attack_blocking_door(direction):
 				# Zumbi nao abre porta: fica parado golpeando ate ela quebrar.
 				velocity.x = 0.0
@@ -174,6 +194,7 @@ func _physics_process(delta: float) -> void:
 		else:
 			velocity.x = move_toward(velocity.x, 0.0, speed)
 			velocity.z = move_toward(velocity.z, 0.0, speed)
+			progress_watch.reset()
 			if attack_cooldown <= 0.0:
 				_attack_target_or_door(target)
 				attack_cooldown = 0.9
@@ -375,6 +396,45 @@ func _chase_direction(target: CharacterBody3D, horizontal_offset: Vector3, delta
 	if to_waypoint.length_squared() < 0.0001:
 		return horizontal_offset.normalized()
 	return to_waypoint.normalized()
+
+
+func _watch_chase_progress(target: CharacterBody3D, delta: float) -> void:
+	if target != _watched_target:
+		_watched_target = target
+		_stuck_logged = false
+		progress_watch.reset()
+		wall_detour.reset()
+	progress_watch.update(delta, global_position, target.global_position)
+	if progress_watch.no_progress_seconds >= STRANDED_SECONDS and global_position.distance_to(target.global_position) >= STRANDED_MIN_TARGET_DISTANCE:
+		progress_watch.reset()
+		stranded.emit(self)
+		return
+	if not FlockCoordinatorClass.debug_stuck_zombies or _stuck_logged or progress_watch.no_progress_seconds < STUCK_LOG_SECONDS:
+		return
+	_stuck_logged = true
+	print(JSON.stringify({
+		"event": "zombie_stuck",
+		"zombie": String(name),
+		"position": [snappedf(global_position.x, 0.1), snappedf(global_position.y, 0.1), snappedf(global_position.z, 0.1)],
+		"target": [snappedf(target.global_position.x, 0.1), snappedf(target.global_position.y, 0.1), snappedf(target.global_position.z, 0.1)],
+		"blocked_seconds": progress_watch.blocked_seconds,
+		"has_route": indoor_router.has_route,
+		"in_building": NAVIGATION_SCRIPT.find_for_position(get_tree(), global_position - Vector3.UP * FEET_OFFSET) != null,
+		"on_wall": is_on_wall(),
+		"on_floor": is_on_floor(),
+		"lod": int(lod_level),
+		"leader": is_cluster_leader,
+	}))
+
+
+## Move o zumbi encalhado para um novo ponto e zera rota, medidor e desvio.
+## Uso: zombie.relocate(spawn_locator.pick_spawn_position(get_tree()))
+func relocate(new_position: Vector3) -> void:
+	global_position = new_position
+	velocity = Vector3.ZERO
+	indoor_router.invalidate()
+	progress_watch.reset()
+	wall_detour.reset()
 
 
 func _attack_door(door: Node) -> void:
@@ -655,6 +715,10 @@ func apply_network_state(state: Dictionary) -> void:
 	var position_value: Variant = state.get("position")
 	if position_value is Vector3:
 		network_target_position = position_value
+		# Realocado pelo servidor: teleporta, senao o proxy deslizaria pelo mapa
+		# batendo em paredes no caminho.
+		if global_position.distance_to(network_target_position) > NETWORK_SNAP_DISTANCE:
+			global_position = network_target_position
 	network_target_rotation = float(state.get("rotation", network_target_rotation))
 	health = clampi(int(state.get("health", health)), 0, max_health)
 	health_label.text = "%d/%d" % [health, max_health]

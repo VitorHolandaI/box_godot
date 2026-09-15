@@ -36,22 +36,50 @@ func room_id_at(local_point: Vector2) -> String:
 
 
 ## Amplia a planta na horizontal (comodos, portas e janelas) mantendo o pe-direito.
-## Portas crescem junto, limitadas a `max_door_width`.
-## Uso: unit.scale_layout(1.5, 2.0)
-func scale_layout(factor: float, max_door_width: float) -> void:
-	if factor <= 0.0:
-		push_error("Fator de escala da planta invalido %.2f; esperado > 0." % factor)
+## Cada eixo tem seu fator (x = largura, y = profundidade). Portas crescem pelo
+## maior fator, limitadas a `max_door_width`, para passar o boneco de 1.16 m.
+## Uso: unit.scale_layout(Vector2(1.2, 2.0), 2.0)
+func scale_layout(factor: Vector2, max_door_width: float) -> void:
+	if factor.x <= 0.0 or factor.y <= 0.0:
+		push_error("Fator de escala da planta invalido %s; esperado Vector2 com x e y > 0." % factor)
 		return
-	width *= factor
-	depth *= factor
+	width *= factor.x
+	depth *= factor.y
 	for room in rooms:
 		room.bounds = Rect2(room.bounds.position * factor, room.bounds.size * factor)
 	for door in doors:
 		door["center"] = (door["center"] as Vector2) * factor
-		door["width"] = minf(float(door["width"]) * factor, max_door_width)
+		door["width"] = minf(float(door["width"]) * maxf(factor.x, factor.y), max_door_width)
 	for window in windows:
 		window["center"] = (window["center"] as Vector2) * factor
-		window["width"] = float(window["width"]) * factor
+		window["width"] = float(window["width"]) * (factor.x if window.get("axis", "") == "horizontal" else factor.y)
+
+
+## Espelha a planta da esquerda para a direita (comodos, portas e janelas).
+## Portas e janelas sao os mesmos dicionarios guardados nos comodos.
+## Uso: unit.mirror_horizontally()
+func mirror_horizontally() -> void:
+	for room in rooms:
+		room.bounds = Rect2(width - room.bounds.end.x, room.bounds.position.y, room.bounds.size.x, room.bounds.size.y)
+	for opening in doors + windows:
+		var center: Vector2 = opening["center"]
+		opening["center"] = Vector2(width - center.x, center.y)
+
+
+## Remove janelas de uma linha de parede, ex.: a parede colada no nucleo da
+## escada, onde a janela seria um buraco tampado pela parede vizinha.
+## Uso: unit.remove_windows_on_line("vertical", unit.width)
+func remove_windows_on_line(axis: String, line: float) -> void:
+	var kept: Array[Dictionary] = []
+	for window in windows:
+		var center: Vector2 = window["center"]
+		var window_line := center.x if axis == "vertical" else center.y
+		if window.get("axis", "") == axis and is_equal_approx(window_line, line):
+			continue
+		kept.append(window)
+	windows = kept
+	for room in rooms:
+		room.windows.assign(room.windows.filter(func(window: Dictionary) -> bool: return kept.has(window)))
 
 
 func add_window(window: Dictionary) -> void:

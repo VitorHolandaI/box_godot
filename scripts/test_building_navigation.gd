@@ -14,6 +14,8 @@ const ROUTER_SCRIPT := preload("res://scripts/zombie_indoor_router.gd")
 const APARTMENT_SEED := 18273
 const HOUSE_SEED := 240912
 const STEP_DELTA := 1.0 / 60.0
+# Sala do apartamento, logo depois da passagem que sai do nucleo da escada.
+const APARTMENT_LIVING_POINT := Vector2(9.0, 4.0)
 
 
 func run(test_root: Node) -> void:
@@ -25,15 +27,16 @@ func run(test_root: Node) -> void:
 	await _test_navigation_path_reaches_top_floor(test_root)
 	await _test_zombie_climbs_to_top_floor(test_root)
 	await _test_zombie_descends_to_street(test_root)
-	await _test_player_climbs_to_top_floor(test_root)
+	await _test_player_climbs_to_roof_terrace(test_root)
 	await _test_zombie_leaves_house_breaking_doors(test_root)
 
 
 func _test_stair_flights_alternate_and_skip_walls(test_root: Node) -> void:
 	print("Testando lances alternados da escada livres de paredes...")
 	var blueprint = BUILDING_GENERATOR_SCRIPT.generate(APARTMENT_SEED, "apartment")
-	if blueprint.stair_flights.size() != blueprint.floors - 1:
-		_fail(test_root, "Predio de %d andares deveria ter %d lances; tem %d." % [blueprint.floors, blueprint.floors - 1, blueprint.stair_flights.size()])
+	# Um lance por transicao de andar e mais um ate o terraco.
+	if blueprint.stair_flights.size() != blueprint.floors:
+		_fail(test_root, "Predio de %d andares deveria ter %d lances; tem %d." % [blueprint.floors, blueprint.floors, blueprint.stair_flights.size()])
 		return
 	for index in range(1, blueprint.stair_flights.size()):
 		var previous: Dictionary = blueprint.stair_flights[index - 1]
@@ -100,8 +103,8 @@ func _test_upper_floors_have_no_doors_to_the_void(test_root: Node) -> void:
 	for link in blueprint.unit_links:
 		links_per_floor[int(link["floor_index"])] = int(links_per_floor.get(int(link["floor_index"]), 0)) + 1
 	for floor_index in range(1, blueprint.floors):
-		if int(links_per_floor.get(floor_index, 0)) != 3:
-			_fail(test_root, "Andar %d deveria ligar nucleo e 3 apartamentos com 3 passagens; tem %d." % [floor_index, int(links_per_floor.get(floor_index, 0))])
+		if int(links_per_floor.get(floor_index, 0)) != 1:
+			_fail(test_root, "Andar %d deveria ligar nucleo e apartamento com 1 passagem; tem %d." % [floor_index, int(links_per_floor.get(floor_index, 0))])
 			return
 	print("PASS: Andares altos so tem passagens internas a partir da escada.")
 
@@ -141,7 +144,7 @@ func _test_navigation_path_reaches_top_floor(test_root: Node) -> void:
 	var navigation = await _wait_navigation(test_root, building)
 	var top_floor_y: float = building.global_position.y + float(blueprint.floors - 1) * blueprint.floor_height
 	var from := building.global_position + Vector3(blueprint.width * 0.5, 0.0, -1.5)
-	var to := building.global_position + Vector3(15.0, float(blueprint.floors - 1) * blueprint.floor_height, 12.0)
+	var to := building.global_position + Vector3(APARTMENT_LIVING_POINT.x, float(blueprint.floors - 1) * blueprint.floor_height, APARTMENT_LIVING_POINT.y)
 	var path: PackedVector3Array = navigation.get_path_between(from, to)
 	building.queue_free()
 	if path.is_empty() or absf(path[path.size() - 1].y - top_floor_y) > 0.5:
@@ -157,7 +160,7 @@ func _test_zombie_climbs_to_top_floor(test_root: Node) -> void:
 	await _wait_navigation(test_root, building)
 	_destroy_all_doors(building)
 	var top_level: float = float(blueprint.floors - 1) * blueprint.floor_height
-	var player := _add_bait_player(test_root, building.global_position + Vector3(15.0, top_level + 1.4, 12.0))
+	var player := _add_bait_player(test_root, building.global_position + Vector3(APARTMENT_LIVING_POINT.x, top_level + 1.4, APARTMENT_LIVING_POINT.y))
 	var zombie := _add_walker_zombie(test_root, building.global_position + Vector3(10.0, 1.3, 4.0))
 	await test_root.get_tree().physics_frame
 	var reached: bool = await _step_until(test_root, zombie, 4200, func() -> bool: return zombie.global_position.y - building.global_position.y >= top_level + 0.5)
@@ -179,7 +182,7 @@ func _test_zombie_descends_to_street(test_root: Node) -> void:
 	_destroy_all_doors(building)
 	var top_level: float = float(blueprint.floors - 1) * blueprint.floor_height
 	var player := _add_bait_player(test_root, building.global_position + Vector3(10.0, 1.4, -6.0))
-	var zombie := _add_walker_zombie(test_root, building.global_position + Vector3(15.0, top_level + 1.3, 12.0))
+	var zombie := _add_walker_zombie(test_root, building.global_position + Vector3(APARTMENT_LIVING_POINT.x, top_level + 1.3, APARTMENT_LIVING_POINT.y))
 	await test_root.get_tree().physics_frame
 	var reached: bool = await _step_until(test_root, zombie, 4200, func() -> bool: return zombie.global_position.z < building.global_position.z - 0.5)
 	var final_position := zombie.global_position - building.global_position
@@ -192,13 +195,13 @@ func _test_zombie_descends_to_street(test_root: Node) -> void:
 	print("PASS: Zumbi desce a escada sem travar no degrau de chegada.")
 
 
-func _test_player_climbs_to_top_floor(test_root: Node) -> void:
-	print("Testando jogador subindo a escada ate o ultimo andar...")
+func _test_player_climbs_to_roof_terrace(test_root: Node) -> void:
+	print("Testando jogador subindo a escada ate o terraco...")
 	var blueprint = BUILDING_GENERATOR_SCRIPT.generate(APARTMENT_SEED, "apartment")
 	var building := _add_building(test_root, blueprint, Vector3(0.0, 0.16, 900.0))
 	var navigation = await _wait_navigation(test_root, building)
 	_destroy_all_doors(building)
-	var top_level: float = float(blueprint.floors - 1) * blueprint.floor_height
+	var terrace_level: float = float(blueprint.floors) * blueprint.floor_height
 	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
 	player.set("reads_local_input", false)
 	player.set("is_local_controller", false)
@@ -207,16 +210,16 @@ func _test_player_climbs_to_top_floor(test_root: Node) -> void:
 	test_root.add_child(player)
 	await test_root.get_tree().physics_frame
 	var router = ROUTER_SCRIPT.new()
-	var goal := building.global_position + Vector3(15.0, top_level, 12.0)
+	var goal := building.global_position + Vector3(4.0, terrace_level, 12.0)
 	var reached := false
-	for step in 3000:
+	for step in 4200:
 		var feet := player.global_position - Vector3.UP * 1.17
 		var waypoint: Vector3 = router.next_waypoint(test_root.get_tree(), feet, goal, STEP_DELTA)
 		var to_waypoint := Vector2(waypoint.x - feet.x, waypoint.z - feet.z)
 		player.set("remote_input_age", 0.0)
 		player.set("move_input", to_waypoint.normalized() if router.has_route and to_waypoint.length() > 0.05 else Vector2.ZERO)
 		player.call("_physics_process", STEP_DELTA)
-		if player.global_position.y - building.global_position.y >= top_level + 0.5:
+		if player.global_position.y - building.global_position.y >= terrace_level + 0.5:
 			reached = true
 			break
 		if step % 30 == 29:
@@ -225,9 +228,9 @@ func _test_player_climbs_to_top_floor(test_root: Node) -> void:
 	player.queue_free()
 	building.queue_free()
 	if navigation == null or not reached:
-		_fail(test_root, "Jogador (capsula maior) deveria subir ate o andar %d; parou em %s." % [blueprint.floors - 1, final_position])
+		_fail(test_root, "Jogador (capsula maior) deveria subir ate o terraco (y>=%.1f); parou em %s." % [terrace_level + 0.5, final_position])
 		return
-	print("PASS: Jogador sobe todos os lances da escada.")
+	print("PASS: Jogador sobe todos os lances ate o terraco.")
 
 
 func _test_zombie_leaves_house_breaking_doors(test_root: Node) -> void:
