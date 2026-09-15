@@ -20,6 +20,7 @@ const MINIMAP_PLAYER_COLORS := [
 class MinimapView extends Control:
 	var tracked_players: Array = []
 	var tracked_zombies: Array = []
+	var tracked_crates: Array = []
 	var own_player: Node = null
 	var world_extent := 160.0
 	var colors: Array = []
@@ -47,6 +48,36 @@ class MinimapView extends Control:
 			var zombie_point := (center + Vector2(zombie.global_position.x, zombie.global_position.z) * scale_value).clamp(Vector2.ONE * 6.0, size - Vector2.ONE * 6.0)
 			draw_circle(zombie_point, 5.0, Color(1.0, 0.12, 0.08, 0.95))
 			draw_arc(zombie_point, 8.0, 0.0, TAU, 16, Color(1.0, 0.55, 0.1, 0.8), 2.0)
+		for crate_node in tracked_crates:
+			var crate := crate_node as Node3D
+			if crate == null or not is_instance_valid(crate):
+				continue
+			_draw_crate_widget(crate.global_position, center, scale_value)
+
+
+
+	## Widget do crate no minimapa: icone de paraquedas e, quando o crate esta
+	## fora do alcance do mapa, seta presa na borda apontando a direcao.
+	func _draw_crate_widget(crate_position: Vector3, center: Vector2, scale_value: float) -> void:
+		var raw_point := center + Vector2(crate_position.x, crate_position.z) * scale_value
+		var edge_rect := Rect2(Vector2.ONE * 8.0, size - Vector2.ONE * 16.0)
+		var outside := not edge_rect.has_point(raw_point)
+		var point := raw_point.clamp(edge_rect.position, edge_rect.end)
+		var pulse := 0.7 + 0.3 * absf(sin(Time.get_ticks_msec() / 220.0))
+		draw_circle(point, 7.0, Color(1.0, 0.85, 0.1, 0.95))
+		draw_rect(Rect2(point - Vector2(4.0, 4.0), Vector2(8.0, 8.0)), Color(0.35, 0.22, 0.08), true)
+		draw_circle(point, 4.5, Color(0.95, 0.2, 0.15))
+		if outside:
+			var direction := (raw_point - point).normalized()
+			if direction.length_squared() < 0.001:
+				direction = (point - center).normalized()
+			var tip := point + direction * 9.0
+			var left := point + direction.rotated(2.4) * 7.0
+			var right := point + direction.rotated(-2.4) * 7.0
+			var arrow_color := Color(1.0, 0.85, 0.1, 0.7 + 0.3 * pulse)
+			draw_line(left, tip, arrow_color, 2.0)
+			draw_line(right, tip, arrow_color, 2.0)
+			draw_line(left, right, arrow_color, 2.0)
 
 var players: Array[Node] = []
 var view_panels: Array[Control] = []
@@ -74,6 +105,10 @@ func _process(_delta: float) -> void:
 	var alive_zombies := get_tree().get_nodes_in_group("zombies").size()
 	var all_players := get_tree().get_nodes_in_group("player")
 	var all_zombies := get_tree().get_nodes_in_group("zombies")
+	var all_crates: Array = []
+	for node in get_tree().get_nodes_in_group("ground_weapons"):
+		if node is AirSupplyPickup:
+			all_crates.append(node)
 	for index in minimaps.size():
 		var view_player: Node = players[index] if index < players.size() else null
 		var reveal_zombies: Array = stragglers_to_reveal(all_zombies, straggler_reveal_count)
@@ -81,6 +116,7 @@ func _process(_delta: float) -> void:
 			reveal_zombies = _zombies_near(view_player as Node3D, all_zombies, float(view_player.get_sonar_reveal_radius()))
 		minimaps[index].tracked_players = all_players
 		minimaps[index].tracked_zombies = reveal_zombies
+		minimaps[index].tracked_crates = all_crates
 		minimaps[index].queue_redraw()
 	for index in players.size():
 		var player := players[index]
