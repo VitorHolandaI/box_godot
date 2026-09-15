@@ -2,7 +2,7 @@ class_name ZombieMutator
 extends RefCounted
 
 ## Gerenciador e configurador procedural de variantes anatomicas e mutilacoes de zumbis.
-## Suporta 9 variantes com anatomia, amputacoes, materiais e gait visual especificos.
+## Suporta 15 variantes com anatomia, amputacoes, materiais e gait visual especificos.
 
 enum Type {
 	WALKER = 0,
@@ -18,7 +18,22 @@ enum Type {
 	BRUTE = 9,
 	## Grita periodicamente e atrai a horda pela audicao.
 	SCREAMER = 10,
+	## Inchado e lento: explode ao morrer ferindo quem estiver perto.
+	BLOATER = 11,
+	## Magro e curvado: da um bote rapido quando chega perto.
+	LEAPER = 12,
+	## Capacete e colete: tiro causa metade do dano, faca dano cheio.
+	ARMORED = 13,
+	## Super zumbi (chefe): 10000 de vida, pisao, invocacao e furia.
+	TITAN = 14,
 }
+
+## Quantidade de tipos. Cabe no nibble do snapshot (ZombieSnapshotCodec, ate 16).
+const TYPE_COUNT := 15
+## Tipos que podem sair no sorteio comum pelo hash: todos menos o chefe.
+const RANDOM_VARIANT_COUNT := 14
+const TITAN_CAPSULE_RADIUS := 0.8
+const TITAN_CAPSULE_HEIGHT := 3.4
 
 const SKIN_PALETTE: Array[Color] = [
 	Color(0.28, 0.52, 0.22),
@@ -45,6 +60,12 @@ const PANTS_PALETTE: Array[Color] = [
 static func apply_appearance(zombie: CharacterBody3D, z_type: int, hash_val: int) -> void:
 	_apply_materials(zombie, hash_val)
 	_apply_anatomy(zombie, z_type)
+
+
+## Variante do sorteio comum (modo classico) pelo hash do nome; nunca o chefe.
+## Uso: var tipo := ZombieMutator.random_variant_for_hash(absi(name.hash()))
+static func random_variant_for_hash(hash_val: int) -> int:
+	return posmod(hash_val, RANDOM_VARIANT_COUNT)
 
 
 static func appearance_colors(hash_val: int) -> Array[Color]:
@@ -134,6 +155,24 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			zombie.set("speed", 2.4)
 			zombie.set("max_health", 85)
 			_setup_screamer(zombie)
+		Type.BLOATER:
+			zombie.set("speed", 1.35)
+			zombie.set("max_health", 140)
+			_setup_bloater(zombie, model)
+		Type.LEAPER:
+			zombie.set("speed", 2.6)
+			zombie.set("max_health", 70)
+			model.rotation.x = deg_to_rad(24.0)
+			model.scale = Vector3(0.85, 1.0, 0.85)
+		Type.ARMORED:
+			zombie.set("speed", 1.9)
+			zombie.set("max_health", 160)
+			_setup_armored(zombie)
+		Type.TITAN:
+			zombie.set("speed", 1.7)
+			zombie.set("max_health", 10000)
+			zombie.set("attack_damage", 45)
+			_setup_titan(zombie, model)
 		Type.WALKER:
 			zombie.set("speed", 2.2)
 			zombie.set("max_health", 100)
@@ -177,6 +216,66 @@ static func _setup_screamer(zombie: CharacterBody3D) -> void:
 	if head != null:
 		head.rotation.x = deg_to_rad(-12.0)
 		_add_box(head, Vector3(0.2, 0.12, 0.16), Vector3(0.0, -0.14, -0.24), Color(0.75, 0.72, 0.65))
+
+
+## Bloater: tronco inchado esverdeado com bolhas, para ser reconhecido de longe
+## (matar de perto machuca). Uso: chamado por apply_appearance no spawn.
+static func _setup_bloater(zombie: CharacterBody3D, model: Node3D) -> void:
+	var torso := zombie.get_node_or_null("Model/Torso") as MeshInstance3D
+	if torso != null:
+		torso.scale = Vector3(1.55, 1.15, 1.6)
+		torso.material_override = _quick_mat(Color(0.42, 0.55, 0.18), 0.7)
+		_add_box(torso, Vector3(0.18, 0.18, 0.12), Vector3(0.14, 0.1, -0.24), Color(0.7, 0.82, 0.25))
+		_add_box(torso, Vector3(0.12, 0.12, 0.1), Vector3(-0.16, -0.12, -0.24), Color(0.7, 0.82, 0.25))
+	if model != null:
+		model.scale = Vector3(1.1, 1.0, 1.1)
+
+
+## Tita: corpo 2.3x, pele vermelho-escura, olhos brilhando e capsula maior
+## (a forma da cena e compartilhada, entao e duplicada antes de crescer).
+## A capsula fica abaixo de 2 m de largura para ainda passar pelas portas.
+static func _setup_titan(zombie: CharacterBody3D, model: Node3D) -> void:
+	if model != null:
+		model.scale = Vector3.ONE * 2.3
+	for part in ["Model/Head", "Model/Torso", "Model/LeftArm/Mesh", "Model/RightArm/Mesh"]:
+		var mesh := zombie.get_node_or_null(part) as MeshInstance3D
+		if mesh != null:
+			mesh.material_override = _quick_mat(Color(0.32, 0.08, 0.07), 0.8)
+	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	if head != null:
+		for eye_name in ["LeftEye", "RightEye"]:
+			var eye := head.get_node_or_null(eye_name) as GeometryInstance3D
+			if eye == null:
+				continue
+			var glow := _quick_mat(Color(1.0, 0.35, 0.05), 0.3)
+			glow.emission_enabled = true
+			glow.emission = Color(1.0, 0.35, 0.05)
+			glow.emission_energy_multiplier = 3.0
+			eye.material_override = glow
+	var collision := zombie.get_node_or_null("CollisionShape") as CollisionShape3D
+	if collision != null and collision.shape is CapsuleShape3D:
+		var capsule := (collision.shape as CapsuleShape3D).duplicate() as CapsuleShape3D
+		capsule.radius = TITAN_CAPSULE_RADIUS
+		capsule.height = TITAN_CAPSULE_HEIGHT
+		collision.shape = capsule
+		collision.position.y += (TITAN_CAPSULE_HEIGHT - 2.2) * 0.5
+	var label := zombie.get_node_or_null("HealthLabel") as Label3D
+	if label != null:
+		label.position.y += 2.6
+		label.modulate = Color(1.0, 0.4, 0.2)
+
+
+## Armored: capacete e colete de policia escuros com faixa refletiva.
+## Uso: chamado por apply_appearance no spawn.
+static func _setup_armored(zombie: CharacterBody3D) -> void:
+	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	if head != null:
+		_add_box(head, Vector3(0.56, 0.2, 0.56), Vector3(0.0, 0.24, 0.0), Color(0.1, 0.11, 0.13))
+		_add_box(head, Vector3(0.5, 0.12, 0.05), Vector3(0.0, 0.06, -0.29), Color(0.25, 0.3, 0.35))
+	var torso := zombie.get_node_or_null("Model/Torso") as Node3D
+	if torso != null:
+		_add_box(torso, Vector3(0.74, 0.62, 0.46), Vector3.ZERO, Color(0.12, 0.14, 0.18))
+		_add_box(torso, Vector3(0.76, 0.06, 0.48), Vector3(0.0, 0.12, 0.0), Color(0.85, 0.8, 0.2))
 
 
 static func _hide_node(parent: Node, path: String) -> void:
@@ -295,7 +394,7 @@ static func animate_variant_pose(
 			if head != null:
 				var twitch := sin(walk_time * 2.8) * 0.12 if is_walking else 0.0
 				head.rotation.z = lerpf(head.rotation.z, deg_to_rad(12.0) + twitch, minf(delta * 15.0, 1.0))
-		Type.SPRINTER:
+		Type.SPRINTER, Type.LEAPER:
 			var run_swing := sin(walk_time) * 0.78 if is_walking else 0.0
 			left_arm.rotation.x = lerpf(left_arm.rotation.x, lerpf(run_swing, 1.7, attack_w), minf(delta * 20.0, 1.0))
 			right_arm.rotation.x = lerpf(right_arm.rotation.x, lerpf(-run_swing, 1.7, attack_w), minf(delta * 20.0, 1.0))
