@@ -115,6 +115,8 @@ var magnum_pressed := false
 var double_barrel_pressed := false
 var carbine_pressed := false
 var drop_pressed := false
+## Tab (ou botao do controle) cicla faca -> pistola -> arma de crate.
+var cycle_weapon_pressed := false
 var weapon_slots := WeaponSlots.new()
 ## Ultima revisao do inventario aplicada pelo snapshot; -1 = nunca aplicado.
 var slots_revision := -1
@@ -240,6 +242,7 @@ func get_local_input_state() -> Dictionary:
 		"double_barrel": Input.is_action_pressed(input_action_prefix + "double_barrel"),
 		"carbine": Input.is_action_pressed(input_action_prefix + "carbine"),
 		"drop": Input.is_action_pressed(input_action_prefix + "drop_weapon"),
+		"cycle": Input.is_action_pressed(input_action_prefix + "cycle_weapon"),
 		"aim": aim_input,
 	}
 
@@ -266,6 +269,7 @@ func apply_network_input(state: Dictionary) -> void:
 	double_barrel_pressed = _network_button_just_pressed("double_barrel", bool(state.get("double_barrel", false))) or double_barrel_pressed
 	carbine_pressed = _network_button_just_pressed("carbine", bool(state.get("carbine", false))) or carbine_pressed
 	drop_pressed = _network_button_just_pressed("drop", bool(state.get("drop", false))) or drop_pressed
+	cycle_weapon_pressed = _network_button_just_pressed("cycle", bool(state.get("cycle", false))) or cycle_weapon_pressed
 	remote_input_age = 0.0
 
 
@@ -370,15 +374,33 @@ func _handle_weapon_input() -> void:
 
 
 func _equip_weapon_from_input() -> void:
+	if cycle_weapon_pressed:
+		_equip_weapon(next_weapon_in_cycle(current_weapon, weapon_slots.kinds))
 	for request in [[knife_pressed, Weapon.KNIFE], [pistol_pressed, Weapon.PISTOL], [shotgun_pressed, Weapon.SHOTGUN], [uzi_pressed, Weapon.UZI], [magnum_pressed, Weapon.MAGNUM], [double_barrel_pressed, Weapon.DOUBLE_BARREL], [carbine_pressed, Weapon.CARBINE]]:
 		if not bool(request[0]):
 			continue
 		var requested: int = request[1]
 		if requested == Weapon.KNIFE or requested == Weapon.PISTOL or weapon_slots.has_kind(requested):
-			current_weapon = requested
-			pistol_stance_time = 0.0
-			crate_weapon_stance_time = 10.0 if WeaponStats.is_crate_weapon(requested) else 0.0
-			_update_weapon_models()
+			_equip_weapon(requested)
+
+
+func _equip_weapon(requested: int) -> void:
+	if requested == current_weapon:
+		return
+	current_weapon = requested
+	pistol_stance_time = 0.0
+	crate_weapon_stance_time = 10.0 if WeaponStats.is_crate_weapon(requested) else 0.0
+	_update_weapon_models()
+
+
+## Proxima arma do ciclo do Tab: faca, pistola e as armas de crate que o
+## jogador tem, voltando para a faca.
+## Uso: var proxima := PlayerCharacter.next_weapon_in_cycle(Weapon.PISTOL, weapon_slots.kinds)
+static func next_weapon_in_cycle(current: int, owned_crate_kinds: Array[int]) -> int:
+	var order: Array[int] = [Weapon.KNIFE, Weapon.PISTOL]
+	order.append_array(owned_crate_kinds)
+	var index := order.find(current)
+	return order[(index + 1) % order.size()]
 
 
 ## Dispara a arma de crate em maos: pellets, desgaste, falha quando degradada
@@ -1135,6 +1157,7 @@ func _poll_input() -> void:
 	double_barrel_pressed = Input.is_action_just_pressed(input_action_prefix + "double_barrel")
 	carbine_pressed = Input.is_action_just_pressed(input_action_prefix + "carbine")
 	drop_pressed = Input.is_action_just_pressed(input_action_prefix + "drop_weapon")
+	cycle_weapon_pressed = Input.is_action_just_pressed(input_action_prefix + "cycle_weapon")
 
 
 ## Le o pulso sonar apenas para o avatar controlado localmente. No cliente de
@@ -1167,6 +1190,7 @@ func _clear_transient_input() -> void:
 	double_barrel_pressed = false
 	carbine_pressed = false
 	drop_pressed = false
+	cycle_weapon_pressed = false
 
 
 ## Define o indice de cor do uniforme do jogador.
