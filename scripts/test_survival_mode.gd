@@ -244,8 +244,8 @@ func _test_forced_variant_spawn(test_root: Node) -> void:
 		_fail(test_root, "Zumbi deveria nascer brute com variante forçada.")
 		zombie.free()
 		return
-	if int(zombie.get("max_health")) != 320 or float(zombie.get("speed")) > 1.3:
-		_fail(test_root, "Brute deveria ter 320 de vida e andar devagar; vida=%s speed=%s." % [zombie.get("max_health"), zombie.get("speed")])
+	if int(zombie.get("max_health")) != 550 or float(zombie.get("speed")) > 1.3:
+		_fail(test_root, "Brute deveria ter 550 de vida e andar devagar; vida=%s speed=%s." % [zombie.get("max_health"), zombie.get("speed")])
 		zombie.free()
 		return
 	zombie.set("forced_variant", ZombieMutator.Type.SCREAMER)
