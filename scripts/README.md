@@ -2,7 +2,7 @@
 
 Logica de jogo, rede, interface e testes automatizados.
 
-- `ammo_loot_director.gd`: municao farta por classe: reposicao a cada 30 s ate 5 itens de cada classe e queda ocasional (8%, meia carga, classe sorteada) ao matar zumbi.
+- `ammo_loot_director.gd`: loot farto: reposicao de municao a cada 30 s ate 5 itens por classe, queda de municao (8%, meia carga) e de arma usada (30%, ate 30 no chao por 90 s) ao matar zumbi.
 - `ammo_pickup.gd`: caixa de municao militar coletavel, recarga de reserva e sincronizacao de rede.
 - `benchmark_indoor_escape.gd`: benchmark de zumbis presos em casas (`--benchmark-indoor-escape`, `--closed-doors`, `--sample-frames=N`) com tempo de script por frame e contagem de fugas.
 - `benchmark_zombies.gd`: suite de estresse e perfilamento de consumo de RAM (Heap e RSS SO), tempo de CPU de fisica e capacidade maxima de zumbis do servidor.
@@ -37,6 +37,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada entre aliados.
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
+- `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
 - `weapon_stats.gd`: tabela de stats das armas de crate (escopeta, Uzi, magnum): dano, pellets, pente, reserva, desgaste e falha.
