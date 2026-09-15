@@ -134,7 +134,7 @@ func _test_zombie_weapon_drop_is_rare_and_worn(test_root: Node) -> void:
 		var durability := int(weapon["durability"])
 		worn_ok = worn_ok and durability < int(stats["max_durability"]) and durability >= 1 and int(weapon["reserve"]) < int(stats["grant_reserve"]) and int(weapon["mag"]) == int(stats["mag_size"])
 	var rate := float(dropped) / float(samples)
-	if absf(rate - DIRECTOR_SCRIPT.WEAPON_DROP_CHANCE) > 0.01 or kinds.size() != DIRECTOR_SCRIPT.DROPPABLE_WEAPONS.size() or not worn_ok:
+	if absf(rate - DIRECTOR_SCRIPT.WEAPON_DROP_CHANCE) > 0.01 or kinds.size() != DIRECTOR_SCRIPT.droppable_weapons().size() or not worn_ok:
 		_fail(test_root, "Arma de zumbi: %.0f%% das mortes, todas as classes, pente cheio e desgastada; taxa=%.3f classes=%d usada=%s." % [DIRECTOR_SCRIPT.WEAPON_DROP_CHANCE * 100.0, rate, kinds.size(), worn_ok])
 		return
 	if DIRECTOR_SCRIPT.MAX_ZOMBIE_WEAPON_DROPS <= 0 or DIRECTOR_SCRIPT.ZOMBIE_WEAPON_LIFETIME > 120.0:

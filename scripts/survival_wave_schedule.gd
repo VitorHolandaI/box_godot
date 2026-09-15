@@ -124,7 +124,7 @@ func crate_kinds_for_wave(wave_index: int, world_seed: int) -> Array[int]:
 		return [WeaponStats.Kind.CARBINE, WeaponStats.Kind.UZI, WeaponStats.Kind.DOUBLE_BARREL]
 	if wave_index < 2:
 		return []
-	var all_kinds: Array[int] = [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM, WeaponStats.Kind.DOUBLE_BARREL, WeaponStats.Kind.CARBINE]
+	var all_kinds: Array[int] = WeaponStats.crate_kinds()
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world_seed * 7919 + wave_index
 	var picked: Array[int] = []
