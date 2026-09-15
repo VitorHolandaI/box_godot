@@ -12,6 +12,8 @@ const DOOR_NETWORK_STATE_SCRIPT := preload("res://scripts/door_network_state.gd"
 const WAVE_SUPPLY_CONTROLLER_SCRIPT := preload("res://scripts/wave_supply_controller.gd")
 const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state.gd")
 const CORPSE_CLEANUP_POLICY_SCRIPT := preload("res://scripts/corpse_cleanup_policy.gd")
+const ZOMBIE_SNAPSHOT_CODEC_SCRIPT := preload("res://scripts/zombie_snapshot_codec.gd")
+const LOAD_TEST_OPTIONS_SCRIPT := preload("res://scripts/load_test_options.gd")
 const CORPSE_CLEANUP_INTERVAL := 1.0
 const MAX_LOCAL_PLAYERS := 4
 const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
@@ -19,7 +21,8 @@ const MAX_CORPSES := 20
 const SPAWN_INTERVAL := 1.0
 const INPUT_INTERVAL := 1.0 / 30.0
 const SNAPSHOT_INTERVAL := 1.0 / 10.0
-const MAX_ZOMBIES_PER_SNAPSHOT_PACKET := 4
+# Payload binario por RPC abaixo do MTU do ENet (~1400 bytes com cabecalhos).
+const ZOMBIE_SNAPSHOT_PACKET_BYTES := 1100
 const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 2
 const PLAYER_VISION_UPDATE_INTERVAL := 0.12
 const PLAYER_SPAWN_POINTS := [
@@ -90,7 +93,20 @@ func _ready() -> void:
 		var smoke_zombie := zombies.get_child(-1) as CharacterBody3D
 		smoke_zombie.set("health", 35)
 		smoke_zombie.set("speed", 0.0)
+	if NetworkSession.is_server():
+		_prespawn_load_test_zombies(LOAD_TEST_OPTIONS_SCRIPT.prespawn_zombie_count(OS.get_cmdline_user_args()))
 	_notify_scene_loaded.call_deferred()
+
+
+## Teste de carga: enche o mundo de zumbis ja no inicio para medir rede e CPU
+## sem precisar jogar ate as ondas altas.
+func _prespawn_load_test_zombies(count: int) -> void:
+	var spawned := 0
+	for _index in count:
+		if _spawn_zombie():
+			spawned += 1
+	if count > 0:
+		print(JSON.stringify({"event": "prespawn_zombies", "requested": count, "spawned": spawned}))
 
 
 func _notify_scene_loaded() -> void:
@@ -120,6 +136,8 @@ func _physics_process(delta: float) -> void:
 	if NetworkSession.is_client():
 		if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 			bot_ai.update(delta, get_tree())
+		if lag_probe.is_enabled():
+			_record_received_network_traffic()
 		if lag_probe.is_enabled() and lag_probe.tick(delta, _server_round_trip_ms()):
 			print(JSON.stringify(lag_probe.build_report()))
 			get_tree().quit(0)
@@ -134,6 +152,16 @@ func _physics_process(delta: float) -> void:
 			if not NetworkSession.peer_slots.is_empty() and _loaded_peers_match(NetworkSession.peer_slots, NetworkSession.loaded_peers):
 				_send_player_snapshots(_collect_player_states())
 				_send_zombie_snapshots(_collect_zombie_states())
+
+
+func _record_received_network_traffic() -> void:
+	var enet_peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if enet_peer == null or enet_peer.host == null:
+		return
+	# pop_statistic zera o contador: cada chamada devolve so o trafego novo.
+	var received_bytes := enet_peer.host.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_DATA)
+	var received_packets := enet_peer.host.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_PACKETS)
+	lag_probe.record_received_traffic(int(received_bytes), int(received_packets))
 
 
 func _server_round_trip_ms() -> float:
@@ -357,8 +385,12 @@ func _collect_zombie_states() -> Array:
 	for zombie in zombies.get_children():
 		if not zombie.has_method("get_network_state"):
 			continue
+		var network_id := int(zombie.get_meta("network_id", -1))
+		if network_id < 0:
+			push_error("Zumbi '%s' sem meta network_id; esperado id atribuido em _spawn_zombie." % zombie.name)
+			continue
 		var state: Dictionary = zombie.get_network_state()
-		state["name"] = zombie.name
+		state["network_id"] = network_id
 		states.append(state)
 	return states
 
@@ -379,15 +411,11 @@ func _send_player_snapshots(states: Array) -> void:
 
 
 func _send_zombie_snapshots(states: Array) -> void:
-	var packet_count := maxi(ceili(float(states.size()) / MAX_ZOMBIES_PER_SNAPSHOT_PACKET), 1)
-	for packet_index in packet_count:
-		var packet_states: Array = []
-		var first_state := packet_index * MAX_ZOMBIES_PER_SNAPSHOT_PACKET
-		var state_limit := mini(first_state + MAX_ZOMBIES_PER_SNAPSHOT_PACKET, states.size())
-		for state_index in range(first_state, state_limit):
-			packet_states.append(states[state_index])
+	var packets: Array[Array] = ZOMBIE_SNAPSHOT_CODEC_SCRIPT.split_into_packets(states, ZOMBIE_SNAPSHOT_PACKET_BYTES)
+	for packet_index in packets.size():
+		var payload: PackedByteArray = ZOMBIE_SNAPSHOT_CODEC_SCRIPT.encode(packets[packet_index])
 		for peer_id in NetworkSession.loaded_peers:
-			_apply_zombie_snapshot.rpc_id(int(peer_id), packet_states, zombie_snapshot_sequence, packet_index, packet_count)
+			_apply_zombie_snapshot.rpc_id(int(peer_id), payload, zombie_snapshot_sequence, packet_index, packets.size())
 	zombie_snapshot_sequence += 1
 
 
@@ -411,7 +439,7 @@ func _apply_player_snapshot(player_states: Array, door_open: bool, building_door
 
 @rpc("authority", "call_remote", "unreliable_ordered")
 func _apply_zombie_snapshot(
-		zombie_states: Array,
+		payload: PackedByteArray,
 		snapshot_sequence: int,
 		packet_index: int,
 		packet_count: int
@@ -427,6 +455,7 @@ func _apply_zombie_snapshot(
 		received_zombie_snapshot_chunks.clear()
 		received_zombie_names.clear()
 	received_zombie_snapshot_chunks[packet_index] = true
+	var zombie_states: Array[Dictionary] = ZOMBIE_SNAPSHOT_CODEC_SCRIPT.decode(payload)
 	if lag_probe.is_enabled():
 		lag_probe.record_zombie_packet(snapshot_sequence, packet_index, packet_count, zombie_states.size(), Time.get_ticks_usec())
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
@@ -475,7 +504,8 @@ func _spawn_zombie(position_override: Variant = null) -> bool:
 	if spawn_position == ZOMBIE_SPAWN_LOCATOR_SCRIPT.INVALID_SPAWN_POSITION:
 		return false
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
-	zombie.name = "ZombieSpawn%d" % spawn_index
+	zombie.name = "%s%d" % [ZOMBIE_SNAPSHOT_CODEC_SCRIPT.NAME_PREFIX, spawn_index]
+	zombie.set_meta("network_id", spawn_index)
 	zombies.add_child(zombie, true)
 	zombie.died.connect(_on_zombie_died)
 	zombie.global_position = spawn_position
