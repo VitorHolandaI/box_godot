@@ -1,7 +1,7 @@
 extends RefCounted
 
-## Regressoes da visao compartilhada: zumbi visto por um aliado aparece para
-## todos; parede (linha bloqueada) e ninguem olhando mantem oculto.
+## Regressoes da visao compartilhada por raio: zumbi no raio de um aliado
+## aparece para todos; fora do raio de todos fica oculto.
 ## Uso: SharedVisionTests.new().run(test_root)
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
@@ -14,30 +14,26 @@ func run(test_root: Node) -> void:
 
 
 func _test_ally_reveals_zombie(test_root: Node) -> void:
-	print("Testando zumbi visto pelo aliado aparecendo para todos...")
+	print("Testando zumbi no raio do aliado aparecendo para todos...")
 	var origin := Vector3(930.0, 1.0, -930.0)
-	# Eu olho para -z; o zumbi esta 12 m atras de mim (+z), fora do meu cone.
 	var me := _add_player(test_root, origin, 0.0)
 	var zombie := ZOMBIE_SCENE.instantiate() as Node3D
 	zombie.name = "SharedVisionTarget"
-	zombie.position = origin + Vector3(0.0, 0.0, 12.0)
+	# Fora do meu raio, mas a 10 m do aliado.
+	zombie.position = origin + Vector3(0.0, 0.0, PlayerCharacter.VIEW_RADIUS + 10.0)
 	test_root.add_child(zombie)
-	var clear := func(_player: Node, _target: Node) -> bool: return true
-	var blocked := func(_player: Node, _target: Node) -> bool: return false
 	var alone: Array[CharacterBody3D] = [me]
-	var alone_sees: bool = SHARED_VISION_SCRIPT.is_seen_by_any(alone, zombie, false, true, clear)
-	# Aliado a 6 m do zumbi olhando para ele (+z = rotacao PI).
-	var ally := _add_player(test_root, origin + Vector3(0.0, 0.0, 6.0), PI)
+	var alone_sees: bool = SHARED_VISION_SCRIPT.is_seen_by_any(alone, zombie)
+	var ally := _add_player(test_root, origin + Vector3(0.0, 0.0, PlayerCharacter.VIEW_RADIUS), PI)
 	var together: Array[CharacterBody3D] = [me, ally]
-	var shared_sees: bool = SHARED_VISION_SCRIPT.is_seen_by_any(together, zombie, false, true, clear)
-	var wall_blocks: bool = SHARED_VISION_SCRIPT.is_seen_by_any(together, zombie, false, true, blocked)
+	var shared_sees: bool = SHARED_VISION_SCRIPT.is_seen_by_any(together, zombie)
 	me.free()
 	ally.free()
 	zombie.free()
-	if alone_sees or not shared_sees or wall_blocks:
-		_fail(test_root, "Sozinho de costas nao ve; com aliado olhando ve; parede bloqueia; sozinho=%s aliado=%s parede=%s." % [alone_sees, shared_sees, wall_blocks])
+	if alone_sees or not shared_sees:
+		_fail(test_root, "Fora do meu raio nao vejo; no raio do aliado todos veem; sozinho=%s aliado=%s." % [alone_sees, shared_sees])
 		return
-	print("PASS: Zumbi visto pelo aliado aparece para todos, parede continua bloqueando.")
+	print("PASS: Zumbi no raio do aliado aparece para todos.")
 
 
 func _add_player(test_root: Node, position: Vector3, facing: float) -> CharacterBody3D:
