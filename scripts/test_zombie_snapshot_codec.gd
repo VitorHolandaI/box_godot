@@ -59,16 +59,19 @@ func _test_packets_fit_budget(test_root: Node) -> void:
 func _test_round_trip_keeps_zombie_type(test_root: Node) -> void:
 	print("Testando tipo do zumbi no snapshot binario...")
 	var states: Array = []
-	for zombie_type in 11:
-		states.append({"network_id": 100 + zombie_type, "position": Vector3.ZERO, "is_dead": zombie_type == 10, "zombie_type": zombie_type})
+	for zombie_type in ZombieMutator.TYPE_COUNT:
+		states.append({"network_id": 100 + zombie_type, "position": Vector3.ZERO, "is_dead": zombie_type == ZombieMutator.TYPE_COUNT - 1, "zombie_type": zombie_type})
 	var payload: PackedByteArray = CODEC_SCRIPT.encode(states)
 	var decoded: Array[Dictionary] = CODEC_SCRIPT.decode(payload)
 	var decoded_types: Array[int] = []
 	for state in decoded:
 		decoded_types.append(int(state.get("zombie_type", -1)))
-	var expected: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-	if decoded_types != expected or not bool(decoded[10]["is_dead"]) or payload.size() != CODEC_SCRIPT.ALIVE_RECORD_BYTES * 10 + CODEC_SCRIPT.DEAD_RECORD_BYTES:
-		_fail(test_root, "Tipos 0..10 deveriam voltar iguais sem crescer o registro; tipos=%s bytes=%d." % [decoded_types, payload.size()])
+	var expected: Array[int] = []
+	for zombie_type in ZombieMutator.TYPE_COUNT:
+		expected.append(zombie_type)
+	var last := ZombieMutator.TYPE_COUNT - 1
+	if decoded_types != expected or not bool(decoded[last]["is_dead"]) or payload.size() != CODEC_SCRIPT.ALIVE_RECORD_BYTES * last + CODEC_SCRIPT.DEAD_RECORD_BYTES:
+		_fail(test_root, "Tipos 0..%d deveriam voltar iguais sem crescer o registro; tipos=%s bytes=%d." % [last, decoded_types, payload.size()])
 		return
 	print("PASS: Snapshot binario carrega o tipo do zumbi sem bytes extras.")
 

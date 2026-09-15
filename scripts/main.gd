@@ -36,6 +36,9 @@ const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
 ## frame (fila) para nao dar hitch de instantiates sincronos.
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 6
 const NETWORK_ZOMBIE_PROXY_FACTORY_SCRIPT := preload("res://scripts/network_zombie_proxy_factory.gd")
+const AMMO_LOOT_DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd")
+const ZOMBIE_BOSS_BRAIN_SCRIPT := preload("res://scripts/zombie_boss_brain.gd")
+const ZOMBIE_SCRIPT := preload("res://scripts/zombie.gd")
 const PLAYER_VISION_UPDATE_INTERVAL := 0.12
 ## Ray de oclusao de visao so dentro de 20m: alem disso o dissolve ja cobre
 ## e o estado anterior persiste (zumbi visto continua, oculto segue oculto).
@@ -94,9 +97,12 @@ var crate_index := 0
 ## Contador de nomes estaveis dos itens de vida/municao espalhados.
 var loot_index := 0
 var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
+var ammo_loot_director = AMMO_LOOT_DIRECTOR_SCRIPT.new()
+var loot_rng := RandomNumberGenerator.new()
 
 
 func _ready() -> void:
+	loot_rng.randomize()
 	in_game_menu.unstuck_requested.connect(_on_unstuck_requested)
 	survival_wave_controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(Callable(self, "_spawn_zombie"))
 	if not NetworkSession.is_client():
@@ -171,6 +177,9 @@ func _process(delta: float) -> void:
 				_restart_survival()
 			return
 		survival_wave_controller.tick(delta)
+		# Sem jogador nao ha onde espalhar (pick_clear_position gira em volta deles).
+		if not get_tree().get_nodes_in_group("player").is_empty():
+			_restock_class_ammo(delta)
 		return
 	if not zombie_spawn_schedule.is_spawn_due(delta):
 		return
@@ -440,6 +449,10 @@ func _spawn_loot_item(rng: RandomNumberGenerator, kind: int, amount: int) -> voi
 	var position := AIRDROP_CONTROLLER_SCRIPT.pick_clear_position(get_tree(), rng, 20.0, 110.0)
 	if position == AIRDROP_CONTROLLER_SCRIPT.INVALID_DROP_POSITION:
 		return
+	_add_loot_item(kind, amount, position)
+
+
+func _add_loot_item(kind: int, amount: int, position: Vector3) -> void:
 	var item := GroundSupplyPickup.new()
 	item.name = "Loot%d" % loot_index
 	loot_index += 1
@@ -856,7 +869,7 @@ func _configure_network_zombies() -> void:
 		zombie.simulation_enabled = false
 
 
-func _spawn_zombie(position_override: Variant = null) -> bool:
+func _spawn_zombie(position_override: Variant = null, variant_override: int = -1) -> bool:
 	var spawn_position: Vector3 = position_override as Vector3 if position_override is Vector3 else zombie_spawn_locator.pick_spawn_position(get_tree())
 	if spawn_position == ZOMBIE_SPAWN_LOCATOR_SCRIPT.INVALID_SPAWN_POSITION:
 		return false
@@ -865,12 +878,15 @@ func _spawn_zombie(position_override: Variant = null) -> bool:
 	zombie.set_meta("network_id", spawn_index)
 	# Sobrevivencia: a onda sorteia a variante (mix percentual por fase) e o
 	# hash sincroniza o visual para os clientes pelo snapshot.
-	if NetworkSession.survival_mode and survival_wave_controller != null:
+	if variant_override >= 0:
+		zombie.set("forced_variant", variant_override)
+	elif NetworkSession.survival_mode and survival_wave_controller != null:
 		var roll := posmod(spawn_index * 37 + NetworkSession.world_seed * 13, 100)
 		zombie.set("forced_variant", survival_wave_controller.schedule.pick_variant(survival_wave_controller.wave_index, roll))
 	zombies.add_child(zombie, true)
-	zombie.died.connect(_on_zombie_died)
+	zombie.died.connect(_on_zombie_died.bind(zombie))
 	zombie.stranded.connect(_on_zombie_stranded)
+	zombie.boss_ability_used.connect(_on_boss_ability_used)
 	zombie.global_position = spawn_position
 	spawn_index += 1
 	return true
@@ -906,9 +922,28 @@ func _on_zombie_stranded(zombie: Node) -> void:
 	print(JSON.stringify({"event": "zombie_relocated", "zombie": String(zombie.name), "position": [snappedf(new_position.x, 0.1), snappedf(new_position.z, 0.1)]}))
 
 
-func _on_zombie_died(_killer: Node) -> void:
+func _on_zombie_died(killer: Node, zombie: Node3D) -> void:
 	if NetworkSession.survival_mode:
 		survival_wave_controller.register_death()
+	_drop_kill_ammo(killer, zombie)
+
+
+## Zumbi abatido pode soltar municao da arma de quem matou, no lugar da morte.
+func _drop_kill_ammo(killer: Node, zombie: Node3D) -> void:
+	if NetworkSession.is_client() or not is_instance_valid(zombie):
+		return
+	var supply_kind: int = ammo_loot_director.drop_kind_for_kill(killer, loot_rng.randf())
+	if supply_kind < 0:
+		return
+	_add_loot_item(supply_kind, AMMO_LOOT_DIRECTOR_SCRIPT.amount_for(supply_kind), Vector3(zombie.global_position.x, 0.02, zombie.global_position.z))
+
+
+## Reposicao periodica: completa o minimo de municao de cada classe no mapa.
+func _restock_class_ammo(delta: float) -> void:
+	if not ammo_loot_director.is_restock_due(delta):
+		return
+	for supply_kind in AMMO_LOOT_DIRECTOR_SCRIPT.kinds_to_restock(AMMO_LOOT_DIRECTOR_SCRIPT.count_supplies(get_tree())):
+		_spawn_loot_item(loot_rng, supply_kind, AMMO_LOOT_DIRECTOR_SCRIPT.amount_for(supply_kind))
 
 
 ## Cada nova onda devolve 3 vidas a todos os jogadores, inclusive os que
@@ -939,6 +974,46 @@ func _on_wave_transition(wave_index: int) -> void:
 	_schedule_wave_task(0.12, func() -> void: if wave_supply_controller != null: wave_supply_controller.refresh_wave(wave_index))
 	_schedule_wave_task(0.24, func() -> void: if airdrop_controller != null: airdrop_controller.on_wave_started(wave_index))
 	_schedule_wave_task(0.36, func() -> void: _spawn_scattered_loot(wave_index))
+	if survival_wave_controller.schedule.is_boss_wave(wave_index):
+		_schedule_wave_task(3.0, _spawn_boss)
+
+
+## Hora 10, 20, 30: o super zumbi entra fora da cota e a onda espera ele morrer.
+func _spawn_boss() -> void:
+	if NetworkSession.is_client() or survival_wave_controller.game_over:
+		return
+	if _spawn_zombie(null, ZombieMutator.Type.TITAN):
+		survival_wave_controller.register_extra_spawn()
+		print(JSON.stringify({"event": "boss_spawned", "wave_index": survival_wave_controller.wave_index}))
+
+
+## Habilidade do Tita: invocacao vira sprinters ao redor; todo efeito visual vai
+## para os clientes por RPC (a partida local toca direto).
+func _on_boss_ability_used(zombie: Node, ability: String) -> void:
+	if NetworkSession.is_client() or not is_instance_valid(zombie):
+		return
+	var origin: Vector3 = (zombie as Node3D).global_position
+	if ability == "summon":
+		for index in ZOMBIE_BOSS_BRAIN_SCRIPT.SUMMON_COUNT:
+			var angle := TAU * float(index) / float(ZOMBIE_BOSS_BRAIN_SCRIPT.SUMMON_COUNT)
+			if _spawn_zombie(origin + Vector3(cos(angle) * 3.0, 0.0, sin(angle) * 3.0), ZombieMutator.Type.SPRINTER):
+				survival_wave_controller.register_extra_spawn()
+	_play_boss_ability_effect(ability, origin)
+	if NetworkSession.is_server():
+		for peer_id in NetworkSession.loaded_peers:
+			_boss_ability_effect.rpc_id(int(peer_id), ability, origin)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _boss_ability_effect(ability: String, origin: Vector3) -> void:
+	if NetworkSession.is_client():
+		_play_boss_ability_effect(ability, origin)
+
+
+func _play_boss_ability_effect(ability: String, origin: Vector3) -> void:
+	var colors := {"slam": ZOMBIE_SCRIPT.TITAN_SLAM_COLOR, "summon": Color(0.6, 0.2, 0.9), "rage": Color(1.0, 0.1, 0.05)}
+	var radius: float = ZOMBIE_BOSS_BRAIN_SCRIPT.SLAM_RANGE if ability == "slam" else 3.0
+	ZOMBIE_SCRIPT.play_area_effect(get_tree(), origin, colors.get(ability, Color.WHITE), radius)
 
 
 func _schedule_wave_task(delay: float, task: Callable) -> void:

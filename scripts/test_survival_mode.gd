@@ -446,18 +446,19 @@ func _test_variant_mix(test_root: Node) -> void:
 	if endgame.get(ZombieMutator.Type.SCREAMER, 0) == 0:
 		_fail(test_root, "Hora 11+ deveria liberar o screamer.")
 		return
-	# Faixas acumuladas do mix final: walker 0-34, brute 83-92, screamer 93-99.
+	# Faixas acumuladas do mix final (ordem do tipo): walker 0-13, brute 62-71,
+	# screamer 72-78, bloater 79-84, leaper 85-91, armored 92-99.
 	if schedule.pick_variant(12, 0) != int(ZombieMutator.Type.WALKER):
 		_fail(test_root, "Rolagem 0 deveria cair no walker (maior faixa).")
 		return
-	if schedule.pick_variant(12, 83) != int(ZombieMutator.Type.BRUTE) or schedule.pick_variant(12, 92) != int(ZombieMutator.Type.BRUTE):
-		_fail(test_root, "Faixa do brute deveria cobrir rolagens 83-92.")
+	if schedule.pick_variant(12, 62) != int(ZombieMutator.Type.BRUTE) or schedule.pick_variant(12, 71) != int(ZombieMutator.Type.BRUTE):
+		_fail(test_root, "Faixa do brute deveria cobrir rolagens 62-71.")
 		return
-	if schedule.pick_variant(12, 82) == int(ZombieMutator.Type.BRUTE):
-		_fail(test_root, "Rolagem 82 deveria ficar fora da faixa do brute.")
+	if schedule.pick_variant(12, 61) == int(ZombieMutator.Type.BRUTE):
+		_fail(test_root, "Rolagem 61 deveria ficar fora da faixa do brute.")
 		return
-	if schedule.pick_variant(12, 93) != int(ZombieMutator.Type.SCREAMER):
-		_fail(test_root, "Rolagem 93 deveria cair no screamer.")
+	if schedule.pick_variant(12, 72) != int(ZombieMutator.Type.SCREAMER) or schedule.pick_variant(12, 99) != int(ZombieMutator.Type.ARMORED):
+		_fail(test_root, "Rolagem 72 deveria cair no screamer e 99 no armored.")
 		return
 	print("PASS: Mix percentual de variantes validado.")
 
