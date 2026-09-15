@@ -39,7 +39,7 @@ static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void
 			_set_arm_pose(right_arm, right_pose, delta)
 		if knife_model != null:
 			knife_model.rotation.x = lerpf(knife_model.rotation.x, -right_pose.x, minf(delta * 20.0, 1.0))
-	elif float(player.get("pistol_stance_time")) > 0.0:
+	elif cur_weapon == 1 and float(player.get("pistol_stance_time")) > 0.0:
 		if left_arm != null:
 			_set_arm_pose(left_arm, Vector3(1.28, 0.0, 0.38), delta)
 		if right_arm != null:
@@ -47,6 +47,16 @@ static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void
 		var recoil: float = 0.12 if float(player.get("pistol_recoil_time")) > 0.0 else 0.0
 		if weapon_holder != null:
 			weapon_holder.position = weapon_holder.position.lerp(Vector3(0.0, 0.68, -0.9 + recoil), minf(delta * 16.0, 1.0))
+	elif cur_weapon >= 2 and float(player.get("crate_weapon_stance_time")) > 0.0:
+		# Arma de crate: mira com as DUAS maos esticadas na arma (nao fica
+		# na postura tatica da pistola).
+		if left_arm != null:
+			_set_arm_pose(left_arm, Vector3(1.35, 0.0, 0.3), delta)
+		if right_arm != null:
+			_set_arm_pose(right_arm, Vector3(1.35, 0.0, -0.3), delta)
+		if weapon_holder != null:
+			weapon_holder.position = weapon_holder.position.lerp(Vector3(0.0, 0.62, -1.0), minf(delta * 16.0, 1.0))
+			weapon_holder.rotation.x = lerpf(weapon_holder.rotation.x, 0.0, minf(delta * 12.0, 1.0))
 	else:
 		if left_arm != null:
 			_set_arm_pose(left_arm, Vector3(0.72, 0.0, 0.46), delta)
