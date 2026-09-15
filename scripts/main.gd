@@ -40,6 +40,7 @@ const AMMO_LOOT_DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd"
 const SHARED_VISION_SCRIPT := preload("res://scripts/shared_vision.gd")
 const ZOMBIE_BOSS_BRAIN_SCRIPT := preload("res://scripts/zombie_boss_brain.gd")
 const ZOMBIE_SCRIPT := preload("res://scripts/zombie.gd")
+const EXPLOSION_COLOR := Color(1.0, 0.45, 0.1)
 const PLAYER_VISION_UPDATE_INTERVAL := 0.12
 const PLAYER_SPAWN_POINTS := [
 	Vector3(-13.0, 1.18, 9.5),
@@ -293,18 +294,18 @@ func _ragdoll_position(ragdoll: Node) -> Vector3:
 	return torso.global_position if torso != null else (ragdoll as Node3D).global_position
 
 
-func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1, spread_deg: float = 0.0) -> void:
+func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1, spread_deg: float = 0.0, weapon_kind: int = -1) -> void:
 	if not NetworkSession.is_server():
 		return
 	for peer_id in NetworkSession.loaded_peers:
-		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count, spread_deg)
+		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count, spread_deg, weapon_kind)
 
 
 ## any_peer: o visual de bala e cosmico (tracer, dano 0) e o handler roda
 ## apenas no cliente; modo "authority" spamava erro quando o rpc chegava
 ## de um peer que nao e o servidor. Uso: enviado por replicate_bullet_visual.
 @rpc("any_peer", "call_remote", "unreliable_ordered")
-func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1, spread_deg: float = 0.0) -> void:
+func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1, spread_deg: float = 0.0, weapon_kind: int = -1) -> void:
 	if not NetworkSession.is_client():
 		return
 	AudioFeedback.play_gunshot(spawn_position)
@@ -324,6 +325,7 @@ func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pe
 		var side := Vector3.UP.cross(pellet_direction).normalized()
 		bullet.global_position = spawn_position + pellet_direction * 0.12 + side * (float(pellet_index) - float(pellet_total - 1) / 2.0) * 0.04
 		bullet.setup(pellet_direction, 0, false)
+		Bullet.tint_tracer(bullet, WeaponStats.tracer_color_for(weapon_kind))
 		bullet.add_to_group("network_bullet_visuals")
 
 
@@ -1031,6 +1033,21 @@ func _on_boss_ability_used(zombie: Node, ability: String) -> void:
 	if NetworkSession.is_server():
 		for peer_id in NetworkSession.loaded_peers:
 			_boss_ability_effect.rpc_id(int(peer_id), ability, origin)
+
+
+## Explosao da bazuca: toca local (partida local) e manda para os clientes.
+## Uso: get_tree().current_scene.show_explosion(ponto, 5.0)
+func show_explosion(impact: Vector3, radius: float) -> void:
+	ZOMBIE_SCRIPT.play_area_effect(get_tree(), impact, EXPLOSION_COLOR, radius)
+	if NetworkSession.is_server():
+		for peer_id in NetworkSession.loaded_peers:
+			_explosion_effect.rpc_id(int(peer_id), impact, radius)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _explosion_effect(impact: Vector3, radius: float) -> void:
+	if NetworkSession.is_client():
+		ZOMBIE_SCRIPT.play_area_effect(get_tree(), impact, EXPLOSION_COLOR, radius)
 
 
 @rpc("authority", "call_remote", "reliable")
