@@ -14,6 +14,8 @@ var spawned_in_wave := 0
 var alive_in_wave := 0
 var total_kills := 0
 var complete := false
+## Todo mundo caido/eliminado: horda zera e a partida espera novo jogador.
+var game_over := false
 var _spawn_elapsed := 0.0
 
 
@@ -22,7 +24,7 @@ func _init(callback: Callable = Callable()) -> void:
 
 
 func tick(delta: float) -> void:
-	if complete or not spawn_callback.is_valid():
+	if complete or game_over or not spawn_callback.is_valid():
 		return
 	_spawn_elapsed += maxf(delta, 0.0)
 	var target := schedule.target_for(wave_index)
@@ -66,7 +68,27 @@ func set_sync_state(new_wave_index: int, kills: int) -> void:
 	state_changed.emit()
 
 
+## Game over: para tudo; o HUD espera um jogador para reiniciar.
+func trigger_game_over() -> void:
+	game_over = true
+	state_changed.emit()
+
+
+## Alguem entrou de novo: horda zerada recomeca do comeco.
+func restart() -> void:
+	game_over = false
+	complete = false
+	wave_index = 0
+	spawned_in_wave = 0
+	alive_in_wave = 0
+	total_kills = 0
+	_spawn_elapsed = 0.0
+	state_changed.emit()
+
+
 func get_hud_text() -> String:
+	if game_over:
+		return "GAME OVER | Aguardando jogador para reiniciar a horda..."
 	if complete:
 		return "SOBREVIVENCIA CONCLUIDA | Horas: %d | Abates: %d" % [schedule.wave_count(), total_kills]
 	var current_hour := wave_index + 1
