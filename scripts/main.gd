@@ -42,6 +42,8 @@ const PLAYER_SPAWN_POINTS := [
 
 var local_players: Array[Node] = []
 var network_players: Dictionary = {}
+## Contador de nomes estaveis para pickups de arma dropada no chao.
+var ground_weapon_index := 0
 var corpses: Array[Node] = []
 var ragdolls: Array[Node] = []
 var ragdolls_by_zombie: Dictionary = {}
@@ -231,25 +233,26 @@ func _ragdoll_position(ragdoll: Node) -> Vector3:
 	return torso.global_position if torso != null else (ragdoll as Node3D).global_position
 
 
-func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3) -> void:
+func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1) -> void:
 	if not NetworkSession.is_server():
 		return
 	for peer_id in NetworkSession.loaded_peers:
-		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction)
+		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count)
 
 
 @rpc("authority", "call_remote", "reliable")
-func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3) -> void:
+func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1) -> void:
 	if not NetworkSession.is_client():
 		return
 	AudioFeedback.play_gunshot(spawn_position)
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 		bot_ai.notify_bullet()
-	var bullet = BULLET_SCENE.instantiate()
-	add_child(bullet)
-	bullet.global_position = spawn_position
-	bullet.setup(bullet_direction, 0, false)
-	bullet.add_to_group("network_bullet_visuals")
+	for pellet_index in maxi(pellet_count, 1):
+		var bullet = BULLET_SCENE.instantiate()
+		add_child(bullet)
+		bullet.global_position = spawn_position
+		bullet.setup(bullet_direction, 0, false)
+		bullet.add_to_group("network_bullet_visuals")
 
 
 func _spawn_offline_player(slot: int, config: Dictionary) -> void:
@@ -262,7 +265,53 @@ func _spawn_offline_player(slot: int, config: Dictionary) -> void:
 	player.set_color_index(slot)
 	players_node.add_child(player)
 	player.set_spawn_position(player.global_position)
+	_connect_crate_weapon_signals(player)
 	local_players.append(player)
+
+
+func _connect_crate_weapon_signals(player: Node) -> void:
+	player.crate_weapon_dropped.connect(_on_crate_weapon_dropped.bind(player))
+	player.crate_weapon_broken.connect(_on_crate_weapon_broken.bind(player))
+
+
+## Drop da arma da mao: no servidor/offline spawna a pickup no chao; clientes
+## recebem o no pelo sync por nome no snapshot.
+## Uso: conectado ao sinal crate_weapon_dropped do jogador.
+func _on_crate_weapon_dropped(player: Node, kind: int, mag: int, reserve: int, durability: int) -> void:
+	if NetworkSession.is_client():
+		return
+	var pickup := GroundWeaponPickup.new()
+	pickup.name = "GroundWeapon%d" % ground_weapon_index
+	ground_weapon_index += 1
+	pickup.setup(kind, mag, reserve, durability)
+	add_child(pickup)
+	var forward: Vector3 = -player.global_transform.basis.z
+	forward.y = 0.0
+	pickup.global_position = player.global_position + forward.normalized() * 1.2 if not forward.is_zero_approx() else player.global_position
+	pickup.global_position.y = player.global_position.y
+
+
+## Quebra de arma de crate: peca local no simulador + evento para os clientes
+## gerarem os pedacos visualmente. Uso: conectado ao sinal crate_weapon_broken.
+func _on_crate_weapon_broken(player: Node, kind: int) -> void:
+	if not NetworkSession.is_server():
+		return
+	var player_key := ""
+	for key in network_players:
+		if network_players[key] == player:
+			player_key = key
+			break
+	for peer_id in NetworkSession.loaded_peers:
+		_weapon_broke.rpc_id(int(peer_id), player_key, kind, player.global_position + Vector3.UP * 1.1)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _weapon_broke(player_key: String, _kind: int, origin: Vector3) -> void:
+	if not NetworkSession.is_client():
+		return
+	var player = network_players.get(player_key)
+	if player != null and is_instance_valid(player):
+		WeaponBreakDebris.spawn(get_tree().current_scene, origin)
 
 
 func _reconcile_network_players() -> void:
@@ -310,6 +359,8 @@ func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
 	players_node.add_child(player, true)
 	player.set_spawn_position(player.global_position)
 	network_players[key] = player
+	if player.simulation_enabled:
+		_connect_crate_weapon_signals(player)
 
 
 func _refresh_local_views() -> void:
@@ -404,6 +455,7 @@ func _send_player_snapshots(states: Array) -> void:
 	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
 	var door_open := safehouse_door != null and bool(safehouse_door.call("is_open_requested"))
 	var supply_states := SUPPLY_NETWORK_STATE_SCRIPT.collect(get_tree())
+	var ground_weapons := GroundWeaponSync.collect(get_tree())
 	for packet_index in packet_count:
 		var packet_states: Array = []
 		var first_state := packet_index * MAX_PLAYERS_PER_SNAPSHOT_PACKET
@@ -411,7 +463,7 @@ func _send_player_snapshots(states: Array) -> void:
 		for state_index in range(first_state, state_limit):
 			packet_states.append(states[state_index])
 		for peer_id in NetworkSession.loaded_peers:
-			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open, supply_states)
+			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open, supply_states, ground_weapons)
 
 
 ## Portas dos predios: estado completo (confiavel) para quem acabou de carregar
@@ -451,12 +503,13 @@ func _send_zombie_snapshots(states: Array) -> void:
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func _apply_player_snapshot(player_states: Array, door_open: bool, supply_states: Array) -> void:
+func _apply_player_snapshot(player_states: Array, door_open: bool, supply_states: Array, ground_weapons: Array) -> void:
 	if not NetworkSession.is_client():
 		return
 	if safehouse_door != null:
 		safehouse_door.call("apply_network_open_state", door_open)
 	SUPPLY_NETWORK_STATE_SCRIPT.apply(get_tree(), supply_states)
+	GroundWeaponSync.apply(get_tree(), ground_weapons)
 	for state_value in player_states:
 		if not state_value is Dictionary:
 			continue
