@@ -5,6 +5,7 @@ extends RefCounted
 ## etiqueta da classe (antes toda caixa de municao parecia igual).
 ## Uso: AmmoLootTests.new().run(test_root)
 
+const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd")
 
 
@@ -13,6 +14,7 @@ func run(test_root: Node) -> void:
 	_test_restock_fills_each_class_to_minimum(test_root)
 	_test_restock_waits_for_interval(test_root)
 	_test_class_ammo_has_distinct_label(test_root)
+	_test_class_ammo_always_counts(test_root)
 
 
 func _test_kill_drop_is_rare_and_any_class(test_root: Node) -> void:
@@ -81,6 +83,42 @@ func _test_class_ammo_has_distinct_label(test_root: Node) -> void:
 		_fail(test_root, "Cada classe deveria ter etiqueta e cor proprias; etiquetas=%s cores=%d esperado=%d." % [labels.keys(), colors.size(), expected])
 		return
 	print("PASS: Municao de cada classe tem etiqueta e cor proprias.")
+
+
+func _test_class_ammo_always_counts(test_root: Node) -> void:
+	print("Testando municao de classe contando com ou sem a arma...")
+	var without_weapon := PLAYER_SCENE.instantiate() as CharacterBody3D
+	without_weapon.set("reads_local_input", false)
+	without_weapon.set("is_local_controller", false)
+	test_root.add_child(without_weapon)
+	without_weapon.set("reserve_ammo", 0)
+	var foreign := _add_supply(test_root, GroundSupplyPickup.Kind.AMMO_SHOTGUN, 12)
+	foreign.call("_on_body_entered", without_weapon)
+	var pistol_reserve := int(without_weapon.get("reserve_ammo"))
+	var foreign_taken := foreign.is_queued_for_deletion()
+	var with_weapon := PLAYER_SCENE.instantiate() as CharacterBody3D
+	with_weapon.set("reads_local_input", false)
+	with_weapon.set("is_local_controller", false)
+	test_root.add_child(with_weapon)
+	with_weapon.call("take_crate_weapon", WeaponStats.Kind.SHOTGUN)
+	var slots: WeaponSlots = with_weapon.get("weapon_slots")
+	slots.state_of(WeaponStats.Kind.SHOTGUN)["reserve"] = 0
+	var own := _add_supply(test_root, GroundSupplyPickup.Kind.AMMO_SHOTGUN, 12)
+	own.call("_on_body_entered", with_weapon)
+	var shotgun_reserve := int(slots.state_of(WeaponStats.Kind.SHOTGUN).get("reserve", 0))
+	for node in [without_weapon, with_weapon, foreign, own]:
+		node.free()
+	if pistol_reserve != GroundSupplyPickup.PISTOL_ROUNDS_FROM_FOREIGN_CLASS or not foreign_taken or shotgun_reserve != 12:
+		_fail(test_root, "Sem a arma vira %d balas de pistola; com a arma vai para a reserva dela; pistola=%d coletado=%s escopeta=%d." % [GroundSupplyPickup.PISTOL_ROUNDS_FROM_FOREIGN_CLASS, pistol_reserve, foreign_taken, shotgun_reserve])
+		return
+	print("PASS: Municao do chao sempre conta (sem a arma vira bala de pistola).")
+
+
+func _add_supply(test_root: Node, kind: int, amount: int) -> GroundSupplyPickup:
+	var item := GroundSupplyPickup.new()
+	item.setup(kind, amount)
+	test_root.add_child(item)
+	return item
 
 
 func _fail(test_root: Node, message: String) -> void:

@@ -31,8 +31,10 @@ Logica de jogo, rede, interface e testes automatizados.
 - `network_zombie_proxy_factory.gd`: cria o zumbi do cliente a partir do snapshot, com a variante sorteada pelo servidor aplicada antes do _ready.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
+- `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada: zumbi visto por qualquer jogador (local ou aliado de rede) fica visivel para todos.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
+- `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada entre aliados.
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
@@ -43,7 +45,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `ground_weapon_pickup.gd`: arma dropada no chao, coleta por interacao.
 - `ground_weapon_sync.gd`: reconciliacao por nome das armas no chao entre servidor e cliente.
 - `air_supply_pickup.gd`: crate de airdrop com varias armas, coleta por interacao e expiracao em 10 minutos (desce de paraquedas).
-- `ground_supply_pickup.gd`: item de vida/municao espalhado pelas ruas, com cor e etiqueta por classe de municao; coleta ao tocar, expira em 3 minutos.
+- `ground_supply_pickup.gd`: item de vida/municao espalhado pelas ruas, com cor e etiqueta por classe; coleta ao tocar (municao de arma que o jogador nao tem vira bala de pistola), expira em 3 minutos.
 - `airdrop_controller.gd`: decide as ondas de airdrop e o ponto de queda aberto perto de um jogador.
 - `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
