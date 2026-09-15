@@ -3,19 +3,19 @@ extends RefCounted
 
 ## Decide quando e qual municao por classe aparece no mapa. Antes so nascia 1
 ## item de cada classe por troca de hora, expirava em 3 min e no servidor vazio
-## nem nascia: uzi e escopeta ficavam sem municao. Agora (1) zumbi abatido pode
-## soltar municao da arma de quem matou e (2) a cada RESTOCK_INTERVAL o mapa e
-## completado ate MIN_ITEMS_PER_CLASS itens de cada classe.
+## nem nascia: uzi e escopeta ficavam sem municao. Agora (1) zumbi abatido de vez
+## em quando solta municao de qualquer classe, com meia carga, e (2) a cada
+## RESTOCK_INTERVAL o mapa e completado ate MIN_ITEMS_PER_CLASS itens de cada classe.
 ## Uso:
 ##   if director.is_restock_due(delta): for kind in AmmoLootDirector.kinds_to_restock(AmmoLootDirector.count_supplies(tree)): spawn(kind)
-##   var kind := director.drop_kind_for_kill(killer, randf())
+##   var kind := AmmoLootDirector.drop_kind_for_kill(randf(), randf())
 
-# Municao farta (pedido de jogo): 5 itens de cada classe no mapa, reposicao a
-# cada 30 s e queda frequente de quem mata.
+# Municao farta (pedido de jogo): 5 itens de cada classe no mapa e reposicao a
+# cada 30 s. A queda por abate e ocasional e pequena (pedido: "nao muita").
 const RESTOCK_INTERVAL := 30.0
 const MIN_ITEMS_PER_CLASS := 5
-const CLASS_DROP_CHANCE := 0.2
-const PISTOL_DROP_CHANCE := 0.1
+const KILL_DROP_CHANCE := 0.08
+const KILL_DROP_AMOUNT_FACTOR := 0.5
 ## Tipos repostos pelo mapa: municao de pistola e de cada arma de crate.
 const RESTOCKED_KINDS: Array[int] = [
 	GroundSupplyPickup.Kind.AMMO,
@@ -50,19 +50,22 @@ func is_restock_due(delta: float) -> bool:
 	return true
 
 
-## Tipo de item que o zumbi solta ao morrer, ou -1. A classe segue a arma de
-## crate de quem matou; sem arma de crate, chance menor de municao de pistola.
-## `roll` e 0..1 (injetado para teste deterministico).
-## Uso: var kind := director.drop_kind_for_kill(killer, randf())
-func drop_kind_for_kill(killer: Node, roll: float) -> int:
-	if killer == null or not is_instance_valid(killer) or not killer.is_in_group("player"):
+## Tipo de item que o zumbi solta ao morrer, ou -1: em KILL_DROP_CHANCE das
+## mortes, municao de uma classe sorteada (qualquer uma, tenha o jogador a arma
+## ou nao). `roll` decide se cai e `pick` qual classe, ambos 0..1 (injetados
+## para teste deterministico).
+## Uso: var kind := AmmoLootDirector.drop_kind_for_kill(randf(), randf())
+static func drop_kind_for_kill(roll: float, pick: float) -> int:
+	if roll >= KILL_DROP_CHANCE:
 		return -1
-	var slots: Variant = killer.get("weapon_slots")
-	if slots is WeaponSlots and not (slots as WeaponSlots).kinds.is_empty():
-		if roll >= CLASS_DROP_CHANCE:
-			return -1
-		return supply_kind_for_weapon(int((slots as WeaponSlots).kinds[0]))
-	return GroundSupplyPickup.Kind.AMMO if roll < PISTOL_DROP_CHANCE else -1
+	var index := clampi(int(pick * RESTOCKED_KINDS.size()), 0, RESTOCKED_KINDS.size() - 1)
+	return RESTOCKED_KINDS[index]
+
+
+## Carga do item solto por zumbi: metade da caixa espalhada pelo mapa.
+## Uso: var amount := AmmoLootDirector.drop_amount_for(GroundSupplyPickup.Kind.AMMO_UZI)
+static func drop_amount_for(supply_kind: int) -> int:
+	return maxi(roundi(float(amount_for(supply_kind)) * KILL_DROP_AMOUNT_FACTOR), 1)
 
 
 ## Itens que faltam para cada classe chegar ao minimo, a partir da contagem atual.
