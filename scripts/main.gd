@@ -65,6 +65,7 @@ var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
 
 
 func _ready() -> void:
+	in_game_menu.unstuck_requested.connect(_on_unstuck_requested)
 	survival_wave_controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(Callable(self, "_spawn_zombie"))
 	if not NetworkSession.is_client():
 		wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
@@ -541,6 +542,28 @@ func _spawn_zombie(position_override: Variant = null) -> bool:
 	zombie.global_position = spawn_position
 	spawn_index += 1
 	return true
+
+
+## Botao do menu: na partida local destrava na hora; online pede ao servidor,
+## que e quem simula o boneco, e a posicao nova chega pelo snapshot.
+func _on_unstuck_requested() -> void:
+	if NetworkSession.is_client():
+		_request_unstuck.rpc_id(NetworkSession.SERVER_ID)
+		return
+	for player in local_players:
+		if is_instance_valid(player):
+			player.unstuck()
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _request_unstuck() -> void:
+	if not NetworkSession.is_server():
+		return
+	var sender_id := multiplayer.get_remote_sender_id()
+	for slot in int(NetworkSession.peer_slots.get(sender_id, 0)):
+		var player = network_players.get(_player_key(sender_id, slot))
+		if player != null and is_instance_valid(player):
+			player.unstuck()
 
 
 func _on_zombie_stranded(zombie: Node) -> void:
