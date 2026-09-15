@@ -8,7 +8,7 @@ extends Area3D
 ##   item.setup(GroundSupplyPickup.Kind.HEALTH, 35)
 ##   tree.current_scene.add_child(item)
 
-enum Kind { HEALTH, AMMO, AMMO_SHOTGUN, AMMO_UZI, AMMO_MAGNUM, AMMO_DOUBLE_BARREL, AMMO_CARBINE }
+enum Kind { HEALTH, AMMO, AMMO_SHOTGUN, AMMO_UZI, AMMO_MAGNUM, AMMO_DOUBLE_BARREL, AMMO_CARBINE, AMMO_SAWED_OFF, AMMO_AUTO_SHOTGUN, AMMO_LASER, AMMO_PLASMA, AMMO_RAIL, AMMO_AK47, AMMO_M4, AMMO_AUG, AMMO_BERETTA, AMMO_SNIPER, AMMO_ROCKET }
 
 ## Item de municacao de classe alimenta a reserva da arma daquela classe.
 const KIND_TO_WEAPON: Dictionary = {
@@ -17,6 +17,17 @@ const KIND_TO_WEAPON: Dictionary = {
 	Kind.AMMO_MAGNUM: WeaponStats.Kind.MAGNUM,
 	Kind.AMMO_DOUBLE_BARREL: WeaponStats.Kind.DOUBLE_BARREL,
 	Kind.AMMO_CARBINE: WeaponStats.Kind.CARBINE,
+	Kind.AMMO_SAWED_OFF: WeaponStats.Kind.SAWED_OFF,
+	Kind.AMMO_AUTO_SHOTGUN: WeaponStats.Kind.AUTO_SHOTGUN,
+	Kind.AMMO_LASER: WeaponStats.Kind.LASER_RIFLE,
+	Kind.AMMO_PLASMA: WeaponStats.Kind.PLASMA_SMG,
+	Kind.AMMO_RAIL: WeaponStats.Kind.RAILGUN,
+	Kind.AMMO_AK47: WeaponStats.Kind.AK47,
+	Kind.AMMO_M4: WeaponStats.Kind.M4,
+	Kind.AMMO_AUG: WeaponStats.Kind.AUG,
+	Kind.AMMO_BERETTA: WeaponStats.Kind.BERETTA,
+	Kind.AMMO_SNIPER: WeaponStats.Kind.SNIPER,
+	Kind.AMMO_ROCKET: WeaponStats.Kind.BAZOOKA,
 }
 
 ## Cor e etiqueta por classe: antes toda caixa de municao era igual e ninguem
@@ -28,6 +39,17 @@ const CLASS_COLORS: Dictionary = {
 	Kind.AMMO_MAGNUM: Color(0.75, 0.3, 0.9),
 	Kind.AMMO_DOUBLE_BARREL: Color(0.95, 0.2, 0.25),
 	Kind.AMMO_CARBINE: Color(0.35, 0.9, 0.35),
+	Kind.AMMO_SAWED_OFF: Color(0.8, 0.55, 0.3),
+	Kind.AMMO_AUTO_SHOTGUN: Color(1.0, 0.55, 0.0),
+	Kind.AMMO_LASER: Color(0.2, 0.9, 1.0),
+	Kind.AMMO_PLASMA: Color(0.9, 0.25, 1.0),
+	Kind.AMMO_RAIL: Color(0.3, 1.0, 0.5),
+	Kind.AMMO_AK47: Color(0.85, 0.4, 0.2),
+	Kind.AMMO_M4: Color(0.6, 0.65, 0.7),
+	Kind.AMMO_AUG: Color(0.55, 0.75, 0.35),
+	Kind.AMMO_BERETTA: Color(0.95, 0.95, 0.6),
+	Kind.AMMO_SNIPER: Color(0.3, 0.55, 1.0),
+	Kind.AMMO_ROCKET: Color(1.0, 0.25, 0.1),
 }
 const CLASS_LABELS: Dictionary = {
 	Kind.AMMO: "PISTOLA",
@@ -36,6 +58,17 @@ const CLASS_LABELS: Dictionary = {
 	Kind.AMMO_MAGNUM: "MAGNUM",
 	Kind.AMMO_DOUBLE_BARREL: "DUPLA",
 	Kind.AMMO_CARBINE: "CARABINA",
+	Kind.AMMO_SAWED_OFF: "SERRADA",
+	Kind.AMMO_AUTO_SHOTGUN: "AUTO 12GA",
+	Kind.AMMO_LASER: "LASER",
+	Kind.AMMO_PLASMA: "PLASMA",
+	Kind.AMMO_RAIL: "RAIL",
+	Kind.AMMO_AK47: "AK-47",
+	Kind.AMMO_M4: "M4",
+	Kind.AMMO_AUG: "AUG",
+	Kind.AMMO_BERETTA: "BERETTA",
+	Kind.AMMO_SNIPER: "SNIPER",
+	Kind.AMMO_ROCKET: "FOGUETE",
 }
 const DEFAULT_LIFETIME := 180.0
 ## Municao de classe tocada por quem nao tem aquela arma vira balas de pistola:

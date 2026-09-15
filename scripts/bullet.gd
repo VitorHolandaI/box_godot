@@ -108,15 +108,69 @@ func _apply_damage(collider: Object) -> void:
 ## raycasts por tick (dano autoritativo na hora). Visual continua sendo
 ## tracer via RPC. Uso:
 ##   Bullet.hitscan_damage(origin, direcao, 10, player)
-static func hitscan_damage(origin: Vector3, direction: Vector3, damage: int, shooter: CollisionObject3D) -> void:
+static func hitscan_damage(origin: Vector3, direction: Vector3, damage: int, shooter: CollisionObject3D, pierce: int = 1) -> void:
 	if shooter == null or not shooter.is_inside_tree():
 		return
 	var space := shooter.get_world_3d().direct_space_state
 	var reach := origin + direction * HITSACAN_RANGE
 	var exclude: Array[RID] = [shooter.get_rid()]
-	var target: Node = first_hit_collider(space, origin, reach, exclude) as Node
-	while target != null:
-		if target.has_method("take_damage"):
-			target.take_damage(damage, direction, "bullet", shooter)
+	# Railgun (pierce > 1): cada alvo atingido entra no exclude e o raio segue
+	# ate o proximo; parede ou objeto sem take_damage para o tiro.
+	for _hit_index in maxi(pierce, 1):
+		var collider := first_hit_collider(space, origin, reach, exclude)
+		var target := _damageable_ancestor(collider as Node)
+		if target == null:
 			return
-		target = target.get_parent()
+		target.take_damage(damage, direction, "bullet", shooter)
+		if collider is CollisionObject3D:
+			exclude.append((collider as CollisionObject3D).get_rid())
+
+
+## Tiro explosivo (bazuca): voa ate o primeiro impacto (ou o alcance) e fere
+## tudo no raio com queda pela distancia; jogadores levam so um quinto do dano.
+## Devolve o ponto de impacto para o efeito visual.
+## Uso: var ponto := Bullet.explosive_shot(origem, direcao, 150, player, 5.0)
+static func explosive_shot(origin: Vector3, direction: Vector3, damage: int, shooter: CollisionObject3D, radius: float) -> Vector3:
+	var reach := origin + direction * HITSACAN_RANGE
+	if shooter == null or not shooter.is_inside_tree():
+		return reach
+	var query := PhysicsRayQueryParameters3D.create(origin, reach, BULLET_MASK, [shooter.get_rid()])
+	var hit := shooter.get_world_3d().direct_space_state.intersect_ray(query)
+	var impact: Vector3 = hit.get("position", reach)
+	ZombieVariantAbilities.area_damage(shooter.get_tree(), impact, radius, maxi(damage / 5, 1), damage, damage, shooter)
+	return impact
+
+
+static func _damageable_ancestor(node: Node) -> Node:
+	while node != null:
+		if node.has_method("take_damage"):
+			return node
+		node = node.get_parent()
+	return null
+
+
+## Pinta o tracer visual com a cor da arma (laser, plasma, railgun). Materiais
+## em cache por cor: a horda de tracers nao cria material por bala.
+## Uso: Bullet.tint_tracer(bullet, WeaponStats.tracer_color_for(kind))
+static func tint_tracer(bullet: Node3D, color: Color) -> void:
+	if color == WeaponStats.DEFAULT_TRACER_COLOR:
+		return
+	var mesh := bullet.get_node_or_null("Mesh") as MeshInstance3D
+	if mesh == null:
+		return
+	mesh.material_override = _tracer_material(color)
+
+
+static var _tracer_materials: Dictionary = {}
+
+
+static func _tracer_material(color: Color) -> StandardMaterial3D:
+	if _tracer_materials.has(color):
+		return _tracer_materials[color]
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	material.emission_enabled = true
+	material.emission = color
+	material.emission_energy_multiplier = 5.0
+	_tracer_materials[color] = material
+	return material

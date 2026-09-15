@@ -9,11 +9,6 @@ extends RigidBody3D
 ##   var crate := AirSupplyPickup.new()
 ##   crate.setup([WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI])
 
-const KIND_COLORS: Dictionary = {
-	WeaponStats.Kind.SHOTGUN: Color(0.55, 0.36, 0.14),
-	WeaponStats.Kind.UZI: Color(0.16, 0.17, 0.2),
-	WeaponStats.Kind.MAGNUM: Color(0.3, 0.1, 0.12),
-}
 
 const DROP_HEIGHT := 24.0
 const DESCEND_SPEED := 5.0
