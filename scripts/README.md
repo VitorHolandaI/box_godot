@@ -12,7 +12,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `building_assembler_3d.gd`: montador procedural de lotes e edificios com muros perimetrais, rampas de garagem subterranea, cercas, toldos e props urbanos.
 - `build_exports.sh`: gera clientes release autocontidos para Linux e Windows e checksums; aceita templates customizados e `DIST_DIR`.
 - `build_custom_templates.sh`: compila templates release do Godot otimizados para tamanho (sem Vulkan/XR/modulos nao usados).
-- `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis com mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
+- `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis e do hitscan com esfera de tolerancia ao atraso de rede, mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
 - `corpse_cleanup_policy.gd`: escolhe quais ragdolls somem: so os longe de todos os jogadores, com teto que remove o mais distante.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
 - `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores, tremida ao apanhar e arrombamento por zumbis, faca ou tiro que libera o vao.
@@ -32,6 +32,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
+- `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
 - `weapon_stats.gd`: tabela de stats das armas de crate (escopeta, Uzi, magnum): dano, pellets, pente, reserva, desgaste e falha.
