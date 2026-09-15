@@ -12,7 +12,10 @@ const AURA_CUTOUT_RADIUS: float = 3.0
 const SAFEHOUSE_DOOR_SCRIPT: Script = preload("res://scripts/safehouse_door.gd")
 const FLOOR_HEIGHT: float = 3.2
 const BUILDING_NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation/building_navigation.gd")
-const NAVIGATION_SIZE := Vector3(12.8, 6.6, 12.8)
+const ROOF_BUILDER_SCRIPT: GDScript = preload("res://scripts/safehouse_roof_builder.gd")
+# Altura ate o telhado + mureta: o navmesh inclui o telhado (quem esta la em
+# cima continua alcancavel pela rampa interna).
+const NAVIGATION_SIZE := Vector3(12.8, 8.4, 12.8)
 
 const MODEL_PALLET: String = "res://assets/models/modular_urban/pallet.glb"
 const MODEL_BOX_A: String = "res://assets/models/city/box_A.gltf"
@@ -47,6 +50,7 @@ static func build_safehouse() -> StaticBody3D:
 	_build_tactical_armory(house)
 	_build_balcony(house, cutout_floor_mat)
 	_build_sanctuary_lighting(house)
+	ROOF_BUILDER_SCRIPT.build(house, cutout_wall_mat, cutout_floor_mat, wood_mat)
 	# Por ultimo, como nos predios: o navmesh e assado das colisoes acima. Sem ele
 	# a horda ia em linha reta ate quem estava dentro e ficava presa nas paredes
 	# (log de zumbis travados: todos colados em x=-3.5 e z=17.5 com o alvo dentro).
