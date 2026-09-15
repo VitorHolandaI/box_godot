@@ -13,6 +13,8 @@ const KIND_COLORS: Dictionary = {
 	WeaponStats.Kind.SHOTGUN: Color(0.55, 0.36, 0.14),
 	WeaponStats.Kind.UZI: Color(0.16, 0.17, 0.2),
 	WeaponStats.Kind.MAGNUM: Color(0.3, 0.1, 0.12),
+	WeaponStats.Kind.DOUBLE_BARREL: Color(0.42, 0.2, 0.1),
+	WeaponStats.Kind.CARBINE: Color(0.14, 0.22, 0.16),
 }
 
 var weapon_kind := WeaponStats.Kind.SHOTGUN

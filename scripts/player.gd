@@ -10,7 +10,7 @@ signal crate_weapon_broken(kind: int)
 signal crate_weapon_dropped(kind: int, mag: int, reserve: int, durability: int)
 
 ## Ordem segue WeaponStats.Kind: as armas de crate ficam por ultimo.
-enum Weapon { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM }
+enum Weapon { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE }
 
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const KNIFE_ATTACK_DURATION := 0.4
@@ -31,6 +31,8 @@ const SONAR_INTERVAL := 10.0
 const SONAR_REVEAL_RADIUS := 45.0
 ## Raio de coleta por interacao de armas no chao (crates e dropadas).
 const GROUND_INTERACT_RADIUS := 2.8
+## Pellet tracer: menor/mais curto que o tracer da pistola.
+const PELLET_VISUAL_SCALE := Vector3(0.55, 0.55, 0.45)
 const UNSTUCK_LOCATOR_SCRIPT: GDScript = preload("res://scripts/player_unstuck_locator.gd")
 # Recarga do botao "Destravar personagem": sem ela o botao vira voo/escalada.
 const UNSTUCK_COOLDOWN := 5.0
@@ -104,6 +106,8 @@ var interact_pressed := false
 var shotgun_pressed := false
 var uzi_pressed := false
 var magnum_pressed := false
+var double_barrel_pressed := false
+var carbine_pressed := false
 var drop_pressed := false
 var weapon_slots := WeaponSlots.new()
 ## Ultima revisao do inventario aplicada pelo snapshot; -1 = nunca aplicado.
@@ -218,6 +222,8 @@ func get_local_input_state() -> Dictionary:
 		"shotgun": Input.is_action_pressed(input_action_prefix + "shotgun"),
 		"uzi": Input.is_action_pressed(input_action_prefix + "uzi"),
 		"magnum": Input.is_action_pressed(input_action_prefix + "magnum"),
+		"double_barrel": Input.is_action_pressed(input_action_prefix + "double_barrel"),
+		"carbine": Input.is_action_pressed(input_action_prefix + "carbine"),
 		"drop": Input.is_action_pressed(input_action_prefix + "drop_weapon"),
 		"aim": aim_input,
 	}
@@ -238,6 +244,8 @@ func apply_network_input(state: Dictionary) -> void:
 	shotgun_pressed = _network_button_just_pressed("shotgun", bool(state.get("shotgun", false)))
 	uzi_pressed = _network_button_just_pressed("uzi", bool(state.get("uzi", false)))
 	magnum_pressed = _network_button_just_pressed("magnum", bool(state.get("magnum", false)))
+	double_barrel_pressed = _network_button_just_pressed("double_barrel", bool(state.get("double_barrel", false)))
+	carbine_pressed = _network_button_just_pressed("carbine", bool(state.get("carbine", false)))
 	drop_pressed = _network_button_just_pressed("drop", bool(state.get("drop", false)))
 	remote_input_age = 0.0
 
@@ -325,7 +333,7 @@ func _handle_weapon_input() -> void:
 
 
 func _equip_weapon_from_input() -> void:
-	for request in [[knife_pressed, Weapon.KNIFE], [pistol_pressed, Weapon.PISTOL], [shotgun_pressed, Weapon.SHOTGUN], [uzi_pressed, Weapon.UZI], [magnum_pressed, Weapon.MAGNUM]]:
+	for request in [[knife_pressed, Weapon.KNIFE], [pistol_pressed, Weapon.PISTOL], [shotgun_pressed, Weapon.SHOTGUN], [uzi_pressed, Weapon.UZI], [magnum_pressed, Weapon.MAGNUM], [double_barrel_pressed, Weapon.DOUBLE_BARREL], [carbine_pressed, Weapon.CARBINE]]:
 		if not bool(request[0]):
 			continue
 		var requested: int = request[1]
@@ -378,7 +386,7 @@ func _fire_pellets(weapon_kind: int) -> void:
 		# Hitscan: 1 ray por pellet, dano na hora; sem node por pellet.
 		Bullet.hitscan_damage(origin + pellet_direction * 0.12, pellet_direction, int(stats["damage"]), self)
 		if NetworkSession.is_offline():
-			_spawn_pellet_visual(origin + pellet_direction * 0.12, pellet_direction)
+			_spawn_pellet_visual(origin + pellet_direction * 0.12, pellet_direction, pellet_index, pellet_count)
 	ZombieFlockCoordinator.relay_sound(get_tree(), origin, float(stats["noise_radius"]))
 	if NetworkSession.is_offline():
 		AudioFeedback.play_gunshot(origin)
@@ -386,13 +394,21 @@ func _fire_pellets(weapon_kind: int) -> void:
 		get_tree().current_scene.replicate_bullet_visual(origin, base_direction, pellet_count)
 
 
-## Tracer local da escopeta (offline): visual puro, sem dano.
-func _spawn_pellet_visual(origin: Vector3, direction: Vector3) -> void:
+## Tracer de pellet: menor e deslocado em leque, para NAO parecer o tracer
+## unico da pistola. Visual puro, sem dano.
+func _spawn_pellet_visual(origin: Vector3, direction: Vector3, pellet_index: int, pellet_count: int) -> void:
 	var bullet := BULLET_SCENE.instantiate() as Node3D
 	get_tree().current_scene.add_child(bullet)
-	bullet.global_position = origin
+	bullet.scale = PELLET_VISUAL_SCALE
+	bullet.global_position = origin + _pellet_side_offset(direction, pellet_index, pellet_count)
 	bullet.setup(direction, 0, false)
 	bullet.add_to_group("network_bullet_visuals")
+
+
+## Deslocamento lateral pequeno por pellet (leque de tracers visivel).
+func _pellet_side_offset(direction: Vector3, pellet_index: int, pellet_count: int) -> Vector3:
+	var side := Vector3.UP.cross(direction).normalized()
+	return side * (float(pellet_index) - float(pellet_count - 1) / 2.0) * 0.05
 
 
 ## Arma de crate quebrou: sai do slot, cai o braco para a faca e quebra em
@@ -828,9 +844,10 @@ func _update_weapon_models() -> void:
 			flash.visible = crate_model.visible and muzzle_flash_time > 0.0
 
 func _build_crate_weapon_models() -> void:
-	var kinds := [Weapon.SHOTGUN, Weapon.UZI, Weapon.MAGNUM]
+	# Armado ao longo do Z: -Z e a frente do boneco, senao a arma fica uma
+	# "tabua" horizontal atravessada no corpo (o que o teste apontou).
+	var kinds := [Weapon.SHOTGUN, Weapon.UZI, Weapon.MAGNUM, Weapon.DOUBLE_BARREL, Weapon.CARBINE]
 	for kind in kinds:
-		var stats := WeaponStats.stats_for(kind)
 		var weapon_node := Node3D.new()
 		weapon_node.name = "CrateWeapon%d" % kind
 		weapon_node.visible = false
@@ -844,19 +861,29 @@ func _build_crate_weapon_models() -> void:
 		wood.roughness = 0.7
 		match kind:
 			Weapon.SHOTGUN:
-				# Escopeta grande: cano longo, bombeamento e coronha de madeira.
-				_add_weapon_box(weapon_node, Vector3(0.95, 0.14, 0.14), Vector3(0.08, 0.0, 0.0), body)
-				_add_weapon_box(weapon_node, Vector3(0.22, 0.16, 0.16), Vector3(-0.2, -0.05, 0.0), body)
-				_add_weapon_box(weapon_node, Vector3(0.3, 0.18, 0.14), Vector3(-0.5, -0.08, 0.0), wood)
-				_add_weapon_box(weapon_node, Vector3(0.14, 0.22, 0.12), Vector3(-0.72, -0.14, 0.0), wood)
+				# Cano longo para frente, bombeamento embaixo e coronha atras.
+				_add_weapon_box(weapon_node, Vector3(0.14, 0.14, 0.95), Vector3(0.0, 0.0, 0.12), body)
+				_add_weapon_box(weapon_node, Vector3(0.16, 0.1, 0.24), Vector3(0.0, -0.11, 0.18), body)
+				_add_weapon_box(weapon_node, Vector3(0.16, 0.18, 0.3), Vector3(0.0, -0.06, -0.42), wood)
+				_add_weapon_box(weapon_node, Vector3(0.12, 0.22, 0.14), Vector3(0.0, -0.13, -0.62), wood)
 			Weapon.UZI:
-				_add_weapon_box(weapon_node, Vector3(0.55, 0.16, 0.14), Vector3.ZERO, body)
-				_add_weapon_box(weapon_node, Vector3(0.12, 0.3, 0.12), Vector3(-0.05, -0.2, 0.0), body)
-				_add_weapon_box(weapon_node, Vector3(0.1, 0.34, 0.08), Vector3(0.06, 0.22, 0.0), body)
-			_:
-				_add_weapon_box(weapon_node, Vector3(0.5, 0.15, 0.13), Vector3.ZERO, body)
-				_add_weapon_box(weapon_node, Vector3(0.13, 0.24, 0.1), Vector3(-0.14, -0.16, 0.0), wood)
-		var flash := _add_weapon_box(weapon_node, Vector3(0.12, 0.08, 0.08), Vector3(0.34, 0.0, 0.0), _muzzle_material())
+				_add_weapon_box(weapon_node, Vector3(0.16, 0.16, 0.55), Vector3(0.0, 0.0, 0.0), body)
+				_add_weapon_box(weapon_node, Vector3(0.12, 0.3, 0.12), Vector3(0.0, -0.2, 0.05), body)
+				_add_weapon_box(weapon_node, Vector3(0.08, 0.34, 0.08), Vector3(0.0, 0.22, 0.06), body)
+			Weapon.MAGNUM:
+				_add_weapon_box(weapon_node, Vector3(0.13, 0.15, 0.5), Vector3(0.0, 0.0, 0.1), body)
+				_add_weapon_box(weapon_node, Vector3(0.13, 0.24, 0.1), Vector3(0.0, -0.16, -0.14), wood)
+				_add_weapon_box(weapon_node, Vector3(0.11, 0.11, 0.11), Vector3(0.0, -0.03, -0.02), body)
+			Weapon.DOUBLE_BARREL:
+				_add_weapon_box(weapon_node, Vector3(0.24, 0.12, 0.85), Vector3(0.0, 0.0, 0.1), body)
+				_add_weapon_box(weapon_node, Vector3(0.16, 0.16, 0.28), Vector3(0.0, -0.06, -0.42), wood)
+				_add_weapon_box(weapon_node, Vector3(0.12, 0.2, 0.12), Vector3(0.0, -0.14, -0.6), wood)
+			Weapon.CARBINE:
+				_add_weapon_box(weapon_node, Vector3(0.12, 0.12, 1.0), Vector3(0.0, 0.02, 0.14), body)
+				_add_weapon_box(weapon_node, Vector3(0.14, 0.14, 0.3), Vector3(0.0, -0.05, -0.45), wood)
+				_add_weapon_box(weapon_node, Vector3(0.1, 0.14, 0.3), Vector3(0.0, 0.14, -0.1), body)
+				_add_weapon_box(weapon_node, Vector3(0.12, 0.22, 0.12), Vector3(0.0, -0.14, -0.66), wood)
+		var flash := _add_weapon_box(weapon_node, Vector3(0.12, 0.08, 0.08), Vector3(0.0, 0.0, -0.55), _muzzle_material())
 		flash.name = "Flash"
 		flash.visible = false
 		crate_weapon_models[kind] = weapon_node
@@ -868,8 +895,12 @@ func _crate_weapon_color(kind: int) -> Color:
 			return Color(0.55, 0.36, 0.14)
 		Weapon.UZI:
 			return Color(0.16, 0.17, 0.2)
-		_:
+		Weapon.MAGNUM:
 			return Color(0.3, 0.1, 0.12)
+		Weapon.DOUBLE_BARREL:
+			return Color(0.42, 0.2, 0.1)
+		_:
+			return Color(0.14, 0.22, 0.16)
 
 
 func _muzzle_material() -> StandardMaterial3D:
@@ -974,6 +1005,8 @@ func _poll_input() -> void:
 	shotgun_pressed = Input.is_action_just_pressed(input_action_prefix + "shotgun")
 	uzi_pressed = Input.is_action_just_pressed(input_action_prefix + "uzi")
 	magnum_pressed = Input.is_action_just_pressed(input_action_prefix + "magnum")
+	double_barrel_pressed = Input.is_action_just_pressed(input_action_prefix + "double_barrel")
+	carbine_pressed = Input.is_action_just_pressed(input_action_prefix + "carbine")
 	drop_pressed = Input.is_action_just_pressed(input_action_prefix + "drop_weapon")
 
 
@@ -1004,6 +1037,8 @@ func _clear_transient_input() -> void:
 	shotgun_pressed = false
 	uzi_pressed = false
 	magnum_pressed = false
+	double_barrel_pressed = false
+	carbine_pressed = false
 	drop_pressed = false
 
 
