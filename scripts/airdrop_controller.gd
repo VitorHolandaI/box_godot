@@ -50,7 +50,9 @@ func on_wave_started(wave_index: int) -> void:
 ## Uso: var pos := controller.pick_drop_position(get_tree())
 func pick_drop_position(tree: SceneTree) -> Vector3:
 	var rng := RandomNumberGenerator.new()
-	rng.seed = world_seed * 104729 + tree.get_frame_count()
+	# Entropia por chamada: pick roda uma vez por airdrop e o ponto nao e
+	# replicado; Time.get_ticks_msec evita depender de APIs do SceneTree.
+	rng.seed = world_seed * 104729 + Time.get_ticks_msec()
 	var players := tree.get_nodes_in_group("player")
 	if players.is_empty():
 		return INVALID_DROP_POSITION
@@ -65,12 +67,32 @@ func pick_drop_position(tree: SceneTree) -> Vector3:
 			radius = rng.randf_range(MAX_DROP_RADIUS, MAX_DROP_RADIUS * 2.5)
 		var angle := rng.randf_range(0.0, TAU)
 		var candidate := origin_player.global_position + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
-		if _is_drop_clear(candidate, tree):
+		if is_drop_clear(candidate, tree):
 			return Vector3(candidate.x, 0.02, candidate.z)
 	return INVALID_DROP_POSITION
 
 
-func _is_drop_clear(candidate: Vector3, tree: SceneTree) -> bool:
+## Ponto aberto para itens espalhados: reusa a mesma folga de rua do airdrop
+## (sem predios, longe de jogadores e zumbis). Uso:
+##   var pos := AirdropController.pick_clear_position(tree, rng, 20.0, 110.0)
+static func pick_clear_position(tree: SceneTree, rng: RandomNumberGenerator, min_radius: float, max_radius: float, attempts: int = 24) -> Vector3:
+	var players := tree.get_nodes_in_group("player")
+	if players.is_empty():
+		return INVALID_DROP_POSITION
+	var origin_player := players[rng.randi() % players.size()] as Node3D
+	if origin_player == null:
+		return INVALID_DROP_POSITION
+	for _attempt in attempts:
+		var angle := rng.randf_range(0.0, TAU)
+		var radius := rng.randf_range(min_radius, max_radius)
+		var candidate := origin_player.global_position + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
+		if is_drop_clear(candidate, tree):
+			return Vector3(candidate.x, 0.02, candidate.z)
+	return INVALID_DROP_POSITION
+
+
+## Folga de queda/caminhada: distancia de jogadores e zumbis e fora de predio.
+static func is_drop_clear(candidate: Vector3, tree: SceneTree) -> bool:
 	for player_node in tree.get_nodes_in_group("player"):
 		var player := player_node as Node3D
 		if player != null and _distance_2d(candidate, player.global_position) < MIN_PLAYER_DISTANCE:
