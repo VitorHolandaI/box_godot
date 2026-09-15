@@ -70,16 +70,22 @@ func _test_leaper_lunges_then_cools_down(test_root: Node) -> void:
 	print("Testando bote do leaper...")
 	var leap = ABILITIES_SCRIPT.LeapState.new()
 	var toward := Vector3(1.0, 0.0, 0.0)
-	var velocity := Vector3.ZERO
-	var far: Vector3 = leap.update(1.0 / 60.0, velocity, toward, 9.0, true)
-	var lunge: Vector3 = leap.update(1.0 / 60.0, velocity, toward, 3.5, true)
+	var far: Vector3 = leap.update(1.0 / 60.0, Vector3.ZERO, toward, 9.0, true, 22.0)
+	var lunge: Vector3 = leap.update(1.0 / 60.0, Vector3.ZERO, toward, 3.5, true, 22.0)
 	var mid_air: bool = leap.is_leaping()
-	leap.update(ABILITIES_SCRIPT.LEAP_DURATION + 0.1, velocity, toward, 3.5, true)
-	var again: Vector3 = leap.update(1.0 / 60.0, velocity, toward, 3.5, true)
-	if far != Vector3.ZERO or lunge.x < ABILITIES_SCRIPT.LEAP_SPEED - 0.01 or lunge.y <= 0.0 or not mid_air or again != Vector3.ZERO:
-		_fail(test_root, "Leaper: sem bote longe, bote a 3.5 m, sem repetir na recarga; longe=%s bote=%s no_ar=%s repetido=%s." % [far, lunge, mid_air, again])
+	var aloft: Vector3 = leap.update(0.1, Vector3(0.0, -2.0, 0.0), toward, 3.5, false, 22.0)
+	var landed: Vector3 = leap.update(0.4, Vector3(0.0, -5.0, 0.0), toward, 3.5, true, 22.0)
+	var again: Vector3 = leap.update(1.0 / 60.0, Vector3.ZERO, toward, 3.5, true, 22.0)
+	# Arco balistico: vh = d/t alcaca o alvo; vy = g*t/2 devolve ao chao.
+	var expected_x: float = 3.5 / ABILITIES_SCRIPT.LEAP_AIRTIME
+	var expected_y: float = 0.5 * 22.0 * ABILITIES_SCRIPT.LEAP_AIRTIME
+	if far != Vector3.ZERO or not mid_air or landed != Vector3.ZERO or again != Vector3.ZERO:
+		_fail(test_root, "Leaper: sem bote longe, aterrissa e respeita recarga; longe=%s no_ar=%s pousou=%s repetido=%s." % [far, mid_air, landed, again])
 		return
-	print("PASS: Leaper da o bote de perto e respeita a recarga.")
+	if absf(lunge.x - expected_x) > 0.01 or absf(lunge.y - expected_y) > 0.01 or absf(aloft.x - expected_x) > 0.01 or absf(aloft.y + 2.0) > 0.01:
+		_fail(test_root, "Leaper balistico: bote=(%s, %s) esperado=(%s, %s) e o voo=(%s) preserva o impulso sem travar no ar." % [lunge.x, lunge.y, expected_x, expected_y, aloft])
+		return
+	print("PASS: Leaper da bote balistico no alvo e respeita a recarga.")
 
 
 func _test_late_waves_mix_new_variants(test_root: Node) -> void:
