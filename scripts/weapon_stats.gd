@@ -8,6 +8,7 @@ extends RefCounted
 ##   var stats := WeaponStats.stats_for(PlayerCharacter.Weapon.SHOTGUN)
 ##   if stats.is_empty(): return # arma padrao
 
+## Durabilidade triplicada (pedido de jogo): armas de crate quebravam rapido demais.
 enum Kind { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE }
 
 const STATS_BY_KIND: Dictionary = {
@@ -19,8 +20,8 @@ const STATS_BY_KIND: Dictionary = {
 		"max_reserve": 24,
 		"grant_reserve": 24,
 		"attack_cooldown": 0.85,
-		"max_durability": 40,
-		"degraded_below": 16,
+		"max_durability": 120,
+		"degraded_below": 48,
 		"jam_chance": 0.15,
 		"spread_deg": 9.0,
 		"degraded_spread_deg": 16.0,
@@ -35,8 +36,8 @@ const STATS_BY_KIND: Dictionary = {
 		"grant_reserve": 240,
 		"attack_cooldown": 0.11,
 		"is_auto": true,
-		"max_durability": 120,
-		"degraded_below": 40,
+		"max_durability": 360,
+		"degraded_below": 120,
 		"jam_chance": 0.06,
 		"spread_deg": 3.0,
 		"degraded_spread_deg": 6.0,
@@ -50,8 +51,8 @@ const STATS_BY_KIND: Dictionary = {
 		"max_reserve": 18,
 		"grant_reserve": 18,
 		"attack_cooldown": 0.65,
-		"max_durability": 30,
-		"degraded_below": 12,
+		"max_durability": 90,
+		"degraded_below": 36,
 		"jam_chance": 0.10,
 		"spread_deg": 1.0,
 		"degraded_spread_deg": 2.5,
@@ -65,8 +66,8 @@ const STATS_BY_KIND: Dictionary = {
 		"max_reserve": 14,
 		"grant_reserve": 14,
 		"attack_cooldown": 0.7,
-		"max_durability": 26,
-		"degraded_below": 10,
+		"max_durability": 78,
+		"degraded_below": 30,
 		"jam_chance": 0.12,
 		"spread_deg": 14.0,
 		"degraded_spread_deg": 20.0,
@@ -80,8 +81,8 @@ const STATS_BY_KIND: Dictionary = {
 		"max_reserve": 60,
 		"grant_reserve": 60,
 		"attack_cooldown": 0.5,
-		"max_durability": 80,
-		"degraded_below": 28,
+		"max_durability": 240,
+		"degraded_below": 84,
 		"jam_chance": 0.08,
 		"spread_deg": 0.7,
 		"degraded_spread_deg": 2.0,
