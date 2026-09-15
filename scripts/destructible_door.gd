@@ -21,6 +21,7 @@ var target_rotation_y := 0.0
 var swing_direction := 1.0
 var hit_shake_time := 0.0
 var _hinge_offset := Vector3.ZERO
+var _panel_node: Node3D
 var _received_network_state := false
 
 
@@ -39,14 +40,23 @@ func _ready() -> void:
 	add_to_group("destructible_door")
 	health = max_health
 	_create_panel()
+	# Porta ociosa = parada no espaco: fisica desligada ate um evento acorda
+	# (interact/take_damage/apply_network_state). 388 portas paradas nao
+	# podem custar ~1 ms/frame so para responder "nada a fazer".
+	set_physics_process(false)
 
 
 func _physics_process(delta: float) -> void:
-	_update_hit_shake(delta)
+	if hit_shake_time > 0.0:
+		_update_hit_shake(delta)
 	if is_destroyed:
+		# Destruida nao precisa mais de fisica: painel oculto e colisao off.
+		set_physics_process(false)
 		return
 	target_rotation_y = OPEN_SWING * swing_direction if is_open else 0.0
 	rotation.y = move_toward(rotation.y, target_rotation_y, PANEL_SPEED * maxf(delta, 0.0))
+	if hit_shake_time <= 0.0 and absf(rotation.y - target_rotation_y) < 0.001:
+		set_physics_process(false)
 
 
 ## Toggles the door between its two player-visible states. Only players call
@@ -56,6 +66,7 @@ func interact() -> void:
 	if is_destroyed:
 		return
 	is_open = not is_open
+	set_physics_process(true)
 	network_state_changed.emit(self)
 
 
@@ -67,6 +78,7 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 	if amount <= 0 or is_destroyed:
 		return
 	health = maxi(health - amount, 0)
+	set_physics_process(true)
 	if health > 0:
 		hit_shake_time = HIT_SHAKE_DURATION
 		return
@@ -84,6 +96,8 @@ func apply_network_state(should_open: bool, destroyed: bool) -> void:
 		_break_apart(Vector3.ZERO, play_animation)
 	if not destroyed:
 		health = max_health
+	if is_open != (should_open or destroyed):
+		set_physics_process(true)
 	is_open = should_open or destroyed
 
 
@@ -112,7 +126,7 @@ func _break_apart(attack_direction: Vector3, play_animation: bool) -> void:
 
 
 func _update_hit_shake(delta: float) -> void:
-	var panel := get_node_or_null("DoorPanel") as Node3D
+	var panel := _panel_node
 	if panel == null:
 		return
 	hit_shake_time = maxf(hit_shake_time - delta, 0.0)
@@ -139,6 +153,7 @@ func _create_knob_material() -> Material:
 func _create_panel() -> void:
 	var mesh := MeshInstance3D.new()
 	mesh.name = "DoorPanel"
+	_panel_node = mesh
 	var box_mesh := BoxMesh.new()
 	box_mesh.size = panel_size
 	box_mesh.material = panel_material

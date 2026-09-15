@@ -3,6 +3,8 @@ extends Area3D
 
 enum SupplyKind { HEALTH, AMMO }
 
+const NEAR_PLAYER_RADIUS_SQ := 144.0
+
 @export var supply_kind := SupplyKind.HEALTH
 @export var supply_amount := 30
 
@@ -19,6 +21,15 @@ func _ready() -> void:
 	body_entered.connect(_on_body_entered)
 	_build_visuals()
 	_build_collision()
+	# A rotacao/bob e puramente cosmica: um timer de 1 Hz liga o _process
+	# apenas quando existe player por perto, para nao girar 39 pickups
+	# fora de vista.
+	var proximity_timer := Timer.new()
+	proximity_timer.name = "ProximityTimer"
+	proximity_timer.wait_time = 1.0
+	proximity_timer.timeout.connect(_update_proximity)
+	add_child(proximity_timer)
+	proximity_timer.start()
 
 
 func _process(delta: float) -> void:
@@ -29,6 +40,20 @@ func _process(delta: float) -> void:
 	model_root.position.y = 0.32 + sin(elapsed * 3.0) * 0.05
 
 
+## Liga/desliga o _process cosmico conforme a proximidade de players.
+## Uso: chamado pelo timer interno; nao chamar manualmente.
+func _update_proximity() -> void:
+	set_process(is_available and _has_nearby_player())
+
+
+func _has_nearby_player() -> bool:
+	for node in get_tree().get_nodes_in_group("player"):
+		var body := node as Node3D
+		if body != null and global_position.distance_squared_to(body.global_position) < NEAR_PLAYER_RADIUS_SQ:
+			return true
+	return false
+
+
 ## Define a disponibilidade autoritativa do suprimento.
 ## Uso: pickup.set_available(false)
 func set_available(available: bool) -> void:
@@ -37,6 +62,8 @@ func set_available(available: bool) -> void:
 	is_available = available
 	SupplyNetworkState.mark_dirty()
 	visible = available
+	if not available:
+		set_process(false)
 	if collision_shape != null:
 		collision_shape.set_deferred("disabled", not available)
 
