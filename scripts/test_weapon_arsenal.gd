@@ -101,16 +101,24 @@ func _test_railgun_pierces_line_of_zombies(test_root: Node) -> void:
 	print("PASS: Railgun atravessa a fila; tiro comum para no primeiro.")
 
 
+## Cada arma com cara propria: cor do corpo, cor e tamanho do tracer e recuo.
 func _test_futuristic_weapons_have_own_tracer(test_root: Node) -> void:
-	print("Testando tracer das armas futuristas...")
-	var default_color := WeaponStats.tracer_color_for(WeaponStats.Kind.UZI)
-	var colors: Dictionary = {}
-	for kind in [WeaponStats.Kind.LASER_RIFLE, WeaponStats.Kind.PLASMA_SMG, WeaponStats.Kind.RAILGUN]:
-		colors[WeaponStats.tracer_color_for(kind)] = true
-	if colors.size() != 3 or colors.has(default_color):
-		_fail(test_root, "Laser, plasma e railgun deveriam ter tracers distintos do padrao; cores=%s padrao=%s." % [colors.keys(), default_color])
+	print("Testando cor, tracer e recuo proprios de cada arma...")
+	var bodies: Dictionary = {}
+	var tracers: Dictionary = {}
+	var looks: Dictionary = {}
+	var missing_recoil: Array[String] = []
+	for kind in WeaponStats.crate_kinds():
+		bodies[WeaponStats.color_for(kind)] = true
+		tracers[WeaponStats.tracer_color_for(kind)] = true
+		looks["%s|%s" % [WeaponStats.tracer_color_for(kind), WeaponStats.tracer_scale_for(kind)]] = true
+		if WeaponStats.recoil_for(kind).x <= 0.0:
+			missing_recoil.append(String(WeaponStats.stats_for(kind)["label"]))
+	var total := WeaponStats.crate_kinds().size()
+	if bodies.size() != total or tracers.size() != total or looks.size() != total or not missing_recoil.is_empty():
+		_fail(test_root, "Cada uma das %d armas deveria ter cor, tracer e recuo proprios; cores=%d tracers=%d visuais=%d sem_recuo=%s." % [total, bodies.size(), tracers.size(), looks.size(), missing_recoil])
 		return
-	print("PASS: Armas futuristas tem tracer proprio.")
+	print("PASS: As %d armas tem cor, tracer e recuo proprios." % total)
 
 
 func _fail(test_root: Node, message: String) -> void:

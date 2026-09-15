@@ -33,6 +33,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 75.0,
 		"color": Color(0.55, 0.36, 0.14),
 		"model": "shotgun",
+		"tracer_color": Color(1.0, 0.8, 0.35),
+		"tracer_scale": Vector3(0.7, 0.7, 0.5),
+		"recoil": 0.16,
+		"recoil_lift": 0.12,
+		"flash_scale": 1.3,
 	},
 	Kind.UZI: {
 		"label": "Uzi",
@@ -51,6 +56,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 65.0,
 		"color": Color(0.16, 0.17, 0.2),
 		"model": "smg",
+		"tracer_color": Color(1.0, 0.9, 0.3),
+		"tracer_scale": Vector3(0.6, 0.6, 0.7),
+		"recoil": 0.04,
+		"recoil_lift": 0.03,
+		"flash_scale": 0.7,
 	},
 	Kind.MAGNUM: {
 		"label": "Magnum",
@@ -68,6 +78,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 70.0,
 		"color": Color(0.3, 0.1, 0.12),
 		"model": "revolver",
+		"tracer_color": Color(1.0, 0.55, 0.15),
+		"tracer_scale": Vector3(1.3, 1.3, 1.2),
+		"recoil": 0.2,
+		"recoil_lift": 0.25,
+		"flash_scale": 1.5,
 	},
 	Kind.DOUBLE_BARREL: {
 		"label": "Escopeta Dupla",
@@ -85,6 +100,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 80.0,
 		"color": Color(0.42, 0.2, 0.1),
 		"model": "double_barrel",
+		"tracer_color": Color(1.0, 0.65, 0.25),
+		"tracer_scale": Vector3(0.7, 0.7, 0.5),
+		"recoil": 0.24,
+		"recoil_lift": 0.18,
+		"flash_scale": 1.8,
 	},
 	Kind.CARBINE: {
 		"label": "Carabina",
@@ -102,6 +122,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 72.0,
 		"color": Color(0.14, 0.22, 0.16),
 		"model": "rifle",
+		"tracer_color": Color(0.95, 0.95, 0.75),
+		"tracer_scale": Vector3(0.8, 0.8, 1.6),
+		"recoil": 0.1,
+		"recoil_lift": 0.06,
+		"flash_scale": 1.0,
 	},
 	Kind.SAWED_OFF: {
 		"label": "Escopeta Serrada",
@@ -119,6 +144,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 80.0,
 		"color": Color(0.35, 0.2, 0.1),
 		"model": "short_shotgun",
+		"tracer_color": Color(1.0, 0.45, 0.2),
+		"tracer_scale": Vector3(0.8, 0.8, 0.4),
+		"recoil": 0.26,
+		"recoil_lift": 0.22,
+		"flash_scale": 2.0,
 	},
 	Kind.AUTO_SHOTGUN: {
 		"label": "Escopeta Automatica",
@@ -137,6 +167,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 80.0,
 		"color": Color(0.2, 0.22, 0.24),
 		"model": "auto_shotgun",
+		"tracer_color": Color(1.0, 0.7, 0.1),
+		"tracer_scale": Vector3(0.65, 0.65, 0.5),
+		"recoil": 0.12,
+		"recoil_lift": 0.07,
+		"flash_scale": 1.2,
 	},
 	Kind.LASER_RIFLE: {
 		"label": "Rifle Laser",
@@ -153,8 +188,12 @@ const STATS_BY_KIND: Dictionary = {
 		"degraded_spread_deg": 1.0,
 		"noise_radius": 40.0,
 		"color": Color(0.85, 0.88, 0.92),
-		"tracer_color": Color(0.2, 0.9, 1.0),
 		"model": "sci_rifle",
+		"tracer_color": Color(0.2, 0.9, 1.0),
+		"tracer_scale": Vector3(0.5, 0.5, 4.0),
+		"recoil": 0.03,
+		"recoil_lift": 0.02,
+		"flash_scale": 1.1,
 	},
 	Kind.PLASMA_SMG: {
 		"label": "SMG de Plasma",
@@ -172,8 +211,12 @@ const STATS_BY_KIND: Dictionary = {
 		"degraded_spread_deg": 7.0,
 		"noise_radius": 45.0,
 		"color": Color(0.25, 0.1, 0.35),
-		"tracer_color": Color(0.9, 0.25, 1.0),
 		"model": "sci_smg",
+		"tracer_color": Color(0.9, 0.25, 1.0),
+		"tracer_scale": Vector3(1.4, 1.4, 0.8),
+		"recoil": 0.04,
+		"recoil_lift": 0.03,
+		"flash_scale": 1.0,
 	},
 	## Railgun: tiro atravessa ate `pierce` alvos na mesma linha.
 	Kind.RAILGUN: {
@@ -192,8 +235,12 @@ const STATS_BY_KIND: Dictionary = {
 		"degraded_spread_deg": 0.8,
 		"noise_radius": 90.0,
 		"color": Color(0.1, 0.12, 0.16),
-		"tracer_color": Color(0.3, 1.0, 0.5),
 		"model": "railgun",
+		"tracer_color": Color(0.3, 1.0, 0.5),
+		"tracer_scale": Vector3(0.9, 0.9, 5.0),
+		"recoil": 0.4,
+		"recoil_lift": 0.1,
+		"flash_scale": 2.2,
 	},
 	Kind.AK47: {
 		"label": "AK-47",
@@ -212,6 +259,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 75.0,
 		"color": Color(0.35, 0.22, 0.12),
 		"model": "ak",
+		"tracer_color": Color(1.0, 0.6, 0.2),
+		"tracer_scale": Vector3(0.8, 0.8, 1.1),
+		"recoil": 0.07,
+		"recoil_lift": 0.06,
+		"flash_scale": 1.0,
 	},
 	Kind.M4: {
 		"label": "M4",
@@ -230,6 +282,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 70.0,
 		"color": Color(0.12, 0.12, 0.13),
 		"model": "assault_rifle",
+		"tracer_color": Color(1.0, 0.95, 0.5),
+		"tracer_scale": Vector3(0.7, 0.7, 1.1),
+		"recoil": 0.05,
+		"recoil_lift": 0.04,
+		"flash_scale": 0.9,
 	},
 	Kind.AUG: {
 		"label": "AUG",
@@ -248,6 +305,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 70.0,
 		"color": Color(0.3, 0.36, 0.24),
 		"model": "bullpup",
+		"tracer_color": Color(0.8, 1.0, 0.5),
+		"tracer_scale": Vector3(0.7, 0.7, 1.2),
+		"recoil": 0.05,
+		"recoil_lift": 0.035,
+		"flash_scale": 0.9,
 	},
 	Kind.BERETTA: {
 		"label": "Beretta",
@@ -265,6 +327,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 55.0,
 		"color": Color(0.1, 0.1, 0.11),
 		"model": "handgun",
+		"tracer_color": Color(1.0, 1.0, 0.8),
+		"tracer_scale": Vector3(0.7, 0.7, 0.8),
+		"recoil": 0.06,
+		"recoil_lift": 0.08,
+		"flash_scale": 0.8,
 	},
 	Kind.SNIPER: {
 		"label": "Sniper",
@@ -283,6 +350,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 95.0,
 		"color": Color(0.2, 0.24, 0.18),
 		"model": "sniper",
+		"tracer_color": Color(0.6, 0.85, 1.0),
+		"tracer_scale": Vector3(0.6, 0.6, 3.5),
+		"recoil": 0.3,
+		"recoil_lift": 0.2,
+		"flash_scale": 1.6,
 	},
 	## Bazuca: explode no primeiro impacto ferindo tudo em `explosive_radius`.
 	Kind.BAZOOKA: {
@@ -294,7 +366,6 @@ const STATS_BY_KIND: Dictionary = {
 		"grant_reserve": 4,
 		"attack_cooldown": 2.2,
 		"explosive_radius": 5.0,
-		"tracer_color": Color(1.0, 0.4, 0.1),
 		"max_durability": 30,
 		"degraded_below": 10,
 		"jam_chance": 0.05,
@@ -303,6 +374,11 @@ const STATS_BY_KIND: Dictionary = {
 		"noise_radius": 110.0,
 		"color": Color(0.25, 0.32, 0.18),
 		"model": "launcher",
+		"tracer_color": Color(1.0, 0.4, 0.1),
+		"tracer_scale": Vector3(2.4, 2.4, 1.6),
+		"recoil": 0.35,
+		"recoil_lift": 0.3,
+		"flash_scale": 2.4,
 	},
 }
 
@@ -335,7 +411,20 @@ static func color_for(kind: int) -> Color:
 	return stats_for(kind).get("color", Color(0.2, 0.2, 0.2))
 
 
-## Cor do tracer: armas futuristas tem cor propria; o resto usa o amarelo padrao.
+## Tamanho do tracer (bala grossa da magnum, feixe longo do laser, foguete da bazuca).
+## Uso: var escala := WeaponStats.tracer_scale_for(WeaponStats.Kind.SNIPER)
+static func tracer_scale_for(kind: int) -> Vector3:
+	return stats_for(kind).get("tracer_scale", Vector3.ONE)
+
+
+## Recuo da animacao: x = coice para tras (m), y = cano subindo (rad).
+## Uso: var recuo := WeaponStats.recoil_for(WeaponStats.Kind.MAGNUM)
+static func recoil_for(kind: int) -> Vector2:
+	var stats := stats_for(kind)
+	return Vector2(float(stats.get("recoil", 0.0)), float(stats.get("recoil_lift", 0.0)))
+
+
+## Cor do tracer: cada arma tem a sua; faca/pistola usam o amarelo padrao.
 ## Uso: var cor := WeaponStats.tracer_color_for(WeaponStats.Kind.PLASMA_SMG)
 static func tracer_color_for(kind: int) -> Color:
 	return stats_for(kind).get("tracer_color", DEFAULT_TRACER_COLOR)
