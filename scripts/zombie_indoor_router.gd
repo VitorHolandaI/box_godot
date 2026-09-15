@@ -21,6 +21,9 @@ const SLOPE_SEGMENT_RISE := 0.25
 
 var has_route := false
 var replan_count := 0
+## Ultimo navmesh que envolveu zumbi/alvo: find_cached revalida com 1 AABB
+## em vez de varrer os 37 predios a cada replan.
+var _hint = null
 var _path := PackedVector3Array()
 var _path_index := 0
 var _replan_timer := -1.0
@@ -51,9 +54,10 @@ func _replan(tree: SceneTree, zombie_feet: Vector3, target_feet: Vector3) -> voi
 	replan_count += 1
 	_path = PackedVector3Array()
 	_path_index = 0
-	var navigation = NAVIGATION_SCRIPT.find_for_position(tree, zombie_feet)
+	var navigation = NAVIGATION_SCRIPT.find_cached(zombie_feet, _hint)
 	if navigation == null:
-		navigation = NAVIGATION_SCRIPT.find_for_position(tree, target_feet)
+		navigation = NAVIGATION_SCRIPT.find_cached(target_feet, _hint)
+	_hint = navigation
 	if navigation == null:
 		return
 	_path = navigation.get_path_between(zombie_feet, target_feet)
