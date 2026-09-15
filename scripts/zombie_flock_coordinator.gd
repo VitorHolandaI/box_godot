@@ -29,6 +29,13 @@ var _random_source := RandomNumberGenerator.new()
 var _chase_heartbeat_elapsed := 0.0
 ## Lideres de cluster da ultima passada do enxame (0.2s); canal do som.
 var _leader_cache: Array[CharacterBody3D] = []
+## G7-fase1: luzes de interior so nos predios com alguem perto (~2 Hz).
+const LIGHT_TOGGLE_INTERVAL := 0.5
+const LIGHT_MARGIN := 10.0
+const LIGHT_OFF_TICKS := 2
+
+var _light_toggle_elapsed := 0.0
+var _light_off_ticks: Dictionary = {}
 
 
 ## Som no mapa (tiro, grito de screamer) chega apenas aos lideres de cluster:
@@ -39,6 +46,47 @@ func notify_sound(origin: Vector3, radius: float) -> void:
 	for leader in _leader_cache:
 		if is_instance_valid(leader) and not bool(leader.get("is_dead")):
 			leader.call("hear_gunshot", origin, radius)
+
+
+## G7-fase1 (cosmetico/local): predio com jogador (de qualquer peer) perto do
+## volume com margem = luz ON; vazio por 2 ticks seguidos = OFF. Cada tela
+## decide pela sua propria renderizacao; safehouse nunca apaga. Headless
+## dedicado pula tudo. Reduz de ~100-200 para <20 OmniLights ativas.
+## Uso: roda sozinho via _physics_process a cada LIGHT_TOGGLE_INTERVAL.
+func _update_building_lights(delta: float) -> void:
+	if NetworkSession.is_server():
+		return
+	_light_toggle_elapsed += delta
+	if _light_toggle_elapsed < LIGHT_TOGGLE_INTERVAL:
+		return
+	_light_toggle_elapsed = 0.0
+	var margin := Vector3.ONE * LIGHT_MARGIN
+	var relevant_players := _cached_players if not _cached_players.is_empty() else get_living_players(get_tree())
+	for building_value in get_tree().get_nodes_in_group("visibility_building"):
+		var building := building_value as Node
+		if building == null or String(building.name).begins_with("CentralSafehouse"):
+			continue
+		var min_value: Variant = building.get_meta("visibility_min", null)
+		var max_value: Variant = building.get_meta("visibility_max", null)
+		if not (min_value is Vector3 and max_value is Vector3):
+			continue
+		var bounds_min := (min_value as Vector3) - margin
+		var bounds := AABB(bounds_min, (max_value as Vector3) + margin - bounds_min)
+		var want_on := false
+		for player in relevant_players:
+			var player_node := player as Node3D
+			if player_node != null and is_instance_valid(player_node) and bounds.has_point(player_node.global_position):
+				want_on = true
+				break
+		var key := String(building.get_path())
+		if want_on:
+			_light_off_ticks.erase(key)
+			ProceduralBuildingAssembler.set_building_lights_enabled(building, true)
+			continue
+		var off_ticks := int(_light_off_ticks.get(key, 0)) + 1
+		_light_off_ticks[key] = off_ticks
+		if off_ticks >= LIGHT_OFF_TICKS:
+			ProceduralBuildingAssembler.set_building_lights_enabled(building, false)
 
 
 ## Canal estatico de som: usa o coordenador quando existe (mundo real) e cai
@@ -75,6 +123,7 @@ func _exit_tree() -> void:
 
 
 func _physics_process(delta: float) -> void:
+	_update_building_lights(delta)
 	_flock_update_elapsed += delta
 	if _flock_update_elapsed < FLOCK_UPDATE_INTERVAL:
 		return
