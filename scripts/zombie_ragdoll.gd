@@ -11,6 +11,14 @@ const CORPSE_COLLISION_LAYER := 32
 var torso_body: RigidBody3D
 
 
+## Corpo assentado sai do solver: apos 6s congelamos os RigidBody3D em posicao.
+## A remocao continua sendo do corpse_cleanup_policy (mantem os 50m).
+const SETTLE_FREEZE_TIME := 6.0
+
+var settle_age := 0.0
+var froze := false
+
+
 func _ready() -> void:
 	torso_body = _create_torso()
 	var head := _create_head()
@@ -24,6 +32,23 @@ func _ready() -> void:
 	_create_joint("RightShoulderJoint", NodePath("../Torso"), NodePath("../RightArm"), Vector3(0.56, 0.84, 0.0))
 	_create_joint("LeftHipJoint", NodePath("../Torso"), NodePath("../LeftLeg"), Vector3(-0.2, 0.02, 0.0))
 	_create_joint("RightHipJoint", NodePath("../Torso"), NodePath("../RightLeg"), Vector3(0.2, 0.02, 0.0))
+
+
+func _physics_process(delta: float) -> void:
+	if froze:
+		return
+	settle_age += delta
+	if settle_age < SETTLE_FREEZE_TIME:
+		return
+	froze = true
+	for child in get_children():
+		var limb_body := child as RigidBody3D
+		if limb_body != null and is_instance_valid(limb_body):
+			limb_body.freeze = true
+		var joint := child as Joint3D
+		if joint != null:
+			joint.node_a = NodePath()
+			joint.node_b = NodePath()
 
 
 ## Sets initial velocity and angular momentum to make the corpse fall realistically.

@@ -1,6 +1,14 @@
 class_name SupplyNetworkState
 extends RefCounted
 
+## Alteracao local de suprimento marca o snapshot como sujo: o estado so
+## viaja quando muda (todo pacote de jogador era reenviado igual a 10Hz).
+static var dirty := true
+
+
+static func mark_dirty() -> void:
+	dirty = true
+
 
 ## Coleta indices dos suprimentos indisponiveis em ordem deterministica.
 ## Uso: var states := SupplyNetworkState.collect(tree)

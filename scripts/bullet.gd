@@ -1,8 +1,11 @@
+class_name Bullet
 extends Node3D
 
 @export var speed := 16.0
 @export var damage := 35
 @export var lifetime := 2.5
+## Alcance do hitscan de pellet (vive como o projetil: 2.5s x 16 m/s).
+const HITSACAN_RANGE := 48.0
 
 var direction := Vector3.FORWARD
 var causes_damage := true
@@ -47,6 +50,28 @@ func _physics_process(delta: float) -> void:
 
 func _apply_damage(collider: Object) -> void:
 	var target: Node = collider as Node
+	while target != null:
+		if target.has_method("take_damage"):
+			target.take_damage(damage, direction, "bullet", shooter)
+			return
+		target = target.get_parent()
+
+
+## Hitscan instantaneo de pellet: um ray por pellet, sem Node3D nem fila de
+## raycasts por tick (dano autoritativo na hora). Visual continua sendo
+## tracer via RPC. Uso:
+##   Bullet.hitscan_damage(origin, direcao, 10, player)
+static func hitscan_damage(origin: Vector3, direction: Vector3, damage: int, shooter: CollisionObject3D) -> void:
+	if shooter == null or not shooter.is_inside_tree():
+		return
+	var space := shooter.get_world_3d().direct_space_state
+	var reach := origin + direction * HITSACAN_RANGE
+	# Mesma mascara do projetil: mundo/jogador/zumbi + cadaver.
+	var query := PhysicsRayQueryParameters3D.create(origin, reach, 39, [shooter])
+	var hit := space.intersect_ray(query)
+	if hit.is_empty():
+		return
+	var target: Node = hit.collider as Node
 	while target != null:
 		if target.has_method("take_damage"):
 			target.take_damage(damage, direction, "bullet", shooter)
