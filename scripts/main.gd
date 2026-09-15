@@ -27,6 +27,9 @@ const SNAPSHOT_INTERVAL := 1.0 / 10.0
 # Payload binario por RPC abaixo do MTU do ENet (~1400 bytes com cabecalhos).
 const ZOMBIE_SNAPSHOT_PACKET_BYTES := 1100
 const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 2
+## Onda nova chega com centenas de zumbis: o cliente spawna no maximo N por
+## frame (fila) para nao dar hitch de instantiates sincronos.
+const MAX_ZOMBIE_SPAWNS_PER_FRAME := 6
 const PLAYER_VISION_UPDATE_INTERVAL := 0.12
 const PLAYER_SPAWN_POINTS := [
 	Vector3(-13.0, 1.18, 9.5),
@@ -56,6 +59,9 @@ var zombie_snapshot_sequence := 0
 var received_zombie_snapshot_sequence := -1
 var received_zombie_snapshot_chunks: Dictionary = {}
 var received_zombie_names: Dictionary = {}
+## Fila de spawn do cliente (do snapshot -> mundo aos poucos) e cache de nos.
+var pending_zombie_spawns: Array[Dictionary] = []
+var zombie_cache: Dictionary = {}
 var smoke_test_mode := false
 var player_vision_elapsed := 0.0
 var corpse_cleanup_elapsed := 0.0
@@ -165,6 +171,7 @@ func _physics_process(delta: float) -> void:
 		if input_elapsed >= INPUT_INTERVAL:
 			input_elapsed = 0.0
 			_submit_inputs.rpc_id(NetworkSession.SERVER_ID, _collect_local_inputs())
+		_drain_zombie_spawn_queue()
 	elif NetworkSession.is_server():
 		snapshot_elapsed += delta
 		if snapshot_elapsed >= SNAPSHOT_INTERVAL:
@@ -366,6 +373,7 @@ func _drop_airdrop_crate(drop_position: Vector3, kinds: Array[int]) -> void:
 	# Nasce no ar (a _ready soma o DROP_HEIGHT) e desce de paraquedas.
 	crate.position = Vector3(drop_position.x, 0.02, drop_position.z)
 	add_child(crate)
+	GroundWeaponSync.mark_dirty()
 
 
 ## Espalha itens de vida e municao pelas ruas a cada onda (e na partida).
@@ -391,6 +399,7 @@ func _spawn_loot_item(rng: RandomNumberGenerator, kind: int, amount: int) -> voi
 	loot_index += 1
 	item.setup(kind, amount)
 	add_child(item)
+	GroundWeaponSync.mark_dirty()
 	item.global_position = position
 
 
@@ -441,6 +450,8 @@ func _on_peer_scene_loaded(peer_id: int) -> void:
 	if survival_wave_controller.wave_index <= 0:
 		return
 	_wave_state.rpc_id(peer_id, survival_wave_controller.wave_index, survival_wave_controller.total_kills)
+	# Peer novo precisa da lista completa de itens no chao do primeiro snapshot.
+	GroundWeaponSync.mark_dirty()
 
 
 func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
@@ -562,8 +573,16 @@ func _collect_zombie_states() -> Array:
 func _send_player_snapshots(states: Array) -> void:
 	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
 	var door_open := safehouse_door != null and bool(safehouse_door.call("is_open_requested"))
-	var supply_states := SUPPLY_NETWORK_STATE_SCRIPT.collect(get_tree())
-	var ground_weapons := GroundWeaponSync.collect(get_tree())
+	# Snapshot sujo: suprimentos e itens no chao so viajam quando mudam
+	# (pacote identico a 10Hz x pacotes x peers era desperdicio puro).
+	var supply_states: Array = []
+	if SupplyNetworkState.dirty:
+		supply_states = SUPPLY_NETWORK_STATE_SCRIPT.collect(get_tree())
+		SupplyNetworkState.dirty = false
+	var ground_weapons: Array = []
+	if GroundWeaponSync.dirty:
+		ground_weapons = GroundWeaponSync.collect(get_tree())
+		GroundWeaponSync.dirty = false
 	for packet_index in packet_count:
 		var packet_states: Array = []
 		var first_state := packet_index * MAX_PLAYERS_PER_SNAPSHOT_PACKET
@@ -616,8 +635,12 @@ func _apply_player_snapshot(player_states: Array, door_open: bool, supply_states
 		return
 	if safehouse_door != null:
 		safehouse_door.call("apply_network_open_state", door_open)
-	SUPPLY_NETWORK_STATE_SCRIPT.apply(get_tree(), supply_states)
-	GroundWeaponSync.apply(get_tree(), ground_weapons)
+	# Array vazio = "nada mudou desde o ultimo snapshot" (dirty-flag do lado
+	# do servidor); aplicar uma lista vazia resetaria estados.
+	if not supply_states.is_empty():
+		SUPPLY_NETWORK_STATE_SCRIPT.apply(get_tree(), supply_states)
+	if not ground_weapons.is_empty():
+		GroundWeaponSync.apply(get_tree(), ground_weapons)
 	for state_value in player_states:
 		if not state_value is Dictionary:
 			continue
@@ -665,21 +688,53 @@ func _apply_zombie_states(states: Array) -> void:
 		if zombie_name.is_empty() or zombie_name.length() > 64:
 			continue
 		received_zombie_names[zombie_name] = true
-		var zombie := zombies.get_node_or_null(NodePath(zombie_name))
+		var zombie := _client_zombie_by_name(zombie_name)
 		if zombie == null:
-			zombie = ZOMBIE_SCENE.instantiate()
-			zombie.name = zombie_name
-			zombie.simulation_enabled = false
-			zombies.add_child(zombie, true)
-			var initial_position: Variant = state.get("position")
-			if initial_position is Vector3:
-				zombie.global_position = initial_position
+			# Fila: novos zumbis entram no mundo aos poucos (no maximo N por
+			# frame) para a nova onda nao instanciar centenas num frame so.
+			if pending_zombie_spawns.size() < 512:
+				pending_zombie_spawns.append({"name": zombie_name, "state": state})
+			continue
 		zombie.apply_network_state(state)
+
+
+func _client_zombie_by_name(zombie_name: String) -> Node:
+	var cached: Variant = zombie_cache.get(zombie_name)
+	if cached != null and is_instance_valid(cached):
+		return cached
+	var zombie := zombies.get_node_or_null(NodePath(zombie_name))
+	if zombie != null:
+		zombie_cache[zombie_name] = zombie
+	return zombie
+
+
+## Descarrega a fila de spawns do cliente no maximo N por frame.
+func _drain_zombie_spawn_queue() -> void:
+	if pending_zombie_spawns.is_empty():
+		return
+	var spawned := 0
+	while spawned < MAX_ZOMBIE_SPAWNS_PER_FRAME and not pending_zombie_spawns.is_empty():
+		var entry: Dictionary = pending_zombie_spawns.pop_front()
+		var zombie_name := String(entry["name"])
+		if _client_zombie_by_name(zombie_name) != null:
+			continue
+		var state: Dictionary = entry["state"]
+		var zombie = ZOMBIE_SCENE.instantiate()
+		zombie.name = zombie_name
+		zombie.simulation_enabled = false
+		zombies.add_child(zombie, true)
+		zombie_cache[zombie_name] = zombie
+		var initial_position: Variant = state.get("position")
+		if initial_position is Vector3:
+			zombie.global_position = initial_position
+		zombie.apply_network_state(state)
+		spawned += 1
 
 
 func _remove_missing_network_zombies() -> void:
 	for zombie in zombies.get_children():
 		if not received_zombie_names.has(String(zombie.name)):
+			zombie_cache.erase(String(zombie.name))
 			zombie.queue_free()
 
 

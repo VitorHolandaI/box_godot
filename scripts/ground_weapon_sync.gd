@@ -11,6 +11,13 @@ extends RefCounted
 ##   GroundWeaponSync.apply(tree, estados)
 
 
+## Alteracao de qualquer no do chao marca a lista como suja.
+static var dirty := true
+
+
+static func mark_dirty() -> void:
+	dirty = true
+
 ## Lista deterministica (por ordem do grupo) dos itens no chao.
 ## Uso: var estados := GroundWeaponSync.collect(tree)
 static func collect(tree: SceneTree) -> Array:

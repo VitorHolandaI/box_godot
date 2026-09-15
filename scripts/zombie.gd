@@ -96,6 +96,9 @@ var walk_time := 0.0
 var forced_variant := -1
 ## Grito do screamer: intervalo aleatorio entre gritos.
 var scream_cooldown := 0.0
+## Cache dos nos de pose (Model/bracos/pernas): 1 lookup de Dictionary no
+## lugar de 6 get_node_or_null por tick animado.
+var _pose_nodes: Dictionary = {}
 var death_velocity := Vector3.ZERO
 var is_dead := false
 var simulation_enabled := true
@@ -330,13 +333,13 @@ func _should_switch_target(candidate: CharacterBody3D) -> bool:
 func _find_nearest_melee_player() -> CharacterBody3D:
 	var nearest: CharacterBody3D = null
 	var nearest_distance := MELEE_RANGE
-	for player_node in get_tree().get_nodes_in_group("player"):
-		var player := player_node as CharacterBody3D
-		if not _is_living_player(player):
+	for player in ZombieFlockCoordinator.get_living_players(get_tree()):
+		var player_body := player as CharacterBody3D
+		if not _is_living_player(player_body):
 			continue
-		var distance := global_position.distance_to(player.global_position)
-		if distance <= nearest_distance and absf(player.global_position.y - global_position.y) <= MELEE_VERTICAL_RANGE:
-			nearest = player
+		var distance := global_position.distance_to(player_body.global_position)
+		if distance <= nearest_distance and absf(player_body.global_position.y - global_position.y) <= MELEE_VERTICAL_RANGE:
+			nearest = player_body
 			nearest_distance = distance
 	return nearest
 
@@ -571,14 +574,16 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 func _find_closest_living_player() -> CharacterBody3D:
 	var closest: CharacterBody3D = null
 	var closest_distance := INF
-	for player_node in get_tree().get_nodes_in_group("player"):
-		var player := player_node as CharacterBody3D
-		if player == null or player.health <= 0 or bool(player.get("is_eliminated")):
+	# Cache de jogadores vivos do coordenador (0.25s) em vez de reescanear o
+	# grupo por zumbi por sentido.
+	for player in ZombieFlockCoordinator.get_living_players(get_tree()):
+		var player_body := player as CharacterBody3D
+		if player_body == null or player_body.health <= 0:
 			continue
-		var distance := global_position.distance_to(player.global_position)
+		var distance := global_position.distance_to(player_body.global_position)
 		if distance < closest_distance:
 			closest_distance = distance
-			closest = player
+			closest = player_body
 	return closest
 
 
@@ -709,7 +714,7 @@ func _animate_pose(delta: float, is_walking: bool) -> void:
 		var mult := 9.0 if zombie_type == ZombieType.SPRINTER else 5.5
 		walk_time += delta * mult
 
-	ZombieMutator.animate_variant_pose(self, int(zombie_type), delta, is_walking, attack_weight, walk_time)
+	ZombieMutator.animate_variant_pose(self, int(zombie_type), delta, is_walking, attack_weight, walk_time, _pose_nodes)
 	ZombieMutator.animate_hit_reaction(
 		self,
 		delta,
@@ -718,7 +723,8 @@ func _animate_pose(delta: float, is_walking: bool) -> void:
 		hit_direction,
 		hit_kind,
 		int(zombie_type),
-		attack_weight
+		attack_weight,
+		_pose_nodes
 	)
 
 

@@ -63,6 +63,7 @@ func _physics_process(delta: float) -> void:
 	if not NetworkSession.is_client():
 		lifetime_elapsed += delta
 		if lifetime_elapsed >= lifetime_seconds:
+			GroundWeaponSync.mark_dirty()
 			queue_free()
 			return
 	if dropped:
@@ -107,6 +108,7 @@ func _eject_weapons() -> void:
 		var offset := Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
 		pickup.global_position = global_position + offset
 	weapon_kinds.clear()
+	GroundWeaponSync.mark_dirty()
 
 
 func _update_parachute_sway(delta: float) -> void:

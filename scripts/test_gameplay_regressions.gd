@@ -402,6 +402,8 @@ func _test_network_zombie_starts_at_snapshot(test_root: Node) -> void:
 	test_root.add_child(main_world)
 	var expected_position := Vector3(104.0, 1.0, -12.0)
 	main_world.call("_apply_zombie_states", [{"name": "NetworkSpawnTest", "position": expected_position}])
+	# Spawns do cliente entram por fila (6 por frame): descarrega agora.
+	main_world.call("_drain_zombie_spawn_queue")
 	var replica := main_world.get_node("Zombies/NetworkSpawnTest") as CharacterBody3D
 	if replica.global_position.distance_to(expected_position) > 0.01:
 		_fail(test_root, "Replica apareceu em %s antes de interpolar para %s." % [replica.global_position, expected_position])
