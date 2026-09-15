@@ -22,6 +22,7 @@ func run(test_root: Node) -> void:
 	_test_airdrop_drop_and_pickup(test_root)
 	_test_ground_weapon_sync(test_root)
 	_test_crate_expires(test_root)
+	_test_ground_supply_pickup(test_root)
 	_test_client_wave_sync(test_root)
 	_test_variant_mix(test_root)
 	_test_forced_variant_spawn(test_root)
@@ -201,6 +202,69 @@ func _test_crate_expires(test_root: Node) -> void:
 		return
 	crate.free()
 	print("PASS: Expiracao do crate validada.")
+
+
+## Item de vida/municao espalhado: coleta ao tocar e sync por nome (tipo 2).
+func _test_ground_supply_pickup(test_root: Node) -> void:
+	print("Testando itens de vida e municao espalhados...")
+	var tree := test_root.get_tree()
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.reads_local_input = false
+	test_root.add_child(player)
+	player.health = 50
+	var item := GroundSupplyPickup.new()
+	item.name = "LootSyncTest"
+	item.setup(GroundSupplyPickup.Kind.HEALTH, 35)
+	test_root.add_child(item)
+	item.global_position = Vector3(5.0, 0.0, 5.0)
+	if not item.is_in_group("ground_supplies"):
+		_fail(test_root, "Item espalhado deveria entrar no grupo ground_supplies.")
+		player.free()
+		item.free()
+		return
+	item.call("_on_body_entered", player)
+	if player.health != 85:
+		_fail(test_root, "Item de vida deveria curar 35 ao tocar; vida=%d." % player.health)
+		player.free()
+		return
+	# Vida cheia nao consome o item; ele fica para o proximo jogador.
+	var full_player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	full_player.reads_local_input = false
+	test_root.add_child(full_player)
+	var second := GroundSupplyPickup.new()
+	second.name = "LootSyncTest2"
+	second.setup(GroundSupplyPickup.Kind.HEALTH, 35)
+	test_root.add_child(second)
+	second.global_position = Vector3(-5.0, 0.0, 5.0)
+	second.call("_on_body_entered", full_player)
+	if bool(second.is_queued_for_deletion()):
+		_fail(test_root, "Item nao deveria ser consumido por jogador com vida cheia.")
+	var entries: Array = GroundWeaponSync.collect(tree)
+	var supply_entry: Array = []
+	for entry in entries:
+		if String(entry[0]) == "LootSyncTest2":
+			supply_entry = entry
+	if supply_entry.is_empty() or int(supply_entry[4]) != 2:
+		_fail(test_root, "Sync deveria coletar suprimento com flag 2; entrada=%s." % supply_entry)
+		player.free()
+		full_player.free()
+		item.free()
+		second.free()
+		return
+	second.free()
+	GroundWeaponSync.apply(tree, entries)
+	var restored: Node = null
+	for node in tree.get_nodes_in_group("ground_supplies"):
+		if String(node.name) == "LootSyncTest2":
+			restored = node
+	if restored == null or int(restored.get("supply_kind")) != int(GroundSupplyPickup.Kind.HEALTH) or int(restored.get("amount")) != 35:
+		_fail(test_root, "Suprimento recriado pelo sync deveria preservar tipo e quantidade.")
+	player.free()
+	full_player.free()
+	item.free()
+	for node in tree.get_nodes_in_group("ground_supplies"):
+		node.free()
+	print("PASS: Itens de vida e municao espalhados validados.")
 
 
 func _test_client_wave_sync(test_root: Node) -> void:

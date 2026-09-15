@@ -6,6 +6,9 @@ signal join_failed(message: String)
 signal server_lost
 signal latency_changed(latency_ms: int)
 signal server_list_changed
+## Peer terminou de carregar a cena da partida (registro em loaded_peers):
+## usado para entregar estado de onda a quem reconectou no meio da horda.
+signal peer_scene_loaded(peer_id: int)
 
 const DEFAULT_PORT := 27015
 const MIN_PORT := 1024
@@ -488,6 +491,7 @@ func _client_loaded() -> void:
 	if not is_server():
 		return
 	loaded_peers[multiplayer.get_remote_sender_id()] = true
+	peer_scene_loaded.emit(multiplayer.get_remote_sender_id())
 
 
 func _on_bot_join_failed(message: String) -> void:
