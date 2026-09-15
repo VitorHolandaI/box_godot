@@ -18,6 +18,9 @@ func run(test_root: Node) -> void:
 	_test_spit_needs_range_line_and_cooldown(test_root)
 	_test_acid_puddle_burns_then_expires(test_root)
 	_test_charger_dash_range_and_hit(test_root)
+	_test_jumper_leaps_high(test_root)
+	await _test_bloater_rushes_and_detonates(test_root)
+	_test_weapons_have_own_sound_and_fast_tracer(test_root)
 
 
 func _test_codec_carries_types_above_fifteen(test_root: Node) -> void:
@@ -41,7 +44,7 @@ func _test_specials_from_first_hour(test_root: Node) -> void:
 	var schedule = SCHEDULE_SCRIPT.new()
 	var first: Dictionary = schedule.variant_mix_for_wave(0)
 	var missing: Array[String] = []
-	for special in [ZombieMutator.Type.LEAPER, ZombieMutator.Type.SPITTER, ZombieMutator.Type.BLOATER, ZombieMutator.Type.CHARGER]:
+	for special in [ZombieMutator.Type.LEAPER, ZombieMutator.Type.SPITTER, ZombieMutator.Type.BLOATER, ZombieMutator.Type.CHARGER, ZombieMutator.Type.JUMPER]:
 		if int(first.get(special, 0)) <= 0:
 			missing.append(ZombieMutator.Type.keys()[ZombieMutator.Type.values().find(special)])
 	var all_stages_have_specials := true
@@ -122,6 +125,62 @@ func _test_charger_dash_range_and_hit(test_root: Node) -> void:
 		_fail(test_root, "Investida: nao arranca colado, arranca a 9 m e arremessa o jogador; colado=%s arrancada=%s correndo=%s acerto=%s." % [close, start, charging, hit])
 		return
 	print("PASS: Charger arranca de longe e arremessa o jogador.")
+
+
+func _test_jumper_leaps_high(test_root: Node) -> void:
+	print("Testando saltador pulando alto...")
+	var jump = ABILITIES_SCRIPT.HighJumpState.new()
+	var leap = ABILITIES_SCRIPT.LeapState.new()
+	var toward := Vector3(1.0, 0.0, 0.0)
+	var close: Vector3 = jump.update(0.1, Vector3.ZERO, toward, 2.0, true)
+	var jump_start: Vector3 = jump.update(0.1, Vector3.ZERO, toward, 8.0, true)
+	var leap_start: Vector3 = leap.update(0.1, Vector3.ZERO, toward, 3.0, true)
+	if close != Vector3.ZERO or jump_start.y < leap_start.y * 2.5 or jump_start.x <= 0.0:
+		_fail(test_root, "Saltador: nao pula colado e pula bem mais alto que o leaper; colado=%s saltador=%s leaper=%s." % [close, jump_start, leap_start])
+		return
+	print("PASS: Saltador pula alto em arco ate o jogador.")
+
+
+func _test_bloater_rushes_and_detonates(test_root: Node) -> void:
+	print("Testando bloater kamikaze...")
+	var origin := Vector3(-920.0, 1.0, -960.0)
+	var player := _add_player(test_root, origin + Vector3(1.4, 0.0, 0.0))
+	var bloater := preload("res://scenes/zombie.tscn").instantiate() as CharacterBody3D
+	bloater.name = "KamikazeBloater"
+	bloater.set("forced_variant", ZombieMutator.Type.BLOATER)
+	bloater.set("gravity", 0.0)
+	bloater.position = origin
+	test_root.add_child(bloater)
+	await test_root.get_tree().physics_frame
+	var fast := float(bloater.get("speed")) >= 3.0
+	bloater.set("alert_target", player)
+	bloater.call("_physics_process", 1.0 / 60.0)
+	var detonated := bool(bloater.get("is_dead"))
+	var hurt := int(player.get("health")) < int(player.get("max_health"))
+	player.free()
+	bloater.free()
+	if not fast or not detonated or not hurt:
+		_fail(test_root, "Bloater deveria ser rapido e explodir colado no jogador; rapido=%s explodiu=%s feriu=%s." % [fast, detonated, hurt])
+		return
+	print("PASS: Bloater corre e explode no jogador.")
+
+
+func _test_weapons_have_own_sound_and_fast_tracer(test_root: Node) -> void:
+	print("Testando som proprio e tracer rapido das armas...")
+	var profiles: Dictionary = {}
+	var slow: Array[String] = []
+	for kind in WeaponStats.crate_kinds():
+		profiles[String(WeaponStats.stats_for(kind).get("sound", ""))] = true
+		if WeaponStats.tracer_speed_for(kind) < 100.0:
+			slow.append(String(WeaponStats.stats_for(kind)["label"]))
+	var streams: Dictionary = {}
+	for profile in profiles:
+		var stream: AudioStreamWAV = WeaponSoundSynth.create_stream(String(profile))
+		streams[stream.data.slice(0, 2000).hex_encode().md5_text()] = true
+	if profiles.has("") or profiles.size() < 10 or streams.size() != profiles.size() or not slow.is_empty():
+		_fail(test_root, "Armas com perfil de som (>=10 distintos, sons diferentes) e tracer >= 100 m/s; perfis=%s sons=%d lentos=%s." % [profiles.keys(), streams.size(), slow])
+		return
+	print("PASS: %d perfis de som distintos e tracers rapidos nas armas de hitscan." % profiles.size())
 
 
 func _add_player(test_root: Node, position: Vector3) -> CharacterBody3D:

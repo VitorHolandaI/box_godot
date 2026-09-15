@@ -6,6 +6,7 @@ const GROAN_DURATION := 0.62
 
 var _gunshot_stream: AudioStreamWAV
 var _groan_stream: AudioStreamWAV
+var _weapon_streams: Dictionary = {}
 
 
 func _ready() -> void:
@@ -13,8 +14,15 @@ func _ready() -> void:
 	_groan_stream = _create_groan_stream()
 
 
-func play_gunshot(world_position: Vector3) -> void:
-	_play_spatial(_gunshot_stream, world_position, 1.25, 55.0)
+## Tiro com o som da arma (perfil em WeaponStats); faca/pistola = "pistol".
+## Streams por perfil em cache: gerar o PCM a cada disparo custaria CPU.
+## Uso: AudioFeedback.play_gunshot(origem, WeaponStats.Kind.SNIPER)
+func play_gunshot(world_position: Vector3, weapon_kind: int = -1) -> void:
+	var profile := WeaponStats.sound_for(weapon_kind)
+	if not _weapon_streams.has(profile):
+		_weapon_streams[profile] = WeaponSoundSynth.create_stream(profile)
+	var max_distance := 90.0 if profile == "sniper" or profile == "launcher" else 55.0
+	_play_spatial(_weapon_streams[profile], world_position, WeaponSoundSynth.volume_for(profile), max_distance)
 
 
 func play_zombie_groan(world_position: Vector3) -> void:
