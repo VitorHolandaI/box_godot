@@ -527,8 +527,10 @@ func _accept_weapon_offer(weapon_kind: int, incoming_state: Dictionary) -> Strin
 		current_weapon = weapon_kind
 		_update_weapon_models()
 		return "granted"
-	# Slot cheio: se a arma na mao e de crate, troca (a antiga cai no chao).
-	if WeaponStats.is_crate_weapon(current_weapon):
+	# Slot cheio: troca pela arma de crate guardada, esteja ela na mao ou nao
+	# (com faca/pistola na mao pelo Tab, antes voltava "full" e nada acontecia).
+	if not weapon_slots.kinds.is_empty():
+		current_weapon = weapon_slots.kinds[0]
 		_drop_current_crate_weapon()
 		if weapon_slots.has_free_slot():
 			weapon_slots.grant(weapon_kind)
@@ -641,7 +643,8 @@ func _find_nearest_ground_weapon() -> Node:
 		# dela ficam espalhadas ao redor como pickups proprios.
 		if pickup is AirSupplyPickup and (pickup as AirSupplyPickup).weapon_kinds.is_empty():
 			continue
-		var distance := global_position.distance_to(pickup.global_position)
+		# Distancia no chao: a origem do boneco fica ~1 m acima do item.
+		var distance := Vector2(global_position.x - pickup.global_position.x, global_position.z - pickup.global_position.z).length()
 		if distance < best_distance and pickup.has_method("interact_with"):
 			best_distance = distance
 			best = pickup

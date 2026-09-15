@@ -4,7 +4,7 @@ extends RefCounted
 ## Sincroniza itens no chao por NOME, nao por indice: armas dropadas,
 ## crates de airdrop (grupo "ground_weapons") e suprimentos espalhados
 ## (grupo "ground_supplies"). Cada entrada = [nome, x, y, z, tipo, payload]:
-## tipo 0 = dropada [kind, mag, reserve, durability]; 1 = crate [kinds];
+## tipo 0 = dropada [kind, mag, reserve, durability, segundos_restantes]; 1 = crate [kinds];
 ## 2 = item de vida/municao [kind, amount].
 ## Uso:
 ##   var estados := GroundWeaponSync.collect(tree)
@@ -35,7 +35,7 @@ static func collect(tree: SceneTree) -> Array:
 			entries.append([String(node.name), node.global_position.x, node.global_position.y, node.global_position.z, 1, kinds])
 		elif node is GroundWeaponPickup:
 			var pickup := node as GroundWeaponPickup
-			entries.append([String(node.name), node.global_position.x, node.global_position.y, node.global_position.z, 0, [int(pickup.weapon_kind), pickup.mag, pickup.reserve, pickup.durability]])
+			entries.append([String(node.name), node.global_position.x, node.global_position.y, node.global_position.z, 0, [int(pickup.weapon_kind), pickup.mag, pickup.reserve, pickup.durability, roundi(pickup.remaining_lifetime())]])
 	for node in tree.get_nodes_in_group("ground_supplies"):
 		if not tree.current_scene.is_ancestor_of(node):
 			continue
@@ -107,6 +107,9 @@ static func _spawn_from_entry(parent: Node, entry: Array) -> Node:
 			var pickup := GroundWeaponPickup.new()
 			pickup.name = node_name
 			pickup.setup(int(payload[0]), int(payload[1]), int(payload[2]), int(payload[3]))
+			# Tempo restante (5o campo): o cliente pisca junto com o sumico no servidor.
+			if payload.size() >= 5:
+				pickup.lifetime_seconds = float(payload[4])
 			node = pickup
 	parent.add_child(node)
 	node.global_position = position
