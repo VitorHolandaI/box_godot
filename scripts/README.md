@@ -34,10 +34,10 @@ Logica de jogo, rede, interface e testes automatizados.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
-- `shared_vision.gd`: visao compartilhada: zumbi visto por qualquer jogador (local ou aliado de rede) fica visivel para todos.
+- `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
-- `test_shared_vision.gd`: regressoes da visao compartilhada entre aliados.
+- `test_shared_vision.gd`: regressoes da visao compartilhada por raio entre aliados.
 - `test_weapon_arsenal.gd`: regressoes do arsenal: cada arma de crate ligada em municao, drop, crate e modelo, railgun atravessando a fila e tracers futuristas.
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
 - `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
