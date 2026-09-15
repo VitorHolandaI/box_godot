@@ -52,6 +52,20 @@ func register_death() -> void:
 	state_changed.emit()
 
 
+## Estado vindo do servidor (cliente nao simula ondas): alinha o HUD sem
+## simular spawn. Uso: controller.set_sync_state(wave_index, kills)
+## Estado vindo do servidor (cliente nao simula ondas): alinha o HUD sem
+## simular spawn. Uso: controller.set_sync_state(new_wave_index, kills)
+func set_sync_state(new_wave_index: int, kills: int) -> void:
+	total_kills = maxi(kills, 0)
+	if new_wave_index < 0 or complete:
+		return
+	wave_index = new_wave_index
+	spawned_in_wave = schedule.target_for(wave_index)
+	alive_in_wave = maxi(schedule.target_for(wave_index) - total_kills, 0)
+	state_changed.emit()
+
+
 func get_hud_text() -> String:
 	if complete:
 		return "SOBREVIVENCIA CONCLUIDA | Horas: %d | Abates: %d" % [schedule.wave_count(), total_kills]
