@@ -14,6 +14,10 @@ enum Type {
 	ONE_LEG = 6,
 	HALF_LEG = 7,
 	HALF_HEAD = 8,
+	## Tanque: lento, muita vida e golpe forte; corpo maior.
+	BRUTE = 9,
+	## Grita periodicamente e atrai a horda pela audicao.
+	SCREAMER = 10,
 }
 
 const SKIN_PALETTE: Array[Color] = [
@@ -121,6 +125,15 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			zombie.set("speed", 2.3)
 			zombie.set("max_health", 95)
 			_create_split_head(zombie)
+		Type.BRUTE:
+			zombie.set("speed", 1.15)
+			zombie.set("max_health", 320)
+			zombie.set("attack_damage", 26)
+			_setup_brute(model)
+		Type.SCREAMER:
+			zombie.set("speed", 2.4)
+			zombie.set("max_health", 85)
+			_setup_screamer(zombie)
 		Type.WALKER:
 			zombie.set("speed", 2.2)
 			zombie.set("max_health", 100)
@@ -140,6 +153,30 @@ static func _setup_crawler(zombie: CharacterBody3D, model: Node3D) -> void:
 	var health_lbl := zombie.get_node_or_null("HealthLabel") as Label3D
 	if health_lbl != null:
 		health_lbl.position.y = 0.95
+
+
+## Brute: corpo maior e ombreiras de paletizado escuro para leitura imediata.
+static func _setup_brute(model: Node3D) -> void:
+	if model != null:
+		model.scale = Vector3(1.35, 1.25, 1.35)
+	var head := model.get_node_or_null("Head") as Node3D
+	if head != null:
+		head.scale = Vector3(1.2, 1.15, 1.2)
+	var health_label := model.get_parent().get_node_or_null("HealthLabel") as Label3D
+	if health_label != null:
+		health_label.position.y += 0.55
+
+
+## Screamer: tronco vermelho vivo e mandibula aberta, para ser reconhecido
+## antes do grito. Uso: chamado por apply_appearance no spawn.
+static func _setup_screamer(zombie: CharacterBody3D) -> void:
+	var torso := zombie.get_node_or_null("Model/Torso") as MeshInstance3D
+	if torso != null:
+		torso.material_override = _quick_mat(Color(0.55, 0.08, 0.08), 0.9)
+	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	if head != null:
+		head.rotation.x = deg_to_rad(-12.0)
+		_add_box(head, Vector3(0.2, 0.12, 0.16), Vector3(0.0, -0.14, -0.24), Color(0.75, 0.72, 0.65))
 
 
 static func _hide_node(parent: Node, path: String) -> void:

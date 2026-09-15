@@ -26,6 +26,76 @@ func is_airdrop_wave(wave_index: int) -> bool:
 	return AIRDROP_WAVES.has(wave_index)
 
 
+## Mix de variantes por fase da partida, em porcentagens somando 100.
+## Cada fase adiciona variantes e reequilibra o resto da horda.
+const VARIANT_MIXES: Array[Dictionary] = [
+	# Hora 1-2: horda basica.
+	{
+		ZombieMutator.Type.WALKER: 70,
+		ZombieMutator.Type.LIMPER: 15,
+		ZombieMutator.Type.ONE_ARM: 10,
+		ZombieMutator.Type.ONE_LEG: 5,
+	},
+	# Hora 3-6: corredores e rastejantes entram.
+	{
+		ZombieMutator.Type.WALKER: 50,
+		ZombieMutator.Type.LIMPER: 10,
+		ZombieMutator.Type.ONE_ARM: 10,
+		ZombieMutator.Type.CRAWLER: 10,
+		ZombieMutator.Type.SPRINTER: 10,
+		ZombieMutator.Type.HALF_ARM: 10,
+	},
+	# Hora 7-10: brute tanque e cabecas divididas.
+	{
+		ZombieMutator.Type.WALKER: 40,
+		ZombieMutator.Type.CRAWLER: 10,
+		ZombieMutator.Type.SPRINTER: 15,
+		ZombieMutator.Type.LIMPER: 5,
+		ZombieMutator.Type.HALF_HEAD: 10,
+		ZombieMutator.Type.BRUTE: 8,
+		ZombieMutator.Type.HALF_ARM: 12,
+	},
+	# Hora 11+: screamer atrai a horda de longe.
+	{
+		ZombieMutator.Type.WALKER: 35,
+		ZombieMutator.Type.CRAWLER: 8,
+		ZombieMutator.Type.SPRINTER: 15,
+		ZombieMutator.Type.HALF_HEAD: 10,
+		ZombieMutator.Type.BRUTE: 10,
+		ZombieMutator.Type.SCREAMER: 7,
+		ZombieMutator.Type.LIMPER: 5,
+		ZombieMutator.Type.ONE_ARM: 10,
+	},
+]
+
+
+## Mix da fase da onda: indice 0 ate Hora 2, 1 ate Hora 5, 2 ate Hora 9,
+## 3 nas seguintes. Uso: var mix := schedule.variant_mix_for_wave(wave_index)
+func variant_mix_for_wave(wave_index: int) -> Dictionary:
+	var stage := 0
+	if wave_index >= 2:
+		stage = 1
+	if wave_index >= 6:
+		stage = 2
+	if wave_index >= 10:
+		stage = 3
+	return VARIANT_MIXES[stage]
+
+
+## Escolhe a variante com rolagem deterministica 0..99 contra o mix da fase.
+## Uso: var tipo := schedule.pick_variant(wave_index, rolagem)
+func pick_variant(wave_index: int, roll_percent: int) -> int:
+	var mix := variant_mix_for_wave(wave_index)
+	var cumulative := 0
+	var ordered_kinds := mix.keys()
+	ordered_kinds.sort()
+	for kind in ordered_kinds:
+		cumulative += int(mix[kind])
+		if int(roll_percent) < cumulative:
+			return int(kind)
+	return int(ordered_kinds[0])
+
+
 ## Armas dentro do crate da onda: fixas nas primeiras (Hora 3 escopeta;
 ## Hora 7 escopeta+Uzi; Hora 11 Uzi+Magnum) e sorteadas de forma
 ## deterministica por seed nas seguintes.
