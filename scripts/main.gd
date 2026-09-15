@@ -922,20 +922,20 @@ func _on_zombie_stranded(zombie: Node) -> void:
 	print(JSON.stringify({"event": "zombie_relocated", "zombie": String(zombie.name), "position": [snappedf(new_position.x, 0.1), snappedf(new_position.z, 0.1)]}))
 
 
-func _on_zombie_died(killer: Node, zombie: Node3D) -> void:
+func _on_zombie_died(_killer: Node, zombie: Node3D) -> void:
 	if NetworkSession.survival_mode:
 		survival_wave_controller.register_death()
-	_drop_kill_ammo(killer, zombie)
+	_drop_kill_ammo(zombie)
 
 
-## Zumbi abatido pode soltar municao da arma de quem matou, no lugar da morte.
-func _drop_kill_ammo(killer: Node, zombie: Node3D) -> void:
+## Zumbi abatido solta de vez em quando municao de qualquer classe, no lugar da morte.
+func _drop_kill_ammo(zombie: Node3D) -> void:
 	if NetworkSession.is_client() or not is_instance_valid(zombie):
 		return
-	var supply_kind: int = ammo_loot_director.drop_kind_for_kill(killer, loot_rng.randf())
+	var supply_kind: int = AMMO_LOOT_DIRECTOR_SCRIPT.drop_kind_for_kill(loot_rng.randf(), loot_rng.randf())
 	if supply_kind < 0:
 		return
-	_add_loot_item(supply_kind, AMMO_LOOT_DIRECTOR_SCRIPT.amount_for(supply_kind), Vector3(zombie.global_position.x, 0.02, zombie.global_position.z))
+	_add_loot_item(supply_kind, AMMO_LOOT_DIRECTOR_SCRIPT.drop_amount_for(supply_kind), Vector3(zombie.global_position.x, 0.02, zombie.global_position.z))
 
 
 ## Reposicao periodica: completa o minimo de municao de cada classe no mapa.
