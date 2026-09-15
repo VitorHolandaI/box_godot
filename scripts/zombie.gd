@@ -257,7 +257,7 @@ func _update_scream(delta: float) -> void:
 	if scream_cooldown > 0.0:
 		return
 	scream_cooldown = randf_range(7.0, 11.0)
-	get_tree().call_group("zombies", "hear_gunshot", global_position, 28.0)
+	ZombieFlockCoordinator.relay_sound(get_tree(), global_position, 28.0)
 
 
 func _update_senses(delta: float) -> void:

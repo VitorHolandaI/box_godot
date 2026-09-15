@@ -86,12 +86,20 @@ class MinimapView extends Control:
 			draw_line(right, tip, arrow_color, 2.0)
 			draw_line(left, right, arrow_color, 2.0)
 
+## HUD a 5 Hz e minimapa a 12 Hz: nada disso precisa de 60 atualizacoes por
+## segundo, e cada quadro economizado poupa 4 views com varreduras de 600
+## zumbis. Uso: roda sozinho via _process.
+const HUD_UPDATE_INTERVAL := 0.2
+const MINIMAP_UPDATE_INTERVAL := 0.08
+
 var players: Array[Node] = []
 var view_panels: Array[Control] = []
 var viewports: Array[SubViewport] = []
 var hud_labels: Array[Label] = []
 var minimaps: Array[Control] = []
 var straggler_reveal_count := STRAGGLER_REVEAL_COUNT
+var hud_elapsed := 0.0
+var minimap_elapsed := 0.0
 
 
 func configure(local_players: Array[Node]) -> void:
@@ -108,8 +116,18 @@ func configure(local_players: Array[Node]) -> void:
 	call_deferred("_layout_views")
 
 
-func _process(_delta: float) -> void:
-	var alive_zombies := get_tree().get_nodes_in_group("zombies").size()
+func _process(delta: float) -> void:
+	hud_elapsed += delta
+	minimap_elapsed += delta
+	if minimap_elapsed >= MINIMAP_UPDATE_INTERVAL:
+		minimap_elapsed = 0.0
+		_update_minimaps()
+	if hud_elapsed >= HUD_UPDATE_INTERVAL:
+		hud_elapsed = 0.0
+		_update_hud_text()
+
+
+func _update_minimaps() -> void:
 	var all_players := get_tree().get_nodes_in_group("player")
 	var all_zombies := get_tree().get_nodes_in_group("zombies")
 	var all_crates: Array = []
@@ -119,9 +137,11 @@ func _process(_delta: float) -> void:
 			all_crates.append(node)
 		elif node is GroundWeaponPickup:
 			all_loot.append(node)
+	# Stragglers e calculado uma vez por tick (era revarrado por minimapa).
+	var stragglers: Array = stragglers_to_reveal(all_zombies, straggler_reveal_count)
 	for index in minimaps.size():
 		var view_player: Node = players[index] if index < players.size() else null
-		var reveal_zombies: Array = stragglers_to_reveal(all_zombies, straggler_reveal_count)
+		var reveal_zombies: Array = stragglers
 		if reveal_zombies.is_empty() and view_player != null and is_instance_valid(view_player) and view_player.has_method("is_sonar_active") and view_player.is_sonar_active():
 			reveal_zombies = _zombies_near(view_player as Node3D, all_zombies, float(view_player.get_sonar_reveal_radius()))
 		minimaps[index].tracked_players = all_players
@@ -129,6 +149,10 @@ func _process(_delta: float) -> void:
 		minimaps[index].tracked_crates = all_crates
 		minimaps[index].tracked_loot = all_loot
 		minimaps[index].queue_redraw()
+
+
+func _update_hud_text() -> void:
+	var alive_zombies := get_tree().get_nodes_in_group("zombies").size()
 	for index in players.size():
 		var player := players[index]
 		if not is_instance_valid(player):
