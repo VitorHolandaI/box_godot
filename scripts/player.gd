@@ -544,39 +544,34 @@ func _find_knife_door() -> Node:
 	return null
 
 
-func _get_combat_targets() -> Array[Node3D]:
-	var candidates: Array[Node3D] = []
-	for node in get_tree().get_nodes_in_group("zombies"):
-		var z := node as Node3D
-		if z != null and is_instance_valid(z) and not bool(z.get("is_dead")):
-			candidates.append(z)
-	for player_node in get_tree().get_nodes_in_group("player"):
-		if player_node != self and is_instance_valid(player_node):
-			candidates.append(player_node as Node3D)
-	return candidates
-
-
 func _find_knife_target() -> Node3D:
 	var best_target: Node3D = null
 	var best_distance := 1.7
 	var forward := -global_transform.basis.z
 	# No maximo 4 rays por facada: cercado, os 4 mais proximos bastam.
+	# Varre os grupos direto (sem montar array de 600 alvos por facada).
 	var rays_used := 0
-	for target in _get_combat_targets():
-		if rays_used >= 4:
-			break
-		var offset := target.global_position - global_position
-		offset.y = 0.0
-		var distance := offset.length()
-		if distance <= best_distance and forward.dot(offset.normalized()) > 0.6:
-			var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.6, target.global_position + Vector3.UP * 0.6, 1)
-			query.exclude = [get_rid()]
-			var hit := get_world_3d().direct_space_state.intersect_ray(query)
-			rays_used += 1
-			if not hit.is_empty():
+	for group_name in ["zombies", "player"]:
+		for target_value in get_tree().get_nodes_in_group(group_name):
+			if rays_used >= 4:
+				return best_target
+			var target := target_value as Node3D
+			if target == null or not is_instance_valid(target) or target == self:
 				continue
-			best_distance = distance
-			best_target = target
+			if target_value is Node3D and (target_value as Node).get("is_dead") == true:
+				continue
+			var offset := target.global_position - global_position
+			offset.y = 0.0
+			var distance := offset.length()
+			if distance <= best_distance and forward.dot(offset / distance) > 0.6:
+				var query := PhysicsRayQueryParameters3D.create(global_position + Vector3.UP * 0.6, target.global_position + Vector3.UP * 0.6, 1)
+				query.exclude = [get_rid()]
+				var hit := get_world_3d().direct_space_state.intersect_ray(query)
+				rays_used += 1
+				if not hit.is_empty():
+					continue
+				best_distance = distance
+				best_target = target
 	return best_target
 
 
