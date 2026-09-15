@@ -50,6 +50,14 @@ func tick(delta: float) -> void:
 	state_changed.emit()
 
 
+## Zumbi fora da cota da onda (chefe e sua invocacao): conta como vivo, entao a
+## onda so termina quando ele morrer.
+## Uso: controller.register_extra_spawn()
+func register_extra_spawn() -> void:
+	alive_in_wave += 1
+	state_changed.emit()
+
+
 func register_death() -> void:
 	if alive_in_wave > 0:
 		alive_in_wave -= 1
