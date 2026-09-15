@@ -32,6 +32,8 @@ static func build(kind: int, muzzle_material: Material) -> Node3D:
 	var flash := add_box(weapon_node, Vector3(0.12, 0.08, 0.08), Vector3(0.0, 0.0, -0.55), muzzle_material)
 	flash.name = "Flash"
 	flash.visible = false
+	# Clarao do tamanho da arma: bazuca e escopeta serrada estouram, SMG pisca.
+	flash.scale = Vector3.ONE * float(WeaponStats.stats_for(kind).get("flash_scale", 1.0))
 	return weapon_node
 
 

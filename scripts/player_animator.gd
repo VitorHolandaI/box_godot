@@ -55,8 +55,13 @@ static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void
 		if right_arm != null:
 			_set_arm_pose(right_arm, Vector3(1.35, 0.0, -0.3), delta)
 		if weapon_holder != null:
-			weapon_holder.position = weapon_holder.position.lerp(Vector3(0.0, 0.62, -1.0), minf(delta * 16.0, 1.0))
-			weapon_holder.rotation.x = lerpf(weapon_holder.rotation.x, 0.0, minf(delta * 12.0, 1.0))
+			# Recuo proprio de cada arma, dirigido pelo clarao do cano (que ja
+			# viaja no snapshot): coice para tras e cano subindo, e volta rapido.
+			var kick := clampf(float(player.get("muzzle_flash_time")) / 0.08, 0.0, 1.0)
+			var recoil := WeaponStats.recoil_for(cur_weapon) * kick
+			var settle := 40.0 if kick > 0.0 else 16.0
+			weapon_holder.position = weapon_holder.position.lerp(Vector3(0.0, 0.62, -1.0 + recoil.x), minf(delta * settle, 1.0))
+			weapon_holder.rotation.x = lerpf(weapon_holder.rotation.x, recoil.y, minf(delta * settle, 1.0))
 	else:
 		if left_arm != null:
 			_set_arm_pose(left_arm, Vector3(0.72, 0.0, 0.46), delta)
