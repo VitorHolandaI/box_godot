@@ -33,7 +33,8 @@ Logica de jogo, rede, interface e testes automatizados.
 - `weapon_break_debris.gd`: pedacos voxel da arma quebrada, visuais locais.
 - `ground_weapon_pickup.gd`: arma dropada no chao, coleta por interacao.
 - `ground_weapon_sync.gd`: reconciliacao por nome das armas no chao entre servidor e cliente.
-- `air_supply_pickup.gd`: crate de airdrop com varias armas, coleta por interacao e expiracao em 10 minutos (spawn direto no chao).
+- `air_supply_pickup.gd`: crate de airdrop com varias armas, coleta por interacao e expiracao em 10 minutos (desce de paraquedas).
+- `ground_supply_pickup.gd`: item de vida/municao espalhado pelas ruas por onda, coleta ao tocar, expira em 3 minutos.
 - `airdrop_controller.gd`: decide as ondas de airdrop e o ponto de queda aberto perto de um jogador.
 - `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
