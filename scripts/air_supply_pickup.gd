@@ -19,7 +19,7 @@ const DROP_HEIGHT := 24.0
 const DESCEND_SPEED := 5.0
 ## Altura de repouso do corpo rigido no chao (metade da altura da caixa).
 const REST_HEIGHT := 0.7
-const EJECT_RADIUS := 1.5
+const EJECT_RADIUS := 1.7
 ## Crate marcada no minimapa e expira em 10 minutos sem coleta.
 const DEFAULT_LIFETIME := 600.0
 
