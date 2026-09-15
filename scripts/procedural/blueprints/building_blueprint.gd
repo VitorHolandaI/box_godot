@@ -15,6 +15,8 @@ var stair_flights: Array[Dictionary] = []
 ## apartamento). Cada item: {"floor_index", "axis", "center": Vector2, "width",
 ## "node_a": "unidade:comodo", "node_b": "unidade:comodo"} em coordenadas do edificio.
 var unit_links: Array[Dictionary] = []
+## Predios com terraco ganham um lance extra ate a laje do topo, com mureta.
+var has_roof_terrace := false
 
 
 func _init(building_archetype: String, building_seed: int, building_width: float, building_depth: float, floor_count: int) -> void:

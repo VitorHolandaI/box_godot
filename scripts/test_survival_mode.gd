@@ -162,14 +162,17 @@ func _test_nearest_target_and_melee(test_root: Node) -> void:
 	test_root.add_child(zombie)
 	test_root.add_child(far_player)
 	test_root.add_child(near_player)
-	zombie.position = Vector3.ZERO
+	# Longe da origem: testes anteriores deixam jogadores em (0, 1, 0).
+	var origin := Vector3(-640.0, 0.0, 640.0)
+	zombie.position = origin
 	zombie.gravity = 0.0
 	zombie.collision_mask = 0
-	far_player.position = Vector3(0.0, 1.0, 8.0)
-	near_player.position = Vector3(0.0, 1.0, 3.0)
+	far_player.position = origin + Vector3(0.0, 1.0, 8.0)
+	near_player.position = origin + Vector3(0.0, 1.0, 3.0)
 	zombie.call("_update_senses", 0.25)
 	if zombie.get("alert_target") != near_player:
-		_fail(test_root, "Zumbi deveria escolher o jogador vivo mais proximo.")
+		var chosen: Node = zombie.get("alert_target")
+		_fail(test_root, "Zumbi deveria escolher o jogador vivo mais proximo (%s); escolheu %s." % [near_player.get_path(), chosen.get_path() if chosen != null else null])
 		zombie.free()
 		far_player.free()
 		near_player.free()
@@ -177,7 +180,7 @@ func _test_nearest_target_and_melee(test_root: Node) -> void:
 	var previous_health: int = near_player.health
 	zombie.set("alert_target", far_player)
 	zombie.set("target_switch_cooldown", 1.0)
-	near_player.position = Vector3(0.0, 0.8, 0.8)
+	near_player.position = origin + Vector3(0.0, 0.8, 0.8)
 	zombie.call("_physics_process", 0.01)
 	if near_player.health >= previous_health or zombie.get("alert_target") != far_player:
 		_fail(test_root, "Zumbi deveria atacar jogador proximo sem trocar alvo; vida=%d, ataque=%d, alvo=%s." % [near_player.health, zombie.attack_sequence, zombie.alert_target.name if zombie.alert_target != null else "null"])
@@ -186,7 +189,7 @@ func _test_nearest_target_and_melee(test_root: Node) -> void:
 		near_player.free()
 		return
 	var upper_floor_health: int = near_player.health
-	near_player.position = Vector3(0.0, 3.8, 0.8)
+	near_player.position = origin + Vector3(0.0, 3.8, 0.8)
 	zombie.set("alert_target", near_player)
 	zombie.set("sense_check_cooldown", 1.0)
 	zombie.set("attack_cooldown", 0.0)

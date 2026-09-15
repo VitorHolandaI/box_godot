@@ -27,7 +27,7 @@ const RAILING_THICKNESS := 0.08
 ## Laje do andar; acima do terreo ela recebe o vao do lance que chega nela.
 ## Uso: ProceduralStairAssembler.add_floor_slab(body, building, floor_index, floor_y, material)
 static func add_floor_slab(body: StaticBody3D, building, floor_index: int, floor_y: float, material: Material) -> void:
-	var arriving_flight := _flight_arriving_at(building, floor_index)
+	var arriving_flight := flight_arriving_at(building, floor_index)
 	if arriving_flight.is_empty():
 		BOX_BUILDER.add_box(body, "Floor_%d" % floor_index, Vector3(building.width, SLAB_THICKNESS, building.depth), Vector3(building.width * 0.5, floor_y, building.depth * 0.5), material, true)
 		return
@@ -84,7 +84,9 @@ static func build_ramp_collision(flight: Dictionary, base_y: float, floor_height
 	return ramp
 
 
-static func _flight_arriving_at(building, floor_index: int) -> Dictionary:
+## Lance que termina no andar `floor_index` (o terraco e o andar `floors`), ou {}.
+## Uso: var flight := ProceduralStairAssembler.flight_arriving_at(building, building.floors)
+static func flight_arriving_at(building, floor_index: int) -> Dictionary:
 	for flight in building.stair_flights:
 		if int(flight["floor_index"]) + 1 == floor_index:
 			return flight

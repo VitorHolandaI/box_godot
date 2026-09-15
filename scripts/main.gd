@@ -9,6 +9,7 @@ const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedu
 const ZOMBIE_SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator.gd")
 const SURVIVAL_WAVE_CONTROLLER_SCRIPT := preload("res://scripts/survival_wave_controller.gd")
 const DOOR_NETWORK_STATE_SCRIPT := preload("res://scripts/door_network_state.gd")
+const DOOR_STATE_REPLICATOR_SCRIPT := preload("res://scripts/door_state_replicator.gd")
 const WAVE_SUPPLY_CONTROLLER_SCRIPT := preload("res://scripts/wave_supply_controller.gd")
 const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state.gd")
 const CORPSE_CLEANUP_POLICY_SCRIPT := preload("res://scripts/corpse_cleanup_policy.gd")
@@ -60,6 +61,7 @@ var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBI
 var zombie_spawn_locator = ZOMBIE_SPAWN_LOCATOR_SCRIPT.new()
 var survival_wave_controller
 var wave_supply_controller
+var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
 
 
 func _ready() -> void:
@@ -94,6 +96,7 @@ func _ready() -> void:
 		smoke_zombie.set("health", 35)
 		smoke_zombie.set("speed", 0.0)
 	if NetworkSession.is_server():
+		door_state_replicator.watch(get_tree())
 		_prespawn_load_test_zombies(LOAD_TEST_OPTIONS_SCRIPT.prespawn_zombie_count(OS.get_cmdline_user_args()))
 	_notify_scene_loaded.call_deferred()
 
@@ -150,6 +153,7 @@ func _physics_process(delta: float) -> void:
 		if snapshot_elapsed >= SNAPSHOT_INTERVAL:
 			snapshot_elapsed = 0.0
 			if not NetworkSession.peer_slots.is_empty() and _loaded_peers_match(NetworkSession.peer_slots, NetworkSession.loaded_peers):
+				_send_door_states()
 				_send_player_snapshots(_collect_player_states())
 				_send_zombie_snapshots(_collect_zombie_states())
 
@@ -398,7 +402,6 @@ func _collect_zombie_states() -> Array:
 func _send_player_snapshots(states: Array) -> void:
 	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
 	var door_open := safehouse_door != null and bool(safehouse_door.call("is_open_requested"))
-	var building_door_states := DOOR_NETWORK_STATE_SCRIPT.collect(get_tree())
 	var supply_states := SUPPLY_NETWORK_STATE_SCRIPT.collect(get_tree())
 	for packet_index in packet_count:
 		var packet_states: Array = []
@@ -407,7 +410,34 @@ func _send_player_snapshots(states: Array) -> void:
 		for state_index in range(first_state, state_limit):
 			packet_states.append(states[state_index])
 		for peer_id in NetworkSession.loaded_peers:
-			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open, building_door_states, supply_states)
+			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open, supply_states)
+
+
+## Portas dos predios: estado completo (confiavel) para quem acabou de carregar
+## e, depois, so as mudancas. Fora do snapshot nao confiavel de jogadores.
+func _send_door_states() -> void:
+	var loaded_peer_ids: Array[int] = []
+	for peer_id in NetworkSession.loaded_peers:
+		loaded_peer_ids.append(int(peer_id))
+	for peer_id in door_state_replicator.take_unsynced_peers(loaded_peer_ids):
+		_apply_full_door_states.rpc_id(peer_id, DOOR_NETWORK_STATE_SCRIPT.collect(get_tree()))
+	var changes: Dictionary = door_state_replicator.take_changes()
+	if changes.is_empty():
+		return
+	for peer_id in loaded_peer_ids:
+		_apply_door_changes.rpc_id(peer_id, changes)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _apply_full_door_states(states: Dictionary) -> void:
+	if NetworkSession.is_client():
+		DOOR_NETWORK_STATE_SCRIPT.apply(get_tree(), states)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _apply_door_changes(changes: Dictionary) -> void:
+	if NetworkSession.is_client():
+		DOOR_NETWORK_STATE_SCRIPT.apply_changes(get_tree(), changes)
 
 
 func _send_zombie_snapshots(states: Array) -> void:
@@ -420,12 +450,11 @@ func _send_zombie_snapshots(states: Array) -> void:
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func _apply_player_snapshot(player_states: Array, door_open: bool, building_door_states: Dictionary, supply_states: Array) -> void:
+func _apply_player_snapshot(player_states: Array, door_open: bool, supply_states: Array) -> void:
 	if not NetworkSession.is_client():
 		return
 	if safehouse_door != null:
 		safehouse_door.call("apply_network_open_state", door_open)
-	DOOR_NETWORK_STATE_SCRIPT.apply(get_tree(), building_door_states)
 	SUPPLY_NETWORK_STATE_SCRIPT.apply(get_tree(), supply_states)
 	for state_value in player_states:
 		if not state_value is Dictionary:
@@ -508,9 +537,18 @@ func _spawn_zombie(position_override: Variant = null) -> bool:
 	zombie.set_meta("network_id", spawn_index)
 	zombies.add_child(zombie, true)
 	zombie.died.connect(_on_zombie_died)
+	zombie.stranded.connect(_on_zombie_stranded)
 	zombie.global_position = spawn_position
 	spawn_index += 1
 	return true
+
+
+func _on_zombie_stranded(zombie: Node) -> void:
+	var new_position := zombie_spawn_locator.pick_spawn_position(get_tree())
+	if new_position == ZOMBIE_SPAWN_LOCATOR_SCRIPT.INVALID_SPAWN_POSITION or not is_instance_valid(zombie):
+		return
+	zombie.relocate(new_position)
+	print(JSON.stringify({"event": "zombie_relocated", "zombie": String(zombie.name), "position": [snappedf(new_position.x, 0.1), snappedf(new_position.z, 0.1)]}))
 
 
 func _on_zombie_died(_killer: Node) -> void:

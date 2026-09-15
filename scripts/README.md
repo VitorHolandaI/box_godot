@@ -15,7 +15,8 @@ Logica de jogo, rede, interface e testes automatizados.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
 - `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores, tremida ao apanhar e arrombamento por zumbis, faca ou tiro que libera o vao.
 - `door_debris_effect.gd`: animacao visual de tabuas e lascas voando quando uma porta e arrombada.
-- `door_network_state.gd`: coleta e aplica estados autoritativos das portas comuns por caminho deterministico.
+- `door_network_state.gd`: coleta e aplica estados autoritativos das portas comuns por caminho deterministico (completo ou so as mudancas).
+- `door_state_replicator.gd`: no servidor, junta as mudancas de portas e marca quem ja recebeu o estado completo; vai por RPC confiavel, fora do snapshot.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local e navegacao durante a partida.
 - `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
@@ -38,17 +39,19 @@ Logica de jogo, rede, interface e testes automatizados.
 - `wave_supply_pickup.gd`: pickup interno autoritativo de vida ou municao.
 - `wave_supply_controller.gd`: renova quatro suprimentos da Safehouse e sorteia pontos internos por onda.
 - `supply_network_state.gd`: sincroniza disponibilidade de suprimentos por caminhos deterministicos.
-- `safehouse_builder.gd`: gerador procedural da Safehouse fortificada de 2 andares com spawns seguros, porta automatica, escadaria, municao, sacada e iluminacao.
+- `safehouse_builder.gd`: gerador procedural da Safehouse fortificada de 2 andares com spawns seguros, porta automatica, escadaria, municao, sacada, iluminacao e navmesh proprio (a horda contorna ate a porta).
 - `server_ping_probe.gd`: mede RTT usando o ping nativo do ENet na porta do jogo.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores, indestrutivel e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
-- `split_screen_manager.gd`: viewports com audio 3D, cameras, HUDs locais e minimapa com o jogador, os aliados e os zumbis dentro do raio do sonar.
+- `split_screen_manager.gd`: viewports com audio 3D, cameras, HUDs locais e minimapa com o jogador, os aliados, os zumbis dentro do raio do sonar e todos os zumbis quando restam 5 ou menos.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_building_navigation.gd`: regressoes da escada alternada, navmesh por edificio, zumbi subindo/descendo, jogador subindo e zumbi saindo de casa arrombando portas.
 - `test_city_props.gd`: regressoes da altura/posicao dos postes e do telhado das casas.
 - `test_corpse_cleanup.gd`: regressoes do sumico de cadaveres por distancia.
 - `test_collision_boundaries.gd`: regressao focada para faca, tiro e ataque de zumbi bloqueados por paredes.
-- `test_door_breaking.gd`: regressoes de destrocos, vao liberado, tremida, faca do jogador e replicacao da quebra.
+- `test_door_breaking.gd`: regressoes de destrocos, vao liberado, tremida, faca do jogador, replicacao da quebra e envio so das portas que mudaram.
+- `test_apartment_layout.gd`: regressoes da planta dos predios: vao de porta sem parede atravessada, comodos alcancaveis, tamanho para o boneco e terraco acessivel.
+- `test_zombie_unstuck.gd`: regressoes de zumbis presos: medidor de progresso, desvio de muro, casa segura contornada, realocacao, spawn em chao aberto e minimapa do fim de onda.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
 - `test_script_error_counter.gd`: logger que faz a suite falhar em qualquer erro de script.
@@ -59,9 +62,11 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie.gd`: IA de zumbi com perseguicao global do jogador, rota pelo navmesh do edificio (sai de comodos, usa escadas, quebra portas sem abri-las), empurrao de bando limitado, desintegracao por FOV, sentidos, combate bloqueado por paredes, knockback e variantes anatomicas.
 - `zombie_dissolve_visual.gd`: materiais de dissolucao compartilhados por cor e po ao desintegrar zumbis fora da visao.
 - `zombie_indoor_router.gd`: caminho do zumbi pelo navmesh do edificio, replanejado em intervalos com jitter.
+- `zombie_progress_watch.gd`: mede se o zumbi perseguindo avanca (tempo parado e tempo sem se aproximar do alvo).
+- `zombie_wall_detour.gd`: na rua, segue a parede pela tangente ate a linha ate o alvo ficar livre.
 - `zombie_flock_coordinator.gd`: hordas persistentes com um cerebro, drones, fusao aleatoria de lideres, Boids e LOD.
 - `zombie_mutator.gd`: configurador procedural de 9 variantes anatomicas (pedaco de braco, sem 1 braco, pedaco de perna, sem 1 perna, cabeca pela metade com cerebro exposto, rastejante, manco, corredor e classico) e animacoes de marcha e flinch.
 - `zombie_ragdoll.gd`: ragdoll articulado com pescoco limitado, camada propria de cadaver (nao prende o jogador) que some ao ser atingido, e suporte as amputacoes das 9 variantes.
 - `zombie_snapshot_codec.gd`: snapshot binario de zumbis (16 bytes por zumbi) em pacotes abaixo do MTU.
-- `zombie_spawn_locator.gd`: escolhe pontos desocupados exclusivamente na floresta distante, entre as arvores.
+- `zombie_spawn_locator.gd`: escolhe pontos desocupados na floresta distante ou no anel da sobrevivencia, sempre em chao aberto (fora de paredes e predios).
 - `zombie_spawn_schedule.gd`: relogio de spawn gradual com alvo global de 600 zumbis vivos.
