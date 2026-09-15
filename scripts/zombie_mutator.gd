@@ -127,7 +127,7 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			_create_split_head(zombie)
 		Type.BRUTE:
 			zombie.set("speed", 1.15)
-			zombie.set("max_health", 320)
+			zombie.set("max_health", 550)
 			zombie.set("attack_damage", 26)
 			_setup_brute(model)
 		Type.SCREAMER:

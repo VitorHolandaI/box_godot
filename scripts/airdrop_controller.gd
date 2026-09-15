@@ -12,10 +12,13 @@ extends RefCounted
 signal airdrop_requested(drop_position: Vector3, kinds: Array[int])
 
 const SCHEDULE_SCRIPT := preload("res://scripts/survival_wave_schedule.gd")
-const MIN_PLAYER_DISTANCE := 10.0
-const MIN_ZOMBIE_DISTANCE := 2.5
+const MIN_PLAYER_DISTANCE := 6.0
+const MIN_ZOMBIE_DISTANCE := 1.5
+## Anel primario perto do jogador; tentativas seguintes alargam o raio para
+## achar rua aberta mesmo com a horda inteira despejada em cima dele.
 const MIN_DROP_RADIUS := 28.0
 const MAX_DROP_RADIUS := 48.0
+const ATTEMPTS_PER_RING := 32
 const BUILDING_MARGIN := 1.0
 const INVALID_DROP_POSITION := Vector3(0.0, -1000.0, 0.0)
 
@@ -36,6 +39,8 @@ func on_wave_started(wave_index: int) -> void:
 		return
 	var drop_position := pick_drop_position(scene_tree)
 	if drop_position == INVALID_DROP_POSITION:
+		# Horda varreu o anel inteiro: avisa em vez de pular em silencio.
+		push_warning("Airdrop da onda %d adiado: nenhum ponto de queda livre encontrado." % (wave_index + 1))
 		return
 	airdrop_requested.emit(drop_position, schedule.crate_kinds_for_wave(wave_index, world_seed))
 
@@ -52,9 +57,13 @@ func pick_drop_position(tree: SceneTree) -> Vector3:
 	var origin_player := players[rng.randi() % players.size()] as Node3D
 	if origin_player == null:
 		return INVALID_DROP_POSITION
-	for _attempt in 32:
-		var angle := rng.randf_range(0.0, TAU)
+	for attempt in 96:
 		var radius := rng.randf_range(MIN_DROP_RADIUS, MAX_DROP_RADIUS)
+		if attempt >= ATTEMPTS_PER_RING * 2:
+			radius = rng.randf_range(MAX_DROP_RADIUS * 2.5, MAX_DROP_RADIUS * 3.5)
+		elif attempt >= ATTEMPTS_PER_RING:
+			radius = rng.randf_range(MAX_DROP_RADIUS, MAX_DROP_RADIUS * 2.5)
+		var angle := rng.randf_range(0.0, TAU)
 		var candidate := origin_player.global_position + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
 		if _is_drop_clear(candidate, tree):
 			return Vector3(candidate.x, 0.02, candidate.z)
