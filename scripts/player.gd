@@ -23,6 +23,9 @@ const VISION_OVERLAY_ALPHA := 0.18
 const SONAR_DURATION := 4.0
 const SONAR_INTERVAL := 10.0
 const SONAR_REVEAL_RADIUS := 45.0
+const UNSTUCK_LOCATOR_SCRIPT: GDScript = preload("res://scripts/player_unstuck_locator.gd")
+# Recarga do botao "Destravar personagem": sem ela o botao vira voo/escalada.
+const UNSTUCK_COOLDOWN := 5.0
 
 @export var speed := 6.5
 @export var sprint_speed := 8.0
@@ -91,6 +94,10 @@ var interact_pressed := false
 var sonar_pulse_time := 0.0
 var sonar_interval_timer := SONAR_INTERVAL
 var network_target_position := Vector3.ZERO
+var unstuck_cooldown := 0.0
+## Sobe a cada teleporte do servidor (destravar, respawn); o cliente pula a
+## interpolacao, que colidiria com o que prendeu o boneco.
+var teleport_sequence := 0
 var network_target_rotation := 0.0
 var remote_buttons: Dictionary = {}
 var remote_input_age := 0.0
@@ -117,6 +124,7 @@ func _physics_process(delta: float) -> void:
 		return
 
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
+	unstuck_cooldown = maxf(unstuck_cooldown - delta, 0.0)
 	muzzle_flash_time = maxf(muzzle_flash_time - delta, 0.0)
 	pistol_stance_time = maxf(pistol_stance_time - delta, 0.0)
 	pistol_recoil_time = maxf(pistol_recoil_time - delta, 0.0)
@@ -224,6 +232,7 @@ func get_network_state() -> Dictionary:
 		"lives": lives,
 		"eliminated": is_eliminated,
 		"zombie_kills": zombie_kills,
+		"teleport_sequence": teleport_sequence,
 	}
 
 
@@ -231,6 +240,11 @@ func apply_network_state(state: Dictionary) -> void:
 	var position_value: Variant = state.get("position")
 	if position_value is Vector3:
 		network_target_position = position_value
+	var received_teleport := int(state.get("teleport_sequence", teleport_sequence))
+	if received_teleport != teleport_sequence:
+		teleport_sequence = received_teleport
+		global_position = network_target_position
+		velocity = Vector3.ZERO
 	network_target_rotation = float(state.get("rotation", network_target_rotation))
 	health = clampi(int(state.get("health", health)), 0, max_health)
 	stamina = clampf(float(state.get("stamina", stamina)), 0.0, max_stamina)
@@ -455,6 +469,7 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 func respawn() -> void:
 	global_position = spawn_position
 	velocity = Vector3.ZERO
+	teleport_sequence += 1
 	is_eliminated = false
 	visible = true
 	collision_layer = 2
@@ -464,6 +479,23 @@ func respawn() -> void:
 	hit_reaction_time = 0.0
 	pistol_ammo = 12
 	reserve_ammo = 48
+
+
+## Botao "Destravar personagem": leva o boneco ao primeiro espaco livre acima
+## (ou ao redor) e deixa a gravidade assentar. Roda onde o jogador e simulado
+## (partida local ou servidor). Falso durante a recarga ou sem espaco livre.
+## Uso: if not player.unstuck(): mostrar_aviso()
+func unstuck() -> bool:
+	if is_eliminated or unstuck_cooldown > 0.0:
+		return false
+	var target: Vector3 = UNSTUCK_LOCATOR_SCRIPT.find_free_position(self)
+	if target == UNSTUCK_LOCATOR_SCRIPT.NO_FREE_POSITION:
+		return false
+	global_position = target
+	velocity = Vector3.ZERO
+	unstuck_cooldown = UNSTUCK_COOLDOWN
+	teleport_sequence += 1
+	return true
 
 
 func set_spawn_position(position: Vector3) -> void:
