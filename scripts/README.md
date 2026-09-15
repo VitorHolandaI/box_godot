@@ -27,7 +27,15 @@ Logica de jogo, rede, interface e testes automatizados.
 - `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT, atraso entre snapshots, KB/s e pacotes/s recebidos e FPS.
 - `network_session.gd`: sessao ENet, roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
-- `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede.
+- `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
+- `weapon_stats.gd`: tabela de stats das armas de crate (escopeta, Uzi, magnum): dano, pellets, pente, reserva, desgaste e falha.
+- `weapon_slots.gd`: inventario do slot de arma de crate (pente, reserva, durabilidade) com revisao para o snapshot.
+- `weapon_break_debris.gd`: pedacos voxel da arma quebrada, visuais locais.
+- `ground_weapon_pickup.gd`: arma dropada no chao, coleta por interacao.
+- `ground_weapon_sync.gd`: reconciliacao por nome das armas no chao entre servidor e cliente.
+- `air_supply_pickup.gd`: crate de airdrop com varias armas, paraquedas e coleta por interacao.
+- `airdrop_plane.gd`: aviao voxel cosmico; so o servidor solta o crate.
+- `airdrop_controller.gd`: decide as ondas de airdrop e o ponto de queda aberto perto de um jogador.
 - `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
 - `procedural/`: blueprints, geradores, assemblers e navegacao da cidade procedural experimental ativada por `--procedural-city`.
@@ -39,6 +47,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `wave_supply_pickup.gd`: pickup interno autoritativo de vida ou municao.
 - `wave_supply_controller.gd`: renova quatro suprimentos da Safehouse e sorteia pontos internos por onda.
 - `supply_network_state.gd`: sincroniza disponibilidade de suprimentos por caminhos deterministicos.
+- `survival_wave_schedule.gd`: agenda de ondas (10 a 600 zumbis), ondas de airdrop, armas do crate por seed e mix percentual de variantes por fase.
 - `safehouse_builder.gd`: gerador procedural da Safehouse fortificada de 2 andares com spawns seguros, porta automatica, escadaria, municao, sacada, iluminacao e navmesh proprio (a horda contorna ate a porta).
 - `server_ping_probe.gd`: mede RTT usando o ping nativo do ENet na porta do jogo.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores, indestrutivel e replicada aos clientes.
