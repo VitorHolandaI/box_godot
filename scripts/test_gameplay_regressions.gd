@@ -222,7 +222,7 @@ func _test_hud_alive_zombie_count(test_root: Node) -> void:
 	if split_screen.viewports.is_empty() or not split_screen.viewports[0].audio_listener_enable_3d:
 		_fail(test_root, "Viewport local deveria habilitar o listener de audio 3D.")
 		return
-	split_screen._process(0.0)
+	_pump_split_screen(split_screen)
 	var expected_text := "Zumbis: %d" % (alive_before + 2)
 	var hud_text: String = split_screen.hud_labels[0].text
 	if not hud_text.contains(expected_text):
@@ -230,7 +230,7 @@ func _test_hud_alive_zombie_count(test_root: Node) -> void:
 		return
 
 	zombie_a.remove_from_group("zombies")
-	split_screen._process(0.0)
+	_pump_split_screen(split_screen)
 	expected_text = "Zumbis: %d" % (alive_before + 1)
 	if not split_screen.hud_labels[0].text.contains(expected_text):
 		_fail(test_root, "HUD deve retirar zumbis mortos do contador; esperado=%s." % expected_text)
@@ -281,7 +281,7 @@ func _test_minimap_reveals_zombies_on_sonar(test_root: Node) -> void:
 		far_zombie.free()
 		return
 	player.call("trigger_sonar")
-	split_screen.call("_process", 0.016)
+	_pump_split_screen(split_screen)
 	var revealed: Array = minimap.get("tracked_zombies") as Array
 	if not revealed.has(zombie):
 		_fail(test_root, "Sonar ativo deveria revelar o zumbi dentro do raio.")
@@ -546,6 +546,13 @@ func _find_horde_leader(members: Array[CharacterBody3D]) -> CharacterBody3D:
 		if bool(zombie.get("is_cluster_leader")):
 			return zombie
 	return null
+
+
+## Simula frames ate o HUD e o minimapa (5/12 Hz) atualizarem.
+## Uso: _pump_split_screen(split_screen)
+func _pump_split_screen(split_screen: Control) -> void:
+	for _frame in 30:
+		split_screen.call("_process", 0.05)
 
 
 func _fail(test_root: Node, message: String) -> void:
