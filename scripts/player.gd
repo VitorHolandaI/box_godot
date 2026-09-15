@@ -426,7 +426,8 @@ func _accept_weapon_offer(weapon_kind: int, incoming_state: Dictionary) -> Strin
 	if not WeaponStats.is_crate_weapon(weapon_kind):
 		return "full"
 	if weapon_slots.has_kind(weapon_kind):
-		var gained := weapon_slots.add_reserve(weapon_kind, maxi(int(incoming_state["reserve"]), int(WeaponStats.stats_for(weapon_kind)["grant_reserve"])))
+		# Arma repetida vira municao: entra so o que o no chao carregava.
+		var gained := weapon_slots.add_reserve(weapon_kind, int(incoming_state["reserve"]))
 		return "merged" if gained > 0 else "full"
 	if weapon_slots.has_free_slot():
 		weapon_slots.grant(weapon_kind)

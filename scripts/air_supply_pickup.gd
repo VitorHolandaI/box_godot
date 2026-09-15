@@ -104,6 +104,8 @@ func _build_visuals() -> void:
 	light.omni_range = 3.0
 	model_root.add_child(light)
 	_build_parachute()
+	# Crate restaurada ja no chao nasce sem paraquedas.
+	parachute_root.visible = not starts_landed
 
 
 func _build_parachute() -> void:
