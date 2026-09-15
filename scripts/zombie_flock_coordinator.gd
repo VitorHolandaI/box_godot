@@ -61,7 +61,7 @@ func _update_building_lights(delta: float) -> void:
 		return
 	_light_toggle_elapsed = 0.0
 	var margin := Vector3.ONE * LIGHT_MARGIN
-	var relevant_players := _cached_players if not _cached_players.is_empty() else get_living_players(get_tree())
+	var relevant_players: Array = _cached_players if not _cached_players.is_empty() else get_living_players(get_tree())
 	for building_value in get_tree().get_nodes_in_group("visibility_building"):
 		var building := building_value as Node
 		if building == null or String(building.name).begins_with("CentralSafehouse"):
@@ -103,11 +103,18 @@ static func relay_sound(tree: SceneTree, origin: Vector3, radius: float) -> void
 ## scan do grupo por melee/sentidos. Uso: ZombieFlockCoordinator.get_living_players(tree)
 static func get_living_players(tree: SceneTree) -> Array:
 	if instance != null and not instance._cached_players.is_empty():
-		return instance._cached_players
+		# Podem ter sido liberados (peer desconectou) desde a ultima passada:
+		# prune antes de servir, senao o cast de objeto liberado estoura.
+		var pruned: Array[CharacterBody3D] = []
+		for player in instance._cached_players:
+			if is_instance_valid(player) and not player.is_queued_for_deletion():
+				pruned.append(player)
+		instance._cached_players = pruned
+		return pruned
 	var players: Array = []
 	for node in tree.get_nodes_in_group("player"):
 		var player := node as CharacterBody3D
-		if player != null and not bool(player.get("is_eliminated")) and int(player.get("health")) > 0:
+		if player != null and is_instance_valid(player) and not bool(player.get("is_eliminated")) and int(player.get("health")) > 0:
 			players.append(player)
 	return players
 
@@ -163,6 +170,9 @@ func _update_cached_players(delta: float) -> void:
 	_player_scan_timer = PLAYER_SCAN_INTERVAL
 	_cached_players.clear()
 	for node in get_tree().get_nodes_in_group("player"):
+		# Validade ANTES do cast: um no liberado no meio do frame quebra o as.
+		if node == null or not is_instance_valid(node) or node.is_queued_for_deletion():
+			continue
 		var p := node as CharacterBody3D
 		if p != null and not bool(p.get("is_eliminated")) and int(p.get("health")) > 0:
 			_cached_players.append(p)
