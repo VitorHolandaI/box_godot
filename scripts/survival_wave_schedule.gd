@@ -35,26 +35,34 @@ func is_airdrop_wave(wave_index: int) -> bool:
 ## Mix de variantes por fase da partida, em porcentagens somando 100.
 ## Cada fase adiciona variantes e reequilibra o resto da horda.
 const VARIANT_MIXES: Array[Dictionary] = [
-	# Hora 1-2: horda basica.
+	# Hora 1-2: horda basica com especiais leves desde o comeco (pedido de jogo,
+	# estilo Left 4 Dead): leaper, cuspidor, bloater e investida.
 	{
-		ZombieMutator.Type.WALKER: 70,
-		ZombieMutator.Type.LIMPER: 15,
-		ZombieMutator.Type.ONE_ARM: 10,
+		ZombieMutator.Type.WALKER: 55,
+		ZombieMutator.Type.LIMPER: 10,
+		ZombieMutator.Type.ONE_ARM: 8,
 		ZombieMutator.Type.ONE_LEG: 5,
+		ZombieMutator.Type.LEAPER: 6,
+		ZombieMutator.Type.SPITTER: 6,
+		ZombieMutator.Type.BLOATER: 5,
+		ZombieMutator.Type.CHARGER: 5,
 	},
-	# Hora 3-6: corredores, rastejantes e os primeiros leapers entram.
+	# Hora 3-6: corredores e rastejantes entram.
 	{
-		ZombieMutator.Type.WALKER: 45,
+		ZombieMutator.Type.WALKER: 28,
 		ZombieMutator.Type.LEAPER: 5,
 		ZombieMutator.Type.LIMPER: 10,
 		ZombieMutator.Type.ONE_ARM: 10,
 		ZombieMutator.Type.CRAWLER: 10,
 		ZombieMutator.Type.SPRINTER: 10,
 		ZombieMutator.Type.HALF_ARM: 10,
+		ZombieMutator.Type.SPITTER: 6,
+		ZombieMutator.Type.BLOATER: 6,
+		ZombieMutator.Type.CHARGER: 5,
 	},
-	# Hora 7-10: brute tanque, cabecas divididas e bloaters que explodem.
+	# Hora 7-10: brute tanque, cabecas divididas e mais especiais.
 	{
-		ZombieMutator.Type.WALKER: 28,
+		ZombieMutator.Type.WALKER: 16,
 		ZombieMutator.Type.BLOATER: 6,
 		ZombieMutator.Type.LEAPER: 6,
 		ZombieMutator.Type.CRAWLER: 10,
@@ -63,6 +71,8 @@ const VARIANT_MIXES: Array[Dictionary] = [
 		ZombieMutator.Type.HALF_HEAD: 10,
 		ZombieMutator.Type.BRUTE: 8,
 		ZombieMutator.Type.HALF_ARM: 12,
+		ZombieMutator.Type.SPITTER: 6,
+		ZombieMutator.Type.CHARGER: 6,
 	},
 	# Hora 11+: screamer atrai a horda de longe; armored exige faca ou mais tiros.
 	{
@@ -71,12 +81,14 @@ const VARIANT_MIXES: Array[Dictionary] = [
 		ZombieMutator.Type.LEAPER: 7,
 		ZombieMutator.Type.ARMORED: 8,
 		ZombieMutator.Type.CRAWLER: 8,
-		ZombieMutator.Type.SPRINTER: 15,
+		ZombieMutator.Type.SPRINTER: 9,
 		ZombieMutator.Type.HALF_HEAD: 10,
 		ZombieMutator.Type.BRUTE: 10,
 		ZombieMutator.Type.SCREAMER: 7,
 		ZombieMutator.Type.LIMPER: 5,
-		ZombieMutator.Type.ONE_ARM: 10,
+		ZombieMutator.Type.ONE_ARM: 6,
+		ZombieMutator.Type.SPITTER: 5,
+		ZombieMutator.Type.CHARGER: 5,
 	},
 ]
 

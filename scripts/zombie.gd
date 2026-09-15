@@ -7,6 +7,8 @@ signal stranded(zombie: Node)
 ## Super zumbi usou habilidade ("slam", "summon", "rage"); main replica o efeito
 ## e executa a invocacao.
 signal boss_ability_used(zombie: Node, ability: String)
+## Cuspidor cuspiu: main cria a poca de acido no alvo e replica o visual.
+signal spit_used(zombie: Node, target_position: Vector3)
 
 const FlockCoordinatorClass = preload("res://scripts/zombie_flock_coordinator.gd")
 const INDOOR_ROUTER_SCRIPT: GDScript = preload("res://scripts/zombie_indoor_router.gd")
@@ -75,6 +77,8 @@ enum ZombieType {
 	LEAPER = 12,
 	ARMORED = 13,
 	TITAN = 14,
+	SPITTER = 15,
+	CHARGER = 16,
 }
 
 enum LodLevel {
@@ -127,6 +131,9 @@ var indoor_router = INDOOR_ROUTER_SCRIPT.new()
 var progress_watch = PROGRESS_WATCH_SCRIPT.new()
 var wall_detour = WALL_DETOUR_SCRIPT.new()
 var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
+var charge_state = VARIANT_ABILITIES_SCRIPT.ChargeState.new()
+var spit_state = VARIANT_ABILITIES_SCRIPT.SpitState.new()
+var _charge_hit_done := false
 var boss_brain = null
 ## So o chefe mostra vida flutuante. Com a horda cheia, 600 Label3D vermelhos
 ## com o texto reescrito a cada snapshot regeravam malha de texto sem parar (lag).
@@ -212,9 +219,14 @@ func _physics_process(delta: float) -> void:
 			if not indoor_router.has_route:
 				var line_clear: bool = wall_detour.is_active() and _has_line_of_sight(target)
 				direction = wall_detour.steer(delta, global_position, direction, progress_watch.blocked_seconds, get_wall_normal() if is_on_wall() else Vector3.ZERO, line_clear)
-			var leap_velocity: Vector3 = leap_state.update(delta, velocity, direction, distance, is_on_floor()) if int(zombie_type) == ZombieType.LEAPER and same_level else Vector3.ZERO
-			if leap_state.is_leaping():
-				velocity = leap_velocity
+			var dash: RefCounted = _dash_for_type()
+			var dash_velocity: Vector3 = dash.update(delta, velocity, direction, distance, is_on_floor()) if dash != null and same_level else Vector3.ZERO
+			if dash != null and dash.is_leaping():
+				velocity = dash_velocity
+				_check_charge_hit(target, direction)
+			elif _spitter_holds_position(target, distance, delta):
+				velocity.x = 0.0
+				velocity.z = 0.0
 			elif is_on_wall() and _try_attack_blocking_door(direction):
 				# Zumbi nao abre porta: fica parado golpeando ate ela quebrar.
 				velocity.x = 0.0
@@ -481,6 +493,41 @@ func relocate(new_position: Vector3) -> void:
 	indoor_router.invalidate()
 	progress_watch.reset()
 	wall_detour.reset()
+
+
+## Arrancada do tipo: bote do leaper ou investida do charger; null nos demais.
+func _dash_for_type() -> RefCounted:
+	if int(zombie_type) == ZombieType.LEAPER:
+		return leap_state
+	if int(zombie_type) == ZombieType.CHARGER:
+		if not charge_state.is_leaping():
+			_charge_hit_done = false
+		return charge_state
+	return null
+
+
+## Charger correndo: o primeiro jogador no caminho leva dano e e arremessado.
+func _check_charge_hit(target: CharacterBody3D, direction: Vector3) -> void:
+	if int(zombie_type) != ZombieType.CHARGER or _charge_hit_done:
+		return
+	if global_position.distance_to(target.global_position) > VARIANT_ABILITIES_SCRIPT.CHARGE_HIT_RADIUS:
+		return
+	_charge_hit_done = true
+	VARIANT_ABILITIES_SCRIPT.charge_impact(target, direction)
+	attack_animation_time = ATTACK_ANIMATION_DURATION
+	attack_sequence += 1
+
+
+## Cuspidor perto o bastante e vendo o alvo: fica parado e cospe de longe.
+func _spitter_holds_position(target: CharacterBody3D, distance: float, delta: float) -> bool:
+	if int(zombie_type) != ZombieType.SPITTER or distance > VARIANT_ABILITIES_SCRIPT.SPIT_MAX_RANGE:
+		return false
+	var sees_target := _has_line_of_sight(target)
+	if spit_state.update(delta, distance, sees_target):
+		attack_animation_time = ATTACK_ANIMATION_DURATION
+		attack_sequence += 1
+		spit_used.emit(self, target.global_position)
+	return sees_target and distance <= VARIANT_ABILITIES_SCRIPT.SPITTER_KEEP_DISTANCE
 
 
 func _attack_door(door: Node) -> void:

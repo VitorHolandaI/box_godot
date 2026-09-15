@@ -912,6 +912,7 @@ func _spawn_zombie(position_override: Variant = null, variant_override: int = -1
 	zombie.died.connect(_on_zombie_died.bind(zombie))
 	zombie.stranded.connect(_on_zombie_stranded)
 	zombie.boss_ability_used.connect(_on_boss_ability_used)
+	zombie.spit_used.connect(_on_spit_used)
 	zombie.global_position = spawn_position
 	spawn_index += 1
 	return true
@@ -1033,6 +1034,30 @@ func _on_boss_ability_used(zombie: Node, ability: String) -> void:
 	if NetworkSession.is_server():
 		for peer_id in NetworkSession.loaded_peers:
 			_boss_ability_effect.rpc_id(int(peer_id), ability, origin)
+
+
+## Cuspe: poca que queima onde ha simulacao; clientes recebem so o visual.
+func _on_spit_used(_zombie: Node, target_position: Vector3) -> void:
+	var ground := Vector3(target_position.x, target_position.y - 0.9, target_position.z)
+	_spawn_acid_puddle(ground, not NetworkSession.is_client())
+	if NetworkSession.is_server():
+		for peer_id in NetworkSession.loaded_peers:
+			_acid_puddle_effect.rpc_id(int(peer_id), ground)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _acid_puddle_effect(ground: Vector3) -> void:
+	if NetworkSession.is_client():
+		_spawn_acid_puddle(ground, false)
+
+
+func _spawn_acid_puddle(ground: Vector3, damages: bool) -> void:
+	if NetworkSession.is_server() and not damages:
+		return
+	var puddle := AcidPuddle.new()
+	puddle.damages = damages
+	add_child(puddle)
+	puddle.global_position = ground
 
 
 ## Explosao da bazuca: toca local (partida local) e manda para os clientes.
