@@ -45,6 +45,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
 - `test_zombie_specials.gd`: regressoes do cuspidor, da investida, dos tipos acima de 15 no snapshot e das especiais desde a hora 1.
+- `weapon_sound_synth.gd`: sons de tiro sintetizados por perfil (pistola, SMG, fuzil, escopeta, sniper, bazuca, laser, plasma, railgun).
 - `weapon_stats.gd`: tabela unica das 16 armas de crate (escopetas, AK-47, M4, AUG, Beretta, sniper, bazuca, laser, plasma, railgun...) com cor, modelo, tracer, perfuracao e explosao.
 - `weapon_slots.gd`: inventario do slot de arma de crate (pente, reserva, durabilidade) com revisao para o snapshot.
 - `weapon_break_debris.gd`: pedacos voxel da arma quebrada, visuais locais.
@@ -93,10 +94,10 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie_indoor_router.gd`: caminho do zumbi pelo navmesh do edificio, replanejado em intervalos com jitter.
 - `player_unstuck_locator.gd`: acha espaco livre acima ou ao redor do jogador para o botao "Destravar personagem".
 - `zombie_progress_watch.gd`: mede se o zumbi perseguindo avanca (tempo parado e tempo sem se aproximar do alvo).
-- `zombie_variant_abilities.gd`: habilidades de variantes: colete do armored, dano em area, arrancadas (bote do leaper, investida do charger) e cuspe do cuspidor.
+- `zombie_variant_abilities.gd`: habilidades de variantes: colete do armored, dano em area, arrancadas (bote do leaper, investida, pulo alto do saltador, se jogar do bloater) e cuspe do cuspidor.
 - `zombie_wall_detour.gd`: na rua, segue a parede pela tangente ate a linha ate o alvo ficar livre.
 - `zombie_flock_coordinator.gd`: hordas persistentes com um cerebro, drones, fusao aleatoria de lideres, Boids e LOD.
-- `zombie_mutator.gd`: configurador procedural de 17 variantes (classico, amputados, rastejante, manco, corredor, cabeca dividida, brute, screamer, bloater, leaper, armored, cuspidor, investida e o chefe Tita), escala de corpo e animacoes.
+- `zombie_mutator.gd`: configurador procedural de 18 variantes (classico, amputados, rastejante, manco, corredor, cabeca dividida, brute, screamer, bloater kamikaze, leaper, armored, cuspidor, investida, saltador e o chefe Tita), escala de corpo e animacoes.
 - `zombie_ragdoll.gd`: ragdoll articulado com pescoco limitado, camada propria de cadaver (nao prende o jogador) que some ao ser atingido, e suporte as amputacoes das 9 variantes.
 - `zombie_snapshot_codec.gd`: snapshot binario de zumbis (16 bytes por zumbi, tipo nos 4 bits altos das flags) em pacotes abaixo do MTU.
 - `zombie_spawn_locator.gd`: escolhe pontos desocupados na floresta distante ou no anel da sobrevivencia, sempre em chao aberto (fora de paredes e predios).

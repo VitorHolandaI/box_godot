@@ -30,10 +30,12 @@ enum Type {
 	SPITTER = 15,
 	## Investida: braco gigante, arranca em linha reta e arremessa o jogador.
 	CHARGER = 16,
+	## Saltador: pernas longas, pula alto em arco e cai em cima do jogador.
+	JUMPER = 17,
 }
 
 ## Quantidade de tipos (snapshot leva ate 127, ZombieSnapshotCodec).
-const TYPE_COUNT := 17
+const TYPE_COUNT := 18
 ## Geometria base do zumbi (zombie.tscn): pes do modelo e capsula de colisao.
 const MODEL_FEET_Y := -0.82
 const BASE_CAPSULE_RADIUS := 0.56
@@ -206,7 +208,8 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			zombie.set("max_health", 85)
 			_setup_screamer(zombie)
 		Type.BLOATER:
-			zombie.set("speed", 1.35)
+			# Kamikaze: corre e se joga no jogador para explodir colado.
+			zombie.set("speed", 3.2)
 			zombie.set("max_health", 140)
 			_setup_bloater(zombie, model)
 		Type.LEAPER:
@@ -225,6 +228,10 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			zombie.set("speed", 1.9)
 			zombie.set("max_health", 220)
 			_setup_charger(zombie)
+		Type.JUMPER:
+			zombie.set("speed", 2.5)
+			zombie.set("max_health", 90)
+			_setup_jumper(zombie)
 		Type.TITAN:
 			zombie.set("speed", 1.7)
 			zombie.set("max_health", 10000)
@@ -324,6 +331,18 @@ static func _setup_charger(zombie: CharacterBody3D) -> void:
 	var torso := zombie.get_node_or_null("Model/Torso") as Node3D
 	if torso != null:
 		_add_box(torso, Vector3(0.36, 0.3, 0.46), Vector3(0.36, 0.3, 0.0), Color(0.45, 0.3, 0.28))
+
+
+## Saltador: pernas esticadas e agachado, com joelheiras claras.
+static func _setup_jumper(zombie: CharacterBody3D) -> void:
+	for leg_path in ["Model/LeftLeg/Mesh", "Model/RightLeg/Mesh"]:
+		var leg := zombie.get_node_or_null(leg_path) as MeshInstance3D
+		if leg != null:
+			leg.material_override = _quick_mat(Color(0.3, 0.34, 0.2), 0.8)
+			_add_box(leg, Vector3(0.38, 0.14, 0.4), Vector3(0.0, 0.05, -0.05), Color(0.75, 0.7, 0.6))
+	var model := zombie.get_node_or_null("Model") as Node3D
+	if model != null:
+		model.rotation.x = deg_to_rad(18.0)
 
 
 ## Armored: capacete e colete de policia escuros com faixa refletiva.
