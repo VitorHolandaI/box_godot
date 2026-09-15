@@ -12,6 +12,8 @@ const DOOR_NETWORK_STATE_SCRIPT := preload("res://scripts/door_network_state.gd"
 const DOOR_STATE_REPLICATOR_SCRIPT := preload("res://scripts/door_state_replicator.gd")
 const WAVE_SUPPLY_CONTROLLER_SCRIPT := preload("res://scripts/wave_supply_controller.gd")
 const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state.gd")
+const AIRDROP_CONTROLLER_SCRIPT := preload("res://scripts/airdrop_controller.gd")
+const AIRDROP_PLANE_SCRIPT := preload("res://scripts/airdrop_plane.gd")
 const CORPSE_CLEANUP_POLICY_SCRIPT := preload("res://scripts/corpse_cleanup_policy.gd")
 const ZOMBIE_SNAPSHOT_CODEC_SCRIPT := preload("res://scripts/zombie_snapshot_codec.gd")
 const LOAD_TEST_OPTIONS_SCRIPT := preload("res://scripts/load_test_options.gd")
@@ -63,6 +65,10 @@ var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBI
 var zombie_spawn_locator = ZOMBIE_SPAWN_LOCATOR_SCRIPT.new()
 var survival_wave_controller
 var wave_supply_controller
+## Airdrop de armas por onda (crate de paraquedas) — lado autoritativo.
+var airdrop_controller
+## Contador de nomes estaveis dos crates de airdrop.
+var crate_index := 0
 var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
 
 
@@ -73,6 +79,10 @@ func _ready() -> void:
 		wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
 		survival_wave_controller.wave_started.connect(wave_supply_controller.refresh_wave)
 		survival_wave_controller.wave_started.connect(_reset_wave_lives)
+		airdrop_controller = AIRDROP_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
+		airdrop_controller.airdrop_requested.connect(_launch_airdrop)
+		survival_wave_controller.wave_started.connect(airdrop_controller.on_wave_started)
+		survival_wave_controller.wave_started.connect(_broadcast_wave_state)
 		wave_supply_controller.refresh_wave(0)
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
 	coordinator.name = "ZombieFlockCoordinator"
@@ -314,6 +324,59 @@ func _weapon_broke(player_key: String, _kind: int, origin: Vector3) -> void:
 		WeaponBreakDebris.spawn(get_tree().current_scene, origin)
 
 
+## Lanca o aviao do airdrop no ponto sorteado: o servidor conecta a queda do
+## crate; os clientes recebem o mesmo voo cosmico por RPC.
+## Uso: conectado ao sinal airdrop_requested do AirdropController.
+func _launch_airdrop(drop_position: Vector3, kinds: Array[int]) -> void:
+	var plane_start := drop_position + Vector3(-190.0, 42.0, -30.0)
+	var plane_end := drop_position + Vector3(190.0, 42.0, 30.0)
+	var plane := AirdropPlane.new()
+	plane.configure(plane_start, plane_end, drop_position)
+	add_child(plane)
+	if NetworkSession.is_server():
+		plane.reached_drop_point.connect(_drop_airdrop_crate.bind(drop_position, kinds))
+		for peer_id in NetworkSession.loaded_peers:
+			_airdrop_flyby.rpc_id(int(peer_id), plane_start, plane_end, drop_position)
+
+
+## Sosquia cosmica no cliente: mesmo voo, sem queda de crate (o crate chega
+## pelo sync por nome do snapshot). Uso: rpc do servidor.
+@rpc("authority", "call_remote", "reliable")
+func _airdrop_flyby(plane_start: Vector3, plane_end: Vector3, drop_position: Vector3) -> void:
+	if not NetworkSession.is_client():
+		return
+	var plane := AirdropPlane.new()
+	plane.configure(plane_start, plane_end, drop_position)
+	add_child(plane)
+
+
+## O crate nasce no ponto de queda e desce de paraquedas (AirSupplyPickup
+## anima); clientes spawnam a mesma crate pelo GroundWeaponSync no snapshot.
+func _drop_airdrop_crate(_origin: Variant, drop_position: Vector3, kinds: Array[int]) -> void:
+	var crate := AirSupplyPickup.new()
+	crate.name = "AirCrate%d" % crate_index
+	crate_index += 1
+	crate.setup(kinds)
+	add_child(crate)
+	crate.global_position = Vector3(drop_position.x, 0.02, drop_position.z)
+
+
+## Estado de onda para os clientes (hoje o HUD do cliente fica preso na
+## "Hora 1"): um pacote confiavel por mudanca de onda, custo zero por frame.
+func _broadcast_wave_state(wave_index: int) -> void:
+	if not NetworkSession.is_server():
+		return
+	for peer_id in NetworkSession.loaded_peers:
+		_wave_state.rpc_id(int(peer_id), wave_index, survival_wave_controller.total_kills)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _wave_state(wave_index: int, total_kills: int) -> void:
+	if not NetworkSession.is_client():
+		return
+	survival_wave_controller.set_sync_state(wave_index, total_kills)
+
+
 func _reconcile_network_players() -> void:
 	var expected: Dictionary = {}
 	for peer_value in NetworkSession.peer_slots:
@@ -333,6 +396,10 @@ func _reconcile_network_players() -> void:
 		if is_instance_valid(player):
 			player.queue_free()
 	_refresh_local_views()
+	# Peer acabou de carregar a cena: recebe o estado atual da onda (senao o
+	# HUD dele fica preso na "Hora 1" ate a proxima mudanca de onda).
+	if NetworkSession.is_server() and survival_wave_controller != null and survival_wave_controller.wave_index > 0:
+		_broadcast_wave_state(survival_wave_controller.wave_index)
 
 
 func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:

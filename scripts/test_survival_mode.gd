@@ -18,6 +18,10 @@ const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state
 
 func run(test_root: Node) -> void:
 	_test_wave_schedule(test_root)
+	_test_airdrop_schedule(test_root)
+	_test_airdrop_drop_and_pickup(test_root)
+	_test_ground_weapon_sync(test_root)
+	_test_client_wave_sync(test_root)
 	_test_wave_controller(test_root)
 	_test_wave_supplies(test_root)
 	_test_survival_hud(test_root)
@@ -44,6 +48,143 @@ func _test_wave_schedule(test_root: Node) -> void:
 		_fail(test_root, "A ultima onda deveria terminar em 600 zumbis.")
 		return
 	print("PASS: Progressao de ondas validada.")
+
+
+## Ondas de airdrop e conteudo deterministico do crate.
+func _test_airdrop_schedule(test_root: Node) -> void:
+	print("Testando agenda de airdrop de armas...")
+	var schedule = SURVIVAL_WAVE_SCHEDULE_SCRIPT.new()
+	for wave_index in [2, 6, 10, 14]:
+		if not schedule.is_airdrop_wave(wave_index):
+			_fail(test_root, "Onda %d deveria ser de airdrop." % wave_index)
+			return
+	if schedule.is_airdrop_wave(0) or schedule.is_airdrop_wave(3):
+		_fail(test_root, "Ondas fora da lista nao deveriam cair crate.")
+		return
+	var hora_3 := schedule.crate_kinds_for_wave(2, 777)
+	if hora_3 != [WeaponStats.Kind.SHOTGUN]:
+		_fail(test_root, "Hora 3 deveria cair escopeta; veio %s." % hora_3)
+		return
+	var hora_7 := schedule.crate_kinds_for_wave(6, 777)
+	if hora_7 != [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI]:
+		_fail(test_root, "Hora 7 deveria cair escopeta + Uzi; veio %s." % hora_7)
+		return
+	var hora_11 := schedule.crate_kinds_for_wave(10, 777)
+	if hora_11 != [WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM]:
+		_fail(test_root, "Hora 11 deveria cair Uzi + Magnum; veio %s." % hora_11)
+		return
+	var first := schedule.crate_kinds_for_wave(18, 555)
+	var second := schedule.crate_kinds_for_wave(18, 777)
+	if first != second and first.is_empty():
+		_fail(test_root, "Sorteio das ondas altas deveria ser deterministico por seed.")
+		return
+	print("PASS: Agenda de airdrop validada.")
+
+
+## Crate desce, coleta por interacao entrega uma arma por pegada e a troca
+## dropa a da mao. Uso: roda na suite.
+func _test_airdrop_drop_and_pickup(test_root: Node) -> void:
+	print("Testando crate de airdrop com coleta por interacao...")
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.reads_local_input = false
+	player.position = Vector3(0.0, 1.0, 0.0)
+	test_root.add_child(player)
+	var crate := AirSupplyPickup.new()
+	crate.name = "AirCrateTest"
+	crate.setup([WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI])
+	test_root.add_child(crate)
+	crate.global_position = Vector3(0.0, 20.0, 0.0)
+	if not crate.is_in_group("ground_weapons"):
+		_fail(test_root, "Crate deveria entrar no grupo ground_weapons.")
+		player.free()
+		crate.free()
+		return
+	crate.call("interact_with", player)
+	if not player.weapon_slots.has_kind(WeaponStats.Kind.SHOTGUN):
+		_fail(test_root, "Primeira pegada do crate deveria entregar a escopeta.")
+		player.free()
+		crate.free()
+		return
+	var remaining: Array[int] = crate.get("weapon_kinds")
+	if remaining != [WeaponStats.Kind.UZI]:
+		_fail(test_root, "Crate deveria manter a Uzi para a proxima pegada; restou %s." % [remaining])
+		player.free()
+		crate.free()
+		return
+	crate.call("interact_with", player)
+	if player.current_weapon != PlayerCharacter.Weapon.UZI:
+		_fail(test_root, "Pegada da Uzi com slot cheio deveria trocar e equipar a arma.")
+		player.free()
+		crate.free()
+		return
+	if not crate.get("weapon_kinds").is_empty():
+		_fail(test_root, "Crate esvaziado deveria liberar o no.")
+		player.free()
+		crate.free()
+		return
+	crate.free()
+	player.free()
+	print("PASS: Crate de airdrop com coleta por interacao validado.")
+
+
+## Sync por nome concilia o cliente sem duplicar nos nem perder drops.
+func _test_ground_weapon_sync(test_root: Node) -> void:
+	print("Testando sync por nome das armas no chao...")
+	var tree := test_root.get_tree()
+	var crate := AirSupplyPickup.new()
+	crate.name = "AirCrateSync"
+	crate.setup([WeaponStats.Kind.SHOTGUN])
+	test_root.add_child(crate)
+	crate.global_position = Vector3(30.0, 0.0, -20.0)
+	var pickup := GroundWeaponPickup.new()
+	pickup.name = "GroundWeaponSync"
+	pickup.setup(WeaponStats.Kind.MAGNUM, 4, 9, 22)
+	test_root.add_child(pickup)
+	pickup.global_position = Vector3(-15.0, 0.0, 40.0)
+	var entries: Array = GroundWeaponSync.collect(tree)
+	if entries.size() != 2:
+		_fail(test_root, "Sync deveria coletar crate e dropada; coletou %d." % entries.size())
+		crate.free()
+		pickup.free()
+		return
+	crate.free()
+	pickup.free()
+	GroundWeaponSync.apply(tree, entries)
+	var crate_names: Array[String] = []
+	var restored_pickup: Node = null
+	for node in tree.get_nodes_in_group("ground_weapons"):
+		crate_names.append(String(node.name))
+		if node is GroundWeaponPickup:
+			restored_pickup = node
+	if not (crate_names.has("AirCrateSync") and crate_names.has("GroundWeaponSync")):
+		_fail(test_root, "Sync deveria recriar os nos pelo nome; nomes=%s." % crate_names)
+		return
+	if restored_pickup == null or int(restored_pickup.get("durability")) != 22:
+		_fail(test_root, "Dropada recriada deveria preservar durabilidade no payload.")
+		for node in tree.get_nodes_in_group("ground_weapons"):
+			node.free()
+		return
+	# queue_free do apply e adiado para o fim do frame: aqui so garantimos
+	# que nada foi recriado apos o snapshot vazio.
+	GroundWeaponSync.apply(tree, [])
+	for node in tree.get_nodes_in_group("ground_weapons"):
+		if not node.is_queued_for_deletion():
+			_fail(test_root, "Snapshot sem armas deveria marcar as coletadas para remocao.")
+			break
+		node.free()
+	print("PASS: Sync por nome das armas no chao validado.")
+
+
+## Cliente recebe o estado da onda por RPC e o HUD acompanha.
+func _test_client_wave_sync(test_root: Node) -> void:
+	print("Testando sync de onda para o HUD do cliente...")
+	var controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new()
+	controller.set_sync_state(3, 45)
+	var hud_text := controller.get_hud_text()
+	if not hud_text.contains("Hora 4") or not hud_text.contains("Abates: 45"):
+		_fail(test_root, "HUD do cliente deveria refletir a onda sincronizada; texto=%s." % hud_text)
+		return
+	print("PASS: Sync de onda para o cliente validado.")
 
 
 func _test_wave_controller(test_root: Node) -> void:
