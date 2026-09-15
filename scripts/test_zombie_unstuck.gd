@@ -126,6 +126,8 @@ func _test_zombie_detours_around_wall_outdoors(test_root: Node) -> void:
 	player.position = origin + Vector3(0.6, 1.3, 6.0)
 	test_root.add_child(player)
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	# Walker fixo: sorteio pelo nome podia dar cuspidor/investida (comportam diferente).
+	zombie.set("forced_variant", ZombieMutator.Type.WALKER)
 	zombie.position = origin + Vector3(0.0, 1.3, -3.0)
 	test_root.add_child(zombie)
 	await test_root.get_tree().physics_frame
@@ -169,6 +171,7 @@ func _test_zombie_walks_around_safehouse_to_door(test_root: Node) -> void:
 	test_root.add_child(player)
 	# Atras da parede do fundo (sul): a linha reta ate o jogador bate na parede.
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.set("forced_variant", ZombieMutator.Type.WALKER)
 	zombie.position = origin + Vector3(1.0, 1.3, 9.5)
 	test_root.add_child(zombie)
 	await test_root.get_tree().physics_frame
