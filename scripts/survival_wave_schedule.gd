@@ -107,9 +107,13 @@ func crate_kinds_for_wave(wave_index: int, world_seed: int) -> Array[int]:
 		return [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI]
 	if wave_index == 10:
 		return [WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM]
+	if wave_index == 14:
+		return [WeaponStats.Kind.MAGNUM, WeaponStats.Kind.DOUBLE_BARREL]
+	if wave_index == 18:
+		return [WeaponStats.Kind.CARBINE, WeaponStats.Kind.UZI]
 	if wave_index < 2:
 		return []
-	var all_kinds: Array[int] = [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM]
+	var all_kinds: Array[int] = [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM, WeaponStats.Kind.DOUBLE_BARREL, WeaponStats.Kind.CARBINE]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world_seed * 7919 + wave_index
 	var count := 2 + (rng.randi() % 2)

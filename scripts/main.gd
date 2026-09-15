@@ -275,7 +275,10 @@ func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pe
 	for pellet_index in maxi(pellet_count, 1):
 		var bullet = BULLET_SCENE.instantiate()
 		add_child(bullet)
-		bullet.global_position = spawn_position
+		if pellet_count > 1:
+			bullet.scale = Vector3(0.55, 0.55, 0.45)
+		var side := Vector3.UP.cross(bullet_direction).normalized()
+		bullet.global_position = spawn_position + side * (float(pellet_index) - float(pellet_count - 1) / 2.0) * 0.05
 		bullet.setup(bullet_direction, 0, false)
 		bullet.add_to_group("network_bullet_visuals")
 
