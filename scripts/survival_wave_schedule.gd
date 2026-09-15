@@ -96,29 +96,27 @@ func pick_variant(wave_index: int, roll_percent: int) -> int:
 	return int(ordered_kinds[0])
 
 
-## Armas dentro do crate da onda: fixas nas primeiras (Hora 3 escopeta;
-## Hora 7 escopeta+Uzi; Hora 11 Uzi+Magnum) e sorteadas de forma
-## deterministica por seed nas seguintes.
+## Armas dentro do crate da onda: todo crate cai com 3 armas. As primeiras
+## horas sao fixas; as seguintes sorteiam 3 distintas por seed.
 ## Uso: var kinds := schedule.crate_kinds_for_wave(6, world_seed)
 func crate_kinds_for_wave(wave_index: int, world_seed: int) -> Array[int]:
 	if wave_index == 2:
-		return [WeaponStats.Kind.SHOTGUN]
+		return [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM]
 	if wave_index == 6:
-		return [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI]
+		return [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI, WeaponStats.Kind.DOUBLE_BARREL]
 	if wave_index == 10:
-		return [WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM]
+		return [WeaponStats.Kind.MAGNUM, WeaponStats.Kind.DOUBLE_BARREL, WeaponStats.Kind.CARBINE]
 	if wave_index == 14:
-		return [WeaponStats.Kind.MAGNUM, WeaponStats.Kind.DOUBLE_BARREL]
+		return [WeaponStats.Kind.CARBINE, WeaponStats.Kind.DOUBLE_BARREL, WeaponStats.Kind.SHOTGUN]
 	if wave_index == 18:
-		return [WeaponStats.Kind.CARBINE, WeaponStats.Kind.UZI]
+		return [WeaponStats.Kind.CARBINE, WeaponStats.Kind.UZI, WeaponStats.Kind.DOUBLE_BARREL]
 	if wave_index < 2:
 		return []
 	var all_kinds: Array[int] = [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM, WeaponStats.Kind.DOUBLE_BARREL, WeaponStats.Kind.CARBINE]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = world_seed * 7919 + wave_index
-	var count := 2 + (rng.randi() % 2)
 	var picked: Array[int] = []
-	while picked.size() < count:
+	while picked.size() < 3:
 		var kind: int = all_kinds[rng.randi() % all_kinds.size()]
 		if not picked.has(kind):
 			picked.append(kind)
