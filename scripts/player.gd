@@ -31,6 +31,8 @@ const SONAR_INTERVAL := 10.0
 const SONAR_REVEAL_RADIUS := 45.0
 ## Raio de coleta por interacao de armas no chao (crates e dropadas).
 const GROUND_INTERACT_RADIUS := 2.8
+## Segurando interagir ao lado do caido, reanimacao completa em ~3s.
+const REVIVE_DURATION := 3.0
 ## Pellet tracer: menor/mais curto que o tracer da pistola.
 const PELLET_VISUAL_SCALE := Vector3(0.55, 0.55, 0.45)
 const UNSTUCK_LOCATOR_SCRIPT: GDScript = preload("res://scripts/player_unstuck_locator.gd")
@@ -52,6 +54,10 @@ const UNSTUCK_COOLDOWN := 5.0
 @export var lives := MAX_LIVES
 
 var is_eliminated := false
+## Vidas zeradas: caido no chao, reativavel por aliado (interagir segurado).
+## Ninguem salva? Rodada nova devolve a todos (restore_wave_lives).
+var is_downed := false
+var revive_progress := 0.0
 
 var owner_peer_id := 1
 var input_action_prefix := "player_1_"
@@ -161,6 +167,11 @@ func _physics_process(delta: float) -> void:
 		trigger_sonar()
 	_poll_local_sonar()
 	muzzle_flash.visible = muzzle_flash_time > 0.0
+	if is_downed:
+		# Caido: sem acao; o aliado segurando interagir reanima em ~3s.
+		velocity = Vector3.ZERO
+		_update_revive_by_others(delta)
+		return
 	if not simulation_enabled:
 		var previous_position := global_position
 		var target_pos := global_position.lerp(network_target_position, minf(delta * 16.0, 1.0))
@@ -182,6 +193,7 @@ func _physics_process(delta: float) -> void:
 			aim_input = Vector2.ZERO
 	_handle_interaction_input()
 	_handle_weapon_input()
+	_update_revive_by_others(delta)
 
 	if not is_on_floor():
 		velocity.y -= gravity * delta
@@ -271,6 +283,8 @@ func get_network_state() -> Dictionary:
 		"zombie_kills": zombie_kills,
 		"teleport_sequence": teleport_sequence,
 		"weapon_slots": weapon_slots.serialize(),
+		"downed": is_downed,
+		"revive_progress": revive_progress,
 	}
 
 
@@ -306,6 +320,18 @@ func apply_network_state(state: Dictionary) -> void:
 	hit_direction.x = float(state.get("hit_dir_x", hit_direction.x))
 	lives = clampi(int(state.get("lives", lives)), 0, MAX_LIVES)
 	zombie_kills = maxi(zombie_kills, int(state.get("zombie_kills", zombie_kills)))
+	var next_downed := bool(state.get("downed", is_downed))
+	if next_downed != is_downed:
+		if next_downed:
+			is_downed = true
+			visible = true
+			collision_layer = 2
+			collision_mask = 0
+			if model != null:
+				model.rotation.x = deg_to_rad(-86.0)
+		else:
+			_clear_downed()
+	revive_progress = clampf(float(state.get("revive_progress", revive_progress)), 0.0, 1.0)
 	var next_eliminated := bool(state.get("eliminated", is_eliminated))
 	if next_eliminated != is_eliminated:
 		is_eliminated = next_eliminated
@@ -322,7 +348,11 @@ func _handle_weapon_input() -> void:
 		_reload_pistol()
 	elif reload_pressed and WeaponStats.is_crate_weapon(current_weapon):
 		weapon_slots.reload(current_weapon)
-	if attack_pressed and attack_cooldown <= 0.0:
+	# Armas automaticas (Uzi) atiram segurando; as outras sao por aperto.
+	var wants_to_attack := attack_pressed
+	if bool(WeaponStats.stats_for(current_weapon).get("is_auto", false)):
+		wants_to_attack = _is_attack_held()
+	if wants_to_attack and attack_cooldown <= 0.0:
 		match current_weapon:
 			Weapon.KNIFE:
 				_attack_with_knife()
@@ -486,8 +516,67 @@ func _accept_weapon_offer(weapon_kind: int, incoming_state: Dictionary) -> Strin
 	return "full"
 
 
+## Adiciona municao a reserva da arma de crate informada; 0 se nao possui.
+## Uso: item de municiao de classe chama add_crate_reserve(UZI, 90)
+func add_crate_reserve(kind: int, amount: int) -> int:
+	if not weapon_slots.has_kind(kind):
+		return 0
+	return weapon_slots.add_reserve(kind, amount)
+
+
 func has_free_weapon_slot() -> bool:
 	return weapon_slots.has_free_slot()
+
+
+## Botao de ataque segurado: input local usa Input, rede usa o estado cru
+## que o servidor recebeu (30 Hz). Uso: armas automaticas.
+func _is_attack_held() -> bool:
+	if reads_local_input:
+		return Input.is_action_pressed(input_action_prefix + "attack")
+	return bool(remote_buttons.get("attack", false))
+
+
+## Reanimacao (D): um aliado de pe segurando INTERAGIR ao lado do caido
+## reanima em ~3s; sem aliado, o progresso decai. Roda onde o revividor e
+## simulado (servidor/offline) e mexe no node do caido.
+func _update_revive_by_others(delta: float) -> void:
+	if is_eliminated:
+		return
+	var target := _find_nearest_downed_player()
+	var helping := target != null and _is_interact_held()
+	if target != null:
+		if helping:
+			target.revive_progress += delta / REVIVE_DURATION
+			if target.revive_progress >= 1.0:
+				target.revive_downed()
+		else:
+			target.revive_progress = maxf(target.revive_progress - delta * 0.6, 0.0)
+	elif not helping:
+		# Ninguem perto: o proprio caido decai se sobrou progresso solto.
+		revive_progress = maxf(revive_progress - delta * 0.6, 0.0)
+
+
+func _find_nearest_downed_player() -> PlayerCharacter:
+	var best: PlayerCharacter = null
+	var best_distance := GROUND_INTERACT_RADIUS
+	for node in get_tree().get_nodes_in_group("player"):
+		var candidate := node as PlayerCharacter
+		if candidate == null or not is_instance_valid(candidate) or candidate == self:
+			continue
+		if not candidate.is_downed or bool(candidate.get("is_eliminated")):
+			continue
+		var distance := global_position.distance_to(candidate.global_position)
+		if distance < best_distance:
+			best_distance = distance
+			best = candidate
+	return best
+
+
+## Interagir segurado: local via Input; na rede via estado cru recebido.
+func _is_interact_held() -> bool:
+	if reads_local_input:
+		return Input.is_action_pressed(input_action_prefix + "interact")
+	return bool(remote_buttons.get("interact", false))
 
 
 func _handle_interaction_input() -> void:
@@ -683,12 +772,8 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 		lives_changed.emit(lives)
 		if lives <= 0:
 			lives = 0
-			is_eliminated = true
-			player_eliminated.emit()
-			velocity = Vector3.ZERO
-			visible = false
-			collision_layer = 0
-			collision_mask = 0
+			# Fim das vidas NAO elimina: cai no chao e fica reativavel.
+			_go_downed()
 		else:
 			respawn()
 
@@ -698,6 +783,7 @@ func respawn() -> void:
 	velocity = Vector3.ZERO
 	teleport_sequence += 1
 	is_eliminated = false
+	_clear_downed()
 	visible = true
 	collision_layer = 2
 	collision_mask = 23
@@ -706,6 +792,37 @@ func respawn() -> void:
 	hit_reaction_time = 0.0
 	pistol_ammo = 12
 	reserve_ammo = 96
+
+
+## Fim das vidas: cai no chao (visivel, deitado, sem acao) e fica
+## reativavel por aliado; se a rodada terminar, restore_wave_lives volta.
+func _go_downed() -> void:
+	is_downed = true
+	revive_progress = 0.0
+	velocity = Vector3.ZERO
+	health = 0
+	stamina = 0.0
+	is_eliminated = false
+	visible = true
+	collision_layer = 2
+	collision_mask = 0
+	if model != null:
+		model.rotation.x = deg_to_rad(-86.0)
+	player_eliminated.emit()
+
+
+## Reanimado por aliado: levanta com metade da vida e sem vidas extras.
+func revive_downed() -> void:
+	_clear_downed()
+	health = maxi(max_health / 2, 1)
+	stamina = max_stamina
+
+
+func _clear_downed() -> void:
+	is_downed = false
+	revive_progress = 0.0
+	if model != null and is_instance_valid(model):
+		model.rotation.x = 0.0
 
 
 ## Botao "Destravar personagem": leva o boneco ao primeiro espaco livre acima
@@ -735,7 +852,7 @@ func set_spawn_position(position: Vector3) -> void:
 func restore_wave_lives() -> void:
 	lives = MAX_LIVES
 	lives_changed.emit(lives)
-	if not is_eliminated:
+	if not is_eliminated and not is_downed:
 		return
 	respawn()
 
@@ -788,6 +905,8 @@ func can_see_position(target_position: Vector3) -> bool:
 
 
 func get_lives_text() -> String:
+	if is_downed:
+		return "CAIDO | segure Interagir perto para reanimar"
 	if is_eliminated or lives <= 0:
 		return "Vidas: [ELIMINADO]"
 	return "Vidas: %s (%d/%d)" % ["❤".repeat(lives), lives, MAX_LIVES]

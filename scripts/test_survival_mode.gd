@@ -25,6 +25,8 @@ func run(test_root: Node) -> void:
 	_test_ground_supply_pickup(test_root)
 	_test_building_lights_toggle(test_root)
 	_test_stale_player_cache_survives(test_root)
+	_test_downed_and_revive(test_root)
+	_test_game_over_and_restart(test_root)
 	_test_client_wave_sync(test_root)
 	_test_variant_mix(test_root)
 	_test_forced_variant_spawn(test_root)
@@ -351,6 +353,59 @@ func _test_stale_player_cache_survives(test_root: Node) -> void:
 			_fail(test_root, "Cache deveria podar o jogador liberado; restou %d." % pruned.size())
 	player.free()
 	print("PASS: Cache de jogadores poda objetos liberados sem erro de cast.")
+
+
+## Caido (D): vidas zeradas deixam caido; aliado segurando interagir
+## reanima em ~3s; rodada nova levanta todo mundo.
+func _test_downed_and_revive(test_root: Node) -> void:
+	print("Testando caido e reanimacao por aliado...")
+	var downed := PLAYER_SCENE.instantiate() as CharacterBody3D
+	downed.reads_local_input = false
+	test_root.add_child(downed)
+	for _hit in 3:
+		downed.take_damage(100, Vector3.FORWARD, "bullet")
+	if not downed.is_downed:
+		_fail(test_root, "Apos 3 mortes o jogador deveria estar caido.")
+		downed.free()
+		return
+	var rescuer := PLAYER_SCENE.instantiate() as CharacterBody3D
+	rescuer.reads_local_input = false
+	rescuer.position = Vector3(1.5, 1.0, 0.0)
+	test_root.add_child(rescuer)
+	# Aliado segurando interagir (estado cru de rede) por ~3s de reanimacao.
+	rescuer.set("remote_buttons", {"interact": true})
+	for _tick in 200:
+		rescuer.call("_update_revive_by_others", 1.0 / 60.0)
+		if not downed.is_downed:
+			break
+	if downed.is_downed or downed.health != downed.max_health / 2:
+		_fail(test_root, "Segurar interagir deveria reanimar com metade da vida; vida=%d." % downed.health)
+		downed.free()
+		rescuer.free()
+		return
+	if not rescuer._find_nearest_downed_player() == null:
+		_fail(test_root, "Ninguem caido deveria estar proximo apos reanimar.")
+	downed.free()
+	rescuer.free()
+	print("PASS: Caido e reanimacao por aliado validados.")
+
+
+## Game over (C): todo mundo caido zera a horda; rodada nova recomeca.
+func _test_game_over_and_restart(test_root: Node) -> void:
+	print("Testando game over com horda zerada e reinicio...")
+	var controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(func() -> bool:
+		return true
+	)
+	controller.trigger_game_over()
+	controller.tick(0.2)
+	if not controller.game_over or controller.get_hud_text().contains("Hora"):
+		_fail(test_root, "Game over deveria travar a horda e mudar o HUD.")
+		return
+	controller.restart()
+	if controller.game_over or controller.wave_index != 0 or controller.total_kills != 0:
+		_fail(test_root, "Reinicio deveria zerar onda, abates e game over.")
+		return
+	print("PASS: Game over e reinicio da horda validados.")
 
 
 func _test_client_wave_sync(test_root: Node) -> void:
