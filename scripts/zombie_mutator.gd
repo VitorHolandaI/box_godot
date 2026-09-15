@@ -32,8 +32,22 @@ enum Type {
 const TYPE_COUNT := 15
 ## Tipos que podem sair no sorteio comum pelo hash: todos menos o chefe.
 const RANDOM_VARIANT_COUNT := 14
-const TITAN_CAPSULE_RADIUS := 0.8
-const TITAN_CAPSULE_HEIGHT := 3.4
+## Geometria base do zumbi (zombie.tscn): pes do modelo e capsula de colisao.
+const MODEL_FEET_Y := -0.82
+const BASE_CAPSULE_RADIUS := 0.56
+const BASE_CAPSULE_HEIGHT := 2.2
+const CAPSULE_BOTTOM_Y := -0.88
+const BASE_HEALTH_LABEL_Y := 1.75
+## Capsula de zumbi grande cresce com o corpo, mas cabe em porta de 2 m e sob a
+## verga de 2.75 m: o Tita segue entrando em predio (a cabeca atravessa o teto).
+const MAX_CAPSULE_RADIUS := 0.95
+const MAX_CAPSULE_HEIGHT := 2.6
+const BODY_SCALES: Dictionary = {
+	Type.BRUTE: Vector3(1.35, 1.25, 1.35),
+	Type.TITAN: Vector3(2.3, 2.3, 2.3),
+	Type.BLOATER: Vector3(1.1, 1.0, 1.1),
+	Type.LEAPER: Vector3(0.85, 1.0, 0.85),
+}
 
 const SKIN_PALETTE: Array[Color] = [
 	Color(0.28, 0.52, 0.22),
@@ -60,12 +74,44 @@ const PANTS_PALETTE: Array[Color] = [
 static func apply_appearance(zombie: CharacterBody3D, z_type: int, hash_val: int) -> void:
 	_apply_materials(zombie, hash_val)
 	_apply_anatomy(zombie, z_type)
+	apply_body_scale(zombie, z_type)
 
 
 ## Variante do sorteio comum (modo classico) pelo hash do nome; nunca o chefe.
 ## Uso: var tipo := ZombieMutator.random_variant_for_hash(absi(name.hash()))
 static func random_variant_for_hash(hash_val: int) -> int:
 	return posmod(hash_val, RANDOM_VARIANT_COUNT)
+
+
+## Escala do corpo por tipo, usada pelo zumbi vivo e pelo cadaver.
+## Uso: var escala := ZombieMutator.body_scale_for(ZombieMutator.Type.TITAN)
+static func body_scale_for(z_type: int) -> Vector3:
+	return BODY_SCALES.get(z_type, Vector3.ONE)
+
+
+## Amplia modelo e capsula mantendo os pes no chao. Antes o modelo crescia a
+## partir do centro: o Tita afundava ~1 m e ficava maior que a colisao, parecendo
+## atravessar tudo. Uso: ZombieMutator.apply_body_scale(zombie, ZombieMutator.Type.BRUTE)
+static func apply_body_scale(zombie: CharacterBody3D, z_type: int) -> void:
+	var body_scale := body_scale_for(z_type)
+	if body_scale == Vector3.ONE:
+		return
+	var model := zombie.get_node_or_null("Model") as Node3D
+	if model != null:
+		model.scale = body_scale
+		model.position.y = MODEL_FEET_Y * (1.0 - body_scale.y)
+	var collision := zombie.get_node_or_null("CollisionShape") as CollisionShape3D
+	if collision != null and collision.shape is CapsuleShape3D:
+		# A forma da cena e compartilhada entre todos os zumbis: duplica antes.
+		var capsule := (collision.shape as CapsuleShape3D).duplicate() as CapsuleShape3D
+		capsule.radius = minf(BASE_CAPSULE_RADIUS * maxf(body_scale.x, body_scale.z), MAX_CAPSULE_RADIUS)
+		capsule.height = maxf(minf(BASE_CAPSULE_HEIGHT * body_scale.y, MAX_CAPSULE_HEIGHT), capsule.radius * 2.0)
+		collision.shape = capsule
+		collision.position.y = CAPSULE_BOTTOM_Y + capsule.height * 0.5
+	var label := zombie.get_node_or_null("HealthLabel") as Label3D
+	if label != null:
+		# Valor absoluto: apply_appearance pode rodar de novo (troca de tipo pela rede).
+		label.position.y = BASE_HEALTH_LABEL_Y + 1.6 * (body_scale.y - 1.0)
 
 
 static func appearance_colors(hash_val: int) -> Array[Color]:
@@ -163,7 +209,6 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			zombie.set("speed", 2.6)
 			zombie.set("max_health", 70)
 			model.rotation.x = deg_to_rad(24.0)
-			model.scale = Vector3(0.85, 1.0, 0.85)
 		Type.ARMORED:
 			zombie.set("speed", 1.9)
 			zombie.set("max_health", 160)
@@ -196,14 +241,10 @@ static func _setup_crawler(zombie: CharacterBody3D, model: Node3D) -> void:
 
 ## Brute: corpo maior e ombreiras de paletizado escuro para leitura imediata.
 static func _setup_brute(model: Node3D) -> void:
-	if model != null:
-		model.scale = Vector3(1.35, 1.25, 1.35)
+	# Tamanho do corpo vem de apply_body_scale; aqui so a cabeca desproporcional.
 	var head := model.get_node_or_null("Head") as Node3D
 	if head != null:
 		head.scale = Vector3(1.2, 1.15, 1.2)
-	var health_label := model.get_parent().get_node_or_null("HealthLabel") as Label3D
-	if health_label != null:
-		health_label.position.y += 0.55
 
 
 ## Screamer: tronco vermelho vivo e mandibula aberta, para ser reconhecido
@@ -227,16 +268,11 @@ static func _setup_bloater(zombie: CharacterBody3D, model: Node3D) -> void:
 		torso.material_override = _quick_mat(Color(0.42, 0.55, 0.18), 0.7)
 		_add_box(torso, Vector3(0.18, 0.18, 0.12), Vector3(0.14, 0.1, -0.24), Color(0.7, 0.82, 0.25))
 		_add_box(torso, Vector3(0.12, 0.12, 0.1), Vector3(-0.16, -0.12, -0.24), Color(0.7, 0.82, 0.25))
-	if model != null:
-		model.scale = Vector3(1.1, 1.0, 1.1)
 
 
-## Tita: corpo 2.3x, pele vermelho-escura, olhos brilhando e capsula maior
-## (a forma da cena e compartilhada, entao e duplicada antes de crescer).
-## A capsula fica abaixo de 2 m de largura para ainda passar pelas portas.
-static func _setup_titan(zombie: CharacterBody3D, model: Node3D) -> void:
-	if model != null:
-		model.scale = Vector3.ONE * 2.3
+## Tita: pele vermelho-escura e olhos brilhando; o tamanho (2.3x) e a capsula
+## vem de apply_body_scale.
+static func _setup_titan(zombie: CharacterBody3D, _model: Node3D) -> void:
 	for part in ["Model/Head", "Model/Torso", "Model/LeftArm/Mesh", "Model/RightArm/Mesh"]:
 		var mesh := zombie.get_node_or_null(part) as MeshInstance3D
 		if mesh != null:
@@ -252,16 +288,8 @@ static func _setup_titan(zombie: CharacterBody3D, model: Node3D) -> void:
 			glow.emission = Color(1.0, 0.35, 0.05)
 			glow.emission_energy_multiplier = 3.0
 			eye.material_override = glow
-	var collision := zombie.get_node_or_null("CollisionShape") as CollisionShape3D
-	if collision != null and collision.shape is CapsuleShape3D:
-		var capsule := (collision.shape as CapsuleShape3D).duplicate() as CapsuleShape3D
-		capsule.radius = TITAN_CAPSULE_RADIUS
-		capsule.height = TITAN_CAPSULE_HEIGHT
-		collision.shape = capsule
-		collision.position.y += (TITAN_CAPSULE_HEIGHT - 2.2) * 0.5
 	var label := zombie.get_node_or_null("HealthLabel") as Label3D
 	if label != null:
-		label.position.y += 2.6
 		label.modulate = Color(1.0, 0.4, 0.2)
 
 

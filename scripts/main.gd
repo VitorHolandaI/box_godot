@@ -97,6 +97,8 @@ var loot_index := 0
 var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
 var ammo_loot_director = AMMO_LOOT_DIRECTOR_SCRIPT.new()
 var loot_rng := RandomNumberGenerator.new()
+## Armas soltas por zumbis ainda no chao, da mais antiga para a mais nova.
+var zombie_weapon_drops: Array[Node] = []
 
 
 func _ready() -> void:
@@ -249,6 +251,8 @@ func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3,
 	if not source_name.is_empty() and is_instance_valid(ragdolls_by_zombie.get(source_name)):
 		return
 	var ragdoll := ZOMBIE_RAGDOLL_SCENE.instantiate()
+	# Antes de entrar na arvore: _ready monta as partes ja no tamanho do zumbi.
+	ragdoll.set("body_scale", ZombieMutator.body_scale_for(z_type))
 	add_child(ragdoll)
 	ragdoll.position = position
 	ragdoll.rotation.y = rotation
@@ -348,15 +352,36 @@ func _connect_crate_weapon_signals(player: Node) -> void:
 func _on_crate_weapon_dropped(player: Node, kind: int, mag: int, reserve: int, durability: int) -> void:
 	if NetworkSession.is_client():
 		return
+	var forward: Vector3 = -player.global_transform.basis.z
+	forward.y = 0.0
+	var drop_position: Vector3 = player.global_position + forward.normalized() * 1.2 if not forward.is_zero_approx() else player.global_position
+	drop_position.y = player.global_position.y
+	_add_ground_weapon(kind, mag, reserve, durability, drop_position)
+
+
+## Cria arma no chao com nome estavel e marca o sync. Antes o drop manual nao
+## marcava e os outros jogadores so viam a arma no proximo evento de chao.
+func _add_ground_weapon(kind: int, mag: int, reserve: int, durability: int, drop_position: Vector3) -> GroundWeaponPickup:
 	var pickup := GroundWeaponPickup.new()
 	pickup.name = "GroundWeapon%d" % ground_weapon_index
 	ground_weapon_index += 1
 	pickup.setup(kind, mag, reserve, durability)
 	add_child(pickup)
-	var forward: Vector3 = -player.global_transform.basis.z
-	forward.y = 0.0
-	pickup.global_position = player.global_position + forward.normalized() * 1.2 if not forward.is_zero_approx() else player.global_position
-	pickup.global_position.y = player.global_position.y
+	pickup.global_position = drop_position
+	GroundWeaponSync.mark_dirty()
+	return pickup
+
+
+## Com 30% de drop a horda solta centenas de armas: cada uma dura pouco e so as
+## MAX_ZOMBIE_WEAPON_DROPS mais novas ficam, para a lista do chao (replicada
+## inteira a cada mudanca) nao explodir.
+func _track_zombie_weapon_drop(pickup: GroundWeaponPickup) -> void:
+	pickup.lifetime_seconds = AMMO_LOOT_DIRECTOR_SCRIPT.ZOMBIE_WEAPON_LIFETIME
+	zombie_weapon_drops.assign(zombie_weapon_drops.filter(func(node: Node) -> bool: return is_instance_valid(node) and not node.is_queued_for_deletion()))
+	zombie_weapon_drops.append(pickup)
+	while zombie_weapon_drops.size() > AMMO_LOOT_DIRECTOR_SCRIPT.MAX_ZOMBIE_WEAPON_DROPS:
+		var oldest: Node = zombie_weapon_drops.pop_front()
+		oldest.queue_free()
 
 
 ## Quebra de arma de crate: peca local no simulador + evento para os clientes
@@ -926,14 +951,20 @@ func _on_zombie_died(_killer: Node, zombie: Node3D) -> void:
 	_drop_kill_ammo(zombie)
 
 
-## Zumbi abatido solta de vez em quando municao de qualquer classe, no lugar da morte.
+## Zumbi abatido solta de vez em quando municao de qualquer classe e, mais raro,
+## uma arma de crate usada, no lugar da morte.
 func _drop_kill_ammo(zombie: Node3D) -> void:
 	if NetworkSession.is_client() or not is_instance_valid(zombie):
 		return
+	var ground_position := Vector3(zombie.global_position.x, 0.02, zombie.global_position.z)
+	var weapon: Dictionary = AMMO_LOOT_DIRECTOR_SCRIPT.weapon_drop_for_kill(loot_rng.randf(), loot_rng.randf(), loot_rng.randf())
+	if not weapon.is_empty():
+		var pickup := _add_ground_weapon(int(weapon["kind"]), int(weapon["mag"]), int(weapon["reserve"]), int(weapon["durability"]), ground_position)
+		_track_zombie_weapon_drop(pickup)
 	var supply_kind: int = AMMO_LOOT_DIRECTOR_SCRIPT.drop_kind_for_kill(loot_rng.randf(), loot_rng.randf())
 	if supply_kind < 0:
 		return
-	_add_loot_item(supply_kind, AMMO_LOOT_DIRECTOR_SCRIPT.drop_amount_for(supply_kind), Vector3(zombie.global_position.x, 0.02, zombie.global_position.z))
+	_add_loot_item(supply_kind, AMMO_LOOT_DIRECTOR_SCRIPT.drop_amount_for(supply_kind), ground_position)
 
 
 ## Reposicao periodica: completa o minimo de municao de cada classe no mapa.

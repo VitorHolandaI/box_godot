@@ -7,6 +7,7 @@ extends RefCounted
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd")
+const MAIN_SCRIPT := preload("res://scripts/main.gd")
 
 
 func run(test_root: Node) -> void:
@@ -15,6 +16,8 @@ func run(test_root: Node) -> void:
 	_test_restock_waits_for_interval(test_root)
 	_test_class_ammo_has_distinct_label(test_root)
 	_test_class_ammo_always_counts(test_root)
+	_test_zombie_weapon_drop_is_rare_and_worn(test_root)
+	_test_zombie_weapon_drops_are_capped(test_root)
 
 
 func _test_kill_drop_is_rare_and_any_class(test_root: Node) -> void:
@@ -112,6 +115,53 @@ func _test_class_ammo_always_counts(test_root: Node) -> void:
 		_fail(test_root, "Sem a arma vira %d balas de pistola; com a arma vai para a reserva dela; pistola=%d coletado=%s escopeta=%d." % [GroundSupplyPickup.PISTOL_ROUNDS_FROM_FOREIGN_CLASS, pistol_reserve, foreign_taken, shotgun_reserve])
 		return
 	print("PASS: Municao do chao sempre conta (sem a arma vira bala de pistola).")
+
+
+func _test_zombie_weapon_drop_is_rare_and_worn(test_root: Node) -> void:
+	print("Testando arma solta por zumbi (rara, usada)...")
+	var samples := 2000
+	var dropped := 0
+	var kinds: Dictionary = {}
+	var worn_ok := true
+	for index in samples:
+		var roll := (float(index) + 0.5) / float(samples)
+		var weapon := DIRECTOR_SCRIPT.weapon_drop_for_kill(roll, fmod(float(index) * 0.618034, 1.0), fmod(float(index) * 0.414214, 1.0))
+		if weapon.is_empty():
+			continue
+		dropped += 1
+		kinds[int(weapon["kind"])] = true
+		var stats := WeaponStats.stats_for(int(weapon["kind"]))
+		var durability := int(weapon["durability"])
+		worn_ok = worn_ok and durability < int(stats["max_durability"]) and durability >= 1 and int(weapon["reserve"]) < int(stats["grant_reserve"]) and int(weapon["mag"]) == int(stats["mag_size"])
+	var rate := float(dropped) / float(samples)
+	if absf(rate - DIRECTOR_SCRIPT.WEAPON_DROP_CHANCE) > 0.01 or kinds.size() != DIRECTOR_SCRIPT.DROPPABLE_WEAPONS.size() or not worn_ok:
+		_fail(test_root, "Arma de zumbi: %.0f%% das mortes, todas as classes, pente cheio e desgastada; taxa=%.3f classes=%d usada=%s." % [DIRECTOR_SCRIPT.WEAPON_DROP_CHANCE * 100.0, rate, kinds.size(), worn_ok])
+		return
+	if DIRECTOR_SCRIPT.MAX_ZOMBIE_WEAPON_DROPS <= 0 or DIRECTOR_SCRIPT.ZOMBIE_WEAPON_LIFETIME > 120.0:
+		_fail(test_root, "Drop frequente precisa de limite e vida curta no chao; limite=%d vida=%.0f." % [DIRECTOR_SCRIPT.MAX_ZOMBIE_WEAPON_DROPS, DIRECTOR_SCRIPT.ZOMBIE_WEAPON_LIFETIME])
+		return
+	print("PASS: Zumbi solta arma usada em %.1f%% das mortes." % (rate * 100.0))
+
+
+func _test_zombie_weapon_drops_are_capped(test_root: Node) -> void:
+	print("Testando limite de armas soltas por zumbis no chao...")
+	var main = MAIN_SCRIPT.new()
+	var pickups: Array[GroundWeaponPickup] = []
+	for index in DIRECTOR_SCRIPT.MAX_ZOMBIE_WEAPON_DROPS + 5:
+		var pickup := GroundWeaponPickup.new()
+		pickups.append(pickup)
+		main.call("_track_zombie_weapon_drop", pickup)
+	var tracked: int = (main.get("zombie_weapon_drops") as Array).size()
+	var oldest_removed := pickups[0].is_queued_for_deletion() and pickups[4].is_queued_for_deletion()
+	var newest_kept := not pickups[pickups.size() - 1].is_queued_for_deletion()
+	var short_life := is_equal_approx(pickups[pickups.size() - 1].lifetime_seconds, DIRECTOR_SCRIPT.ZOMBIE_WEAPON_LIFETIME)
+	for pickup in pickups:
+		pickup.free()
+	main.free()
+	if tracked != DIRECTOR_SCRIPT.MAX_ZOMBIE_WEAPON_DROPS or not oldest_removed or not newest_kept or not short_life:
+		_fail(test_root, "Limite de %d armas de zumbi: rastreadas=%d antigas_removidas=%s nova_mantida=%s vida_curta=%s." % [DIRECTOR_SCRIPT.MAX_ZOMBIE_WEAPON_DROPS, tracked, oldest_removed, newest_kept, short_life])
+		return
+	print("PASS: So as %d armas de zumbi mais novas ficam no chao." % tracked)
 
 
 func _add_supply(test_root: Node, kind: int, amount: int) -> GroundSupplyPickup:

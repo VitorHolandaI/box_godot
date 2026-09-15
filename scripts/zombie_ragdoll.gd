@@ -9,6 +9,9 @@ const EYE_COLOR := Color(0.75, 0.05, 0.04)
 const CORPSE_COLLISION_LAYER := 32
 
 var torso_body: RigidBody3D
+## Escala do corpo do zumbi (brute, Tita...). Definida ANTES de entrar na arvore:
+## as partes nascem no tamanho certo em _ready. Antes o gigante virava corpo pequeno.
+var body_scale := Vector3.ONE
 
 
 ## Corpo sai do solver assim que assenta (parado) e, no limite, apos 6s.
@@ -180,10 +183,17 @@ func _create_limb(limb_name: String, limb_size: Vector3, limb_offset: Vector3, l
 	return _create_rigid_box(limb_name, limb_size, limb_offset, limb_color, limb_mass)
 
 
-func _create_rigid_box(node_name: String, box_size: Vector3, box_position: Vector3, color: Color, mass_value: float) -> RigidBody3D:
+## Posicao local escalada, subindo junto com os pes (mesma regra do zumbi vivo).
+func _scaled(local_position: Vector3) -> Vector3:
+	return local_position * body_scale + Vector3.UP * ZombieMutator.MODEL_FEET_Y * (1.0 - body_scale.y)
+
+
+func _create_rigid_box(node_name: String, base_size: Vector3, base_position: Vector3, color: Color, base_mass: float) -> RigidBody3D:
+	var box_size := base_size * body_scale
+	var box_position := _scaled(base_position)
 	var body := RigidBody3D.new()
 	body.name = node_name
-	body.mass = mass_value
+	body.mass = base_mass * body_scale.x * body_scale.y * body_scale.z
 	body.collision_layer = CORPSE_COLLISION_LAYER
 	body.collision_mask = 1
 	body.linear_damp = 1.2
@@ -218,12 +228,12 @@ func _add_eye(parent_body: RigidBody3D, eye_position: Vector3) -> void:
 	eye_material.emission = Color(0.3, 0.01, 0.0)
 
 	var mesh := BoxMesh.new()
-	mesh.size = Vector3(0.08, 0.08, 0.02)
+	mesh.size = Vector3(0.08, 0.08, 0.02) * body_scale
 	mesh.material = eye_material
 
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.mesh = mesh
-	mesh_instance.position = eye_position
+	mesh_instance.position = eye_position * body_scale
 	parent_body.add_child(mesh_instance)
 
 
@@ -232,7 +242,7 @@ func _create_neck_joint() -> void:
 	joint.name = "NeckJoint"
 	joint.node_a = NodePath("../Torso")
 	joint.node_b = NodePath("../Head")
-	joint.position = Vector3(0.0, 0.86, 0.0)
+	joint.position = _scaled(Vector3(0.0, 0.86, 0.0))
 	joint.rotation.z = PI * 0.5
 	joint.swing_span = deg_to_rad(28.0)
 	joint.twist_span = deg_to_rad(35.0)
@@ -247,6 +257,6 @@ func _create_joint(joint_name: String, path_a: NodePath, path_b: NodePath, ancho
 	joint.name = joint_name
 	joint.node_a = path_a
 	joint.node_b = path_b
-	joint.position = anchor
+	joint.position = _scaled(anchor)
 	joint.exclude_nodes_from_collision = true
 	add_child(joint)
