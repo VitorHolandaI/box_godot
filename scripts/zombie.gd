@@ -225,7 +225,11 @@ func _physics_process(delta: float) -> void:
 				var line_clear: bool = wall_detour.is_active() and _has_line_of_sight(target)
 				direction = wall_detour.steer(delta, global_position, direction, progress_watch.blocked_seconds, get_wall_normal() if is_on_wall() else Vector3.ZERO, line_clear)
 			var dash: RefCounted = _dash_for_type()
-			var dash_velocity: Vector3 = dash.update(delta, velocity, direction, distance, is_on_floor()) if dash != null and same_level else Vector3.ZERO
+			var dash_velocity := Vector3.ZERO
+			# Durante o voo o bote continua mesmo que o alvo mude de nivel;
+			# o voo so termina ao aterrissar (nunca zera velocidade no ar).
+			if dash != null and (same_level or dash.is_leaping()):
+				dash_velocity = dash.update(delta, velocity, direction, distance, is_on_floor(), gravity)
 			if dash != null and dash.is_leaping():
 				velocity = dash_velocity
 				_check_charge_hit(target, direction)
