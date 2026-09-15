@@ -64,6 +64,7 @@ var pending_zombie_spawns: Array[Dictionary] = []
 var zombie_cache: Dictionary = {}
 var smoke_test_mode := false
 var player_vision_elapsed := 0.0
+var player_vision_tick := 0
 var corpse_cleanup_elapsed := 0.0
 var bot_ai := PlayerBotAI.new()
 var lag_probe := NetworkLagProbe.from_arguments(OS.get_cmdline_user_args())
@@ -848,6 +849,7 @@ func _update_player_vision(delta: float) -> void:
 	if player_vision_elapsed < PLAYER_VISION_UPDATE_INTERVAL:
 		return
 	player_vision_elapsed = 0.0
+	player_vision_tick += 1
 	for zombie_node in get_tree().get_nodes_in_group("zombies"):
 		var zombie := zombie_node as CharacterBody3D
 		if zombie == null or not is_instance_valid(zombie) or bool(zombie.get("is_dead")):
@@ -856,10 +858,17 @@ func _update_player_vision(delta: float) -> void:
 		if int(zombie.get("lod_level")) == 2: # LodLevel.FAR
 			continue
 		var visible_to_player := false
+		# Zumbi ja visivel reconfirma o ray a cada 2 ticks: com a horda em
+		# cima do jogador (todos no cone), metade dos rays some e o atraso
+		# maximo de ocultacao passa de 0.12s para 0.24s (imperceptivel).
+		var needs_ray := bool(zombie.get("vision_visible")) == false or player_vision_tick % 2 == 0
 		for player_node in local_players:
 			var player := player_node as CharacterBody3D
 			if player == null or not is_instance_valid(player) or not player.can_see_position(zombie.global_position):
 				continue
+			if not needs_ray:
+				visible_to_player = true
+				break
 			if _has_clear_player_vision(player, zombie):
 				visible_to_player = true
 				break
