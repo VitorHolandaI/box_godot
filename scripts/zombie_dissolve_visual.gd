@@ -12,7 +12,7 @@ extends RefCounted
 
 const DISSOLVE_SHADER: Shader = preload("res://shaders/zombie_dissolve.gdshader")
 const DUST_NODE_NAME := "DissolveDust"
-const DUST_AMOUNT := 36
+const DUST_AMOUNT := 12
 const DUST_LIFETIME := 1.3
 const DISSOLVE_PARAMETER := &"dissolve_amount"
 
