@@ -8,7 +8,7 @@ extends RefCounted
 ##   var stats := WeaponStats.stats_for(PlayerCharacter.Weapon.SHOTGUN)
 ##   if stats.is_empty(): return # arma padrao
 
-enum Kind { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM }
+enum Kind { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE }
 
 const STATS_BY_KIND: Dictionary = {
 	Kind.SHOTGUN: {
@@ -55,6 +55,36 @@ const STATS_BY_KIND: Dictionary = {
 		"spread_deg": 1.0,
 		"degraded_spread_deg": 2.5,
 		"noise_radius": 70.0,
+	},
+	Kind.DOUBLE_BARREL: {
+		"label": "Escopeta Dupla",
+		"damage": 12,
+		"pellets": 12,
+		"mag_size": 2,
+		"max_reserve": 14,
+		"grant_reserve": 14,
+		"attack_cooldown": 0.7,
+		"max_durability": 26,
+		"degraded_below": 10,
+		"jam_chance": 0.12,
+		"spread_deg": 14.0,
+		"degraded_spread_deg": 20.0,
+		"noise_radius": 80.0,
+	},
+	Kind.CARBINE: {
+		"label": "Carabina",
+		"damage": 48,
+		"pellets": 1,
+		"mag_size": 10,
+		"max_reserve": 60,
+		"grant_reserve": 60,
+		"attack_cooldown": 0.5,
+		"max_durability": 80,
+		"degraded_below": 28,
+		"jam_chance": 0.08,
+		"spread_deg": 0.7,
+		"degraded_spread_deg": 2.0,
+		"noise_radius": 72.0,
 	},
 }
 
