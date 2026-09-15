@@ -31,6 +31,11 @@ var region_rid := RID()
 var navigation_mesh: NavigationMesh = null
 var global_bounds := AABB()
 
+## Registro estatico das navecacoes vivas: consulta de G2 sem
+## get_nodes_in_group (sem alloc, sem cast por no, sem depender de grupo).
+## Limpeza no _exit_tree (padrao do ZombieFlockCoordinator.instance).
+static var _registry: Array = []
+
 
 func _init(building_local_size: Vector3 = Vector3.ZERO, building_local_min: Vector3 = Vector3.ZERO) -> void:
 	name = "BuildingNavigation"
@@ -51,6 +56,7 @@ func _ready() -> void:
 		return
 	add_to_group(GROUP_NAME)
 	global_bounds = _compute_global_bounds(building)
+	_registry.append(self)
 	navigation_mesh = _create_navigation_mesh()
 	var source := build_source_geometry(building)
 	NavigationServer3D.bake_from_source_geometry_data(navigation_mesh, source)
@@ -68,6 +74,7 @@ func _ready() -> void:
 
 
 func _exit_tree() -> void:
+	_registry.erase(self)
 	if region_rid.is_valid():
 		NavigationServer3D.free_rid(region_rid)
 		region_rid = RID()
@@ -104,6 +111,20 @@ func contains_point(global_point: Vector3) -> bool:
 static func find_for_position(tree: SceneTree, global_point: Vector3) -> BuildingNavigation:
 	for node in tree.get_nodes_in_group(GROUP_NAME):
 		var navigation := node as BuildingNavigation
+		if navigation != null and navigation.contains_point(global_point):
+			return navigation
+	return null
+
+
+## Consulta em cache (G2): valida o hint com 1 contains_point (1 AABB) e so
+## varre o registro quando sai do volume. ~40k AABB-checks/s de horda na rua
+## caem para 1 por zumbi por replan (0.5s).
+## Uso: var navigation := BuildingNavigation.find_cached(ponto, hint_do_router)
+static func find_cached(global_point: Vector3, hint: BuildingNavigation = null) -> BuildingNavigation:
+	if hint != null and is_instance_valid(hint) and hint.contains_point(global_point):
+		return hint
+	for entry in _registry:
+		var navigation := entry as BuildingNavigation
 		if navigation != null and navigation.contains_point(global_point):
 			return navigation
 	return null
