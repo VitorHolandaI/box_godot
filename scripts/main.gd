@@ -37,12 +37,10 @@ const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 6
 const NETWORK_ZOMBIE_PROXY_FACTORY_SCRIPT := preload("res://scripts/network_zombie_proxy_factory.gd")
 const AMMO_LOOT_DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd")
+const SHARED_VISION_SCRIPT := preload("res://scripts/shared_vision.gd")
 const ZOMBIE_BOSS_BRAIN_SCRIPT := preload("res://scripts/zombie_boss_brain.gd")
 const ZOMBIE_SCRIPT := preload("res://scripts/zombie.gd")
 const PLAYER_VISION_UPDATE_INTERVAL := 0.12
-## Ray de oclusao de visao so dentro de 20m: alem disso o dissolve ja cobre
-## e o estado anterior persiste (zumbi visto continua, oculto segue oculto).
-const VISION_RAY_MAX_RANGE_SQ := 400.0
 const PLAYER_SPAWN_POINTS := [
 	Vector3(-13.0, 1.18, 9.5),
 	Vector3(-11.0, 1.18, 9.5),
@@ -1035,6 +1033,9 @@ func _update_player_vision(delta: float) -> void:
 		return
 	player_vision_elapsed = 0.0
 	player_vision_tick += 1
+	# Visao compartilhada: aliados (locais e de rede) revelam zumbis para todos.
+	var observers := SHARED_VISION_SCRIPT.observers(get_tree())
+	var clear_line := Callable(self, "_has_clear_player_vision")
 	for zombie_node in get_tree().get_nodes_in_group("zombies"):
 		var zombie := zombie_node as CharacterBody3D
 		if zombie == null or not is_instance_valid(zombie) or bool(zombie.get("is_dead")):
@@ -1043,28 +1044,11 @@ func _update_player_vision(delta: float) -> void:
 		if int(zombie.get("lod_level")) == 2: # LodLevel.FAR
 			continue
 		var already_visible := bool(zombie.get("vision_visible"))
-		var visible_to_player := false
 		# Zumbi ja visivel reconfirma o ray a cada 2 ticks: com a horda em
 		# cima do jogador (todos no cone), metade dos rays some e o atraso
 		# maximo de ocultacao passa de 0.12s para 0.24s (imperceptivel).
 		var needs_ray := not already_visible or player_vision_tick % 2 == 0
-		for player_node in local_players:
-			var player := player_node as CharacterBody3D
-			if player == null or not is_instance_valid(player) or not player.can_see_position(zombie.global_position):
-				continue
-			# Alem de 20m o dissolve mal se percebe: nenhum ray — o estado
-			# anterior persiste (ja visto continua visivel, nunca visto segue
-			# oculto ate aproximar). O ray so paga quando muda algo perto.
-			if player.global_position.distance_squared_to(zombie.global_position) > VISION_RAY_MAX_RANGE_SQ:
-				visible_to_player = visible_to_player or already_visible
-				continue
-			if not needs_ray:
-				visible_to_player = true
-				break
-			if _has_clear_player_vision(player, zombie):
-				visible_to_player = true
-				break
-		zombie.set_vision_visible(visible_to_player)
+		zombie.set_vision_visible(SHARED_VISION_SCRIPT.is_seen_by_any(observers, zombie, already_visible, needs_ray, clear_line))
 
 
 func _has_clear_player_vision(player: CharacterBody3D, zombie: CharacterBody3D) -> bool:
