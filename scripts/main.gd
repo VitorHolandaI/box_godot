@@ -79,13 +79,12 @@ func _ready() -> void:
 	survival_wave_controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(Callable(self, "_spawn_zombie"))
 	if not NetworkSession.is_client():
 		wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
-		survival_wave_controller.wave_started.connect(wave_supply_controller.refresh_wave)
-		survival_wave_controller.wave_started.connect(_reset_wave_lives)
 		airdrop_controller = AIRDROP_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
 		airdrop_controller.airdrop_requested.connect(_launch_airdrop)
-		survival_wave_controller.wave_started.connect(airdrop_controller.on_wave_started)
-		survival_wave_controller.wave_started.connect(_broadcast_wave_state)
-		survival_wave_controller.wave_started.connect(_spawn_scattered_loot)
+		# Transicao de onda escalonada: refresh de suprimentos, airdrop, loot
+		# e HUD rodam em frames distintos para nao varrer 600 zumbis 4x no
+		# mesmo frame (hitch de 1 frame a cada nova hora).
+		survival_wave_controller.wave_started.connect(_on_wave_transition)
 		wave_supply_controller.refresh_wave(0)
 		_spawn_scattered_loot()
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
@@ -255,7 +254,7 @@ func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3,
 		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count)
 
 
-@rpc("authority", "call_remote", "reliable")
+@rpc("authority", "call_remote", "unreliable_ordered")
 func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1) -> void:
 	if not NetworkSession.is_client():
 		return
@@ -765,6 +764,21 @@ func get_survival_hud_text() -> String:
 	return survival_wave_controller.get_hud_text() if NetworkSession.survival_mode else ""
 
 
+## Transicao de onda: o barato roda na hora (vidas, estado do HUD) e o que
+## varre o mundo (suprimentos, airdrop, loot) entra escalonado por timers.
+## Uso: conectado ao sinal wave_started do SurvivalWaveController.
+func _on_wave_transition(wave_index: int) -> void:
+	_reset_wave_lives(wave_index)
+	_broadcast_wave_state(wave_index)
+	_schedule_wave_task(0.12, func() -> void: if wave_supply_controller != null: wave_supply_controller.refresh_wave(wave_index))
+	_schedule_wave_task(0.24, func() -> void: if airdrop_controller != null: airdrop_controller.on_wave_started(wave_index))
+	_schedule_wave_task(0.36, func() -> void: _spawn_scattered_loot(wave_index))
+
+
+func _schedule_wave_task(delay: float, task: Callable) -> void:
+	get_tree().create_timer(delay, false).timeout.connect(task)
+
+
 func _get_player_spawn_position(slot: int) -> Vector3:
 	var spawn_slot := slot % PLAYER_SPAWN_POINTS.size()
 	var marker_path := "GeneratedCity/CentralSafehouse/PlayerSpawn%d" % (spawn_slot + 1)
@@ -782,6 +796,9 @@ func _update_player_vision(delta: float) -> void:
 	for zombie_node in get_tree().get_nodes_in_group("zombies"):
 		var zombie := zombie_node as CharacterBody3D
 		if zombie == null or not is_instance_valid(zombie) or bool(zombie.get("is_dead")):
+			continue
+		# LOD FAR ja fica oculto por design: nenhum ray de visao nele.
+		if int(zombie.get("lod_level")) == 2: # LodLevel.FAR
 			continue
 		var visible_to_player := false
 		for player_node in local_players:
