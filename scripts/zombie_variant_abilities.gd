@@ -15,15 +15,13 @@ const BURST_PLAYER_DAMAGE := 40
 const BURST_ZOMBIE_DAMAGE := 70
 const BURST_DOOR_DAMAGE := 60
 const LEAP_RANGE := 4.5
-const LEAP_SPEED := 8.5
-const LEAP_UP_SPEED := 3.2
-const LEAP_DURATION := 0.35
+const LEAP_AIRTIME := 0.55
+const LEAP_SPEED_CAP := 12.0
 const LEAP_COOLDOWN := 3.5
 const JUMP_MIN_RANGE := 4.0
 const JUMP_MAX_RANGE := 12.0
-const JUMP_FORWARD_SPEED := 6.5
-const JUMP_UP_SPEED := 11.0
-const JUMP_DURATION := 0.9
+const JUMP_AIRTIME := 1.4
+const JUMP_SPEED_CAP := 12.0
 const JUMP_COOLDOWN := 4.0
 ## Bloater explode sozinho colado no alvo (kamikaze) e da uma arrancada curta.
 const BLOATER_DETONATE_DISTANCE := 1.8
@@ -105,13 +103,15 @@ class DashState extends RefCounted:
 		cooldown = dash_cooldown
 
 	## Velocidade da arrancada neste tick, ou Vector3.ZERO quando nao arranca.
-	func update(delta: float, current_velocity: Vector3, direction: Vector3, distance: float, on_floor: bool) -> Vector3:
+	## _gravity e may_launch existem para o bote balistico compartilhar a
+	## chamada; a arrancada e rente ao chao e ignora a gravidade.
+	func update(delta: float, current_velocity: Vector3, direction: Vector3, distance: float, on_floor: bool, _gravity: float = 22.0, may_launch: bool = true) -> Vector3:
 		var step := maxf(delta, 0.0)
 		_cooldown_left = maxf(_cooldown_left - step, 0.0)
 		if _time_left > 0.0:
 			_time_left -= step
 			return Vector3(_velocity.x, current_velocity.y, _velocity.z) if _time_left > 0.0 else Vector3.ZERO
-		if _cooldown_left > 0.0 or not on_floor or distance > max_range or distance < min_range:
+		if _cooldown_left > 0.0 or not on_floor or not may_launch or distance > max_range or distance < min_range:
 			return Vector3.ZERO
 		var flat := Vector3(direction.x, 0.0, direction.z).normalized()
 		if flat.is_zero_approx():
@@ -125,16 +125,74 @@ class DashState extends RefCounted:
 		return _time_left > 0.0
 
 
-## Bote do leaper: curto, rapido e com pulo.
-class LeapState extends DashState:
+## Bote/salto balistico: resolve o arco ate o alvo e mantem o voo ate
+## aterrissar. A velocidade horizontal e distancia/tempo_de_voo (alveja onde
+## o player esta) e o impulso vertical g*t/2 fecha o arco de volta ao chao,
+## entao o zumbi nunca fica pendurado no ar com velocidade zerada.
+## Uso: velocity = leap.update(delta, velocity, dir, dist, on_floor, gravity)
+class ArcLeapState extends RefCounted:
+	const MAX_FLIGHT_TIME := 1.6
+	var min_range: float
+	var max_range: float
+	var airtime: float
+	var speed_cap: float
+	var cooldown: float
+	var _cooldown_left := 0.0
+	var _flying := false
+	var _flight_time := 0.0
+	var _launch := Vector3.ZERO
+
+	func _init(range_min: float, range_max: float, jump_airtime: float, jump_speed_cap: float, dash_cooldown: float) -> void:
+		min_range = range_min
+		max_range = range_max
+		airtime = jump_airtime
+		speed_cap = jump_speed_cap
+		cooldown = dash_cooldown
+
+	## Velocidade deste tick: ZERO fora do bote; no lancamento, o impulso do
+	## arco; em voo, horizontal preservada com o Y em queda livre (o caller
+	## aplica a gravidade antes). may_launch=false bloqueia um novo bote
+	## (alvo em outro nivel) sem abortar um voo em progresso.
+	func update(delta: float, current_velocity: Vector3, direction: Vector3, distance: float, on_floor: bool, gravity: float = 22.0, may_launch: bool = true) -> Vector3:
+		var step := maxf(delta, 0.0)
+		_cooldown_left = maxf(_cooldown_left - step, 0.0)
+		if _flying:
+			_flight_time += step
+			if (on_floor and _flight_time > 0.05) or _flight_time > MAX_FLIGHT_TIME:
+				_flying = false
+				return Vector3.ZERO
+			return Vector3(_launch.x, current_velocity.y, _launch.z)
+		if _cooldown_left > 0.0 or not on_floor or not may_launch or distance > max_range or distance < min_range:
+			return Vector3.ZERO
+		var flat := Vector3(direction.x, 0.0, direction.z).normalized()
+		if flat.is_zero_approx():
+			return Vector3.ZERO
+		# Arco balistico: vh = d/t alcaca a posicao do alvo; vy = g*t/2
+		# devolve o zumbi ao chao no mesmo instante. Cap evita vh absurdo
+		# quando o bote dispara de muito perto.
+		var flight := airtime
+		var horizontal: float = minf(distance / flight, speed_cap)
+		flight = maxf(distance / horizontal, 0.2)
+		_launch = flat * horizontal + Vector3.UP * (gravity * flight * 0.5)
+		_flying = true
+		_flight_time = 0.0
+		_cooldown_left = cooldown
+		return _launch
+
+	func is_leaping() -> bool:
+		return _flying
+
+
+## Bote do leaper: arco baixo e rapido de perto, pousando no alvo.
+class LeapState extends ArcLeapState:
 	func _init() -> void:
-		super(0.0, ZombieVariantAbilities.LEAP_RANGE, ZombieVariantAbilities.LEAP_SPEED, ZombieVariantAbilities.LEAP_UP_SPEED, ZombieVariantAbilities.LEAP_DURATION, ZombieVariantAbilities.LEAP_COOLDOWN)
+		super(0.0, ZombieVariantAbilities.LEAP_RANGE, ZombieVariantAbilities.LEAP_AIRTIME, ZombieVariantAbilities.LEAP_SPEED_CAP, ZombieVariantAbilities.LEAP_COOLDOWN)
 
 
 ## Pulo alto do saltador: arco de ~5 m de altura de 4 a 12 m do alvo.
-class HighJumpState extends DashState:
+class HighJumpState extends ArcLeapState:
 	func _init() -> void:
-		super(ZombieVariantAbilities.JUMP_MIN_RANGE, ZombieVariantAbilities.JUMP_MAX_RANGE, ZombieVariantAbilities.JUMP_FORWARD_SPEED, ZombieVariantAbilities.JUMP_UP_SPEED, ZombieVariantAbilities.JUMP_DURATION, ZombieVariantAbilities.JUMP_COOLDOWN)
+		super(ZombieVariantAbilities.JUMP_MIN_RANGE, ZombieVariantAbilities.JUMP_MAX_RANGE, ZombieVariantAbilities.JUMP_AIRTIME, ZombieVariantAbilities.JUMP_SPEED_CAP, ZombieVariantAbilities.JUMP_COOLDOWN)
 
 
 ## Arrancada do bloater kamikaze: curta e baixa, para se jogar no jogador.
