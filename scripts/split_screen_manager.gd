@@ -4,6 +4,9 @@ const LOCAL_CAMERA_SCRIPT := preload("res://scripts/local_camera.gd")
 const VISION_OVERLAY_LAYER_START := 17
 const MINIMAP_SIZE := 150.0
 const MINIMAP_WORLD_EXTENT := 160.0
+# Fim de onda: com poucos zumbis vivos o minimapa mostra todos, para ninguem
+# ficar cacando o ultimo escondido atras de um predio.
+const STRAGGLER_REVEAL_COUNT := 5
 const MINIMAP_PLAYER_COLORS := [
 	Color(0.4, 1.0, 0.4),
 	Color(1.0, 0.85, 0.2),
@@ -40,7 +43,8 @@ class MinimapView extends Control:
 			var zombie := zombie_node as Node3D
 			if zombie == null or not is_instance_valid(zombie):
 				continue
-			var zombie_point := center + Vector2(zombie.global_position.x, zombie.global_position.z) * scale_value
+			# Zumbi fora do alcance do mapa fica preso na borda, apontando a direcao.
+			var zombie_point := (center + Vector2(zombie.global_position.x, zombie.global_position.z) * scale_value).clamp(Vector2.ONE * 6.0, size - Vector2.ONE * 6.0)
 			draw_circle(zombie_point, 5.0, Color(1.0, 0.12, 0.08, 0.95))
 			draw_arc(zombie_point, 8.0, 0.0, TAU, 16, Color(1.0, 0.55, 0.1, 0.8), 2.0)
 
@@ -49,6 +53,7 @@ var view_panels: Array[Control] = []
 var viewports: Array[SubViewport] = []
 var hud_labels: Array[Label] = []
 var minimaps: Array[Control] = []
+var straggler_reveal_count := STRAGGLER_REVEAL_COUNT
 
 
 func configure(local_players: Array[Node]) -> void:
@@ -71,8 +76,8 @@ func _process(_delta: float) -> void:
 	var all_zombies := get_tree().get_nodes_in_group("zombies")
 	for index in minimaps.size():
 		var view_player: Node = players[index] if index < players.size() else null
-		var reveal_zombies: Array = []
-		if view_player != null and is_instance_valid(view_player) and view_player.has_method("is_sonar_active") and view_player.is_sonar_active():
+		var reveal_zombies: Array = stragglers_to_reveal(all_zombies, straggler_reveal_count)
+		if reveal_zombies.is_empty() and view_player != null and is_instance_valid(view_player) and view_player.has_method("is_sonar_active") and view_player.is_sonar_active():
 			reveal_zombies = _zombies_near(view_player as Node3D, all_zombies, float(view_player.get_sonar_reveal_radius()))
 		minimaps[index].tracked_players = all_players
 		minimaps[index].tracked_zombies = reveal_zombies
@@ -95,6 +100,16 @@ func _process(_delta: float) -> void:
 			player.get_sonar_text(),
 			get_tree().current_scene.get_survival_hud_text() if get_tree().current_scene.has_method("get_survival_hud_text") else "",
 		]
+
+
+## Todos os zumbis vivos quando restam no maximo `max_count`; senao, nenhum.
+## Uso: var revelados := preload("res://scripts/split_screen_manager.gd").stragglers_to_reveal(zumbis, 5)
+static func stragglers_to_reveal(zombies: Array, max_count: int) -> Array:
+	var alive: Array = []
+	for zombie_node in zombies:
+		if is_instance_valid(zombie_node) and zombie_node.get("is_dead") != true:
+			alive.append(zombie_node)
+	return alive if alive.size() <= max_count else []
 
 
 ## Filtra os zumbis dentro do raio de revelacao do pulso sonar.

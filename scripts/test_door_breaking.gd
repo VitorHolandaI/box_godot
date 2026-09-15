@@ -7,6 +7,8 @@ extends RefCounted
 const DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
 const DEBRIS_SCRIPT := preload("res://scripts/door_debris_effect.gd")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
+const DOOR_REPLICATOR_SCRIPT := preload("res://scripts/door_state_replicator.gd")
+const DOOR_NETWORK_STATE_SCRIPT := preload("res://scripts/door_network_state.gd")
 
 
 func run(test_root: Node) -> void:
@@ -16,12 +18,18 @@ func run(test_root: Node) -> void:
 	await _test_player_knife_breaks_door(test_root)
 	_test_network_break_animates_only_after_first_snapshot(test_root)
 	_test_debris_rejects_invalid_size(test_root)
+	_test_replicator_sends_only_changed_doors(test_root)
+	_test_replicator_full_state_once_per_peer(test_root)
+	_test_client_applies_door_change_with_animation(test_root)
 
 
 func _test_broken_door_frees_doorway_and_bursts(test_root: Node) -> void:
 	print("Testando porta arrombada liberando o vao com destrocos...")
 	var door := _add_door(test_root, Vector3(-700.0, 0.0, -700.0))
 	door.take_damage(int(door.get("max_health")), Vector3.FORWARD, "melee", null)
+	# set_deferred so roda no fim do frame ocioso; so o physics_frame nao basta
+	# quando este grupo roda sozinho.
+	await test_root.get_tree().process_frame
 	await test_root.get_tree().physics_frame
 	var collision := door.get_node("DoorCollision") as CollisionShape3D
 	var panel := door.get_node("DoorPanel") as Node3D
@@ -129,6 +137,55 @@ func _test_debris_rejects_invalid_size(test_root: Node) -> void:
 		_fail(test_root, "Destrocos com tamanho invalido deveriam manter o tamanho padrao.")
 		return
 	print("PASS: Destrocos recusam tamanho invalido.")
+
+
+func _test_replicator_sends_only_changed_doors(test_root: Node) -> void:
+	print("Testando replicacao de portas so quando mudam...")
+	var door := _add_door(test_root, Vector3(-720.0, 0.0, -700.0))
+	var replicator = DOOR_REPLICATOR_SCRIPT.new()
+	replicator.watch(test_root.get_tree())
+	var idle: Dictionary = replicator.take_changes()
+	door.interact()
+	var opened: Dictionary = replicator.take_changes()
+	var drained: Dictionary = replicator.take_changes()
+	door.take_damage(int(door.get("max_health")), Vector3.FORWARD, "melee", null)
+	var broken: Dictionary = replicator.take_changes()
+	var path := str(test_root.get_tree().current_scene.get_path_to(door))
+	door.queue_free()
+	var opened_ok: bool = opened.get(path, []) == [true, false]
+	var broken_ok: bool = broken.get(path, []) == [true, true]
+	if not idle.is_empty() or not opened_ok or not drained.is_empty() or not broken_ok:
+		_fail(test_root, "Replicador deveria enviar so mudancas; parado=%s aberta=%s repetido=%s quebrada=%s." % [idle, opened, drained, broken])
+		return
+	print("PASS: Portas vao para a rede apenas quando abrem, fecham ou quebram.")
+
+
+func _test_replicator_full_state_once_per_peer(test_root: Node) -> void:
+	print("Testando estado completo de portas uma vez por jogador...")
+	var replicator = DOOR_REPLICATOR_SCRIPT.new()
+	var first: Array[int] = replicator.take_unsynced_peers([7, 9])
+	var second: Array[int] = replicator.take_unsynced_peers([7, 9, 11])
+	var after_leave: Array[int] = replicator.take_unsynced_peers([11])
+	var rejoin: Array[int] = replicator.take_unsynced_peers([7, 11])
+	if first != [7, 9] or second != [11] or not after_leave.is_empty() or rejoin != [7]:
+		_fail(test_root, "Estado completo esperado [7,9] / [11] / [] / [7]; veio %s / %s / %s / %s." % [first, second, after_leave, rejoin])
+		return
+	print("PASS: Jogador que entra recebe o estado completo das portas uma unica vez.")
+
+
+func _test_client_applies_door_change_with_animation(test_root: Node) -> void:
+	print("Testando cliente aplicando mudanca de porta recebida...")
+	var door := _add_door(test_root, Vector3(-724.0, 0.0, -700.0))
+	DOOR_NETWORK_STATE_SCRIPT.apply(test_root.get_tree(), {})
+	var path := str(test_root.get_tree().current_scene.get_path_to(door))
+	DOOR_NETWORK_STATE_SCRIPT.apply_changes(test_root.get_tree(), {path: [true, true], "Nao/Existe": [true, true]})
+	var destroyed := bool(door.get("is_destroyed"))
+	var debris := door.get_node_or_null("DoorDebris")
+	door.queue_free()
+	if not destroyed or debris == null:
+		_fail(test_root, "Mudanca recebida depois do estado completo deveria quebrar a porta com destrocos; quebrada=%s destrocos=%s." % [destroyed, debris])
+		return
+	print("PASS: Cliente quebra a porta ao vivo e ignora caminhos invalidos.")
 
 
 func _add_door(test_root: Node, position: Vector3) -> AnimatableBody3D:

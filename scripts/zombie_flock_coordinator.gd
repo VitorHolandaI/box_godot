@@ -13,8 +13,11 @@ const LOD_NEAR_DIST_SQ := 484.0 # 22.0 * 22.0
 const LOD_MID_DIST_SQ := 2500.0 # 50.0 * 50.0
 const PLAYER_SCAN_INTERVAL := 0.25
 const FLOCK_UPDATE_INTERVAL := 0.2
+const CHASE_HEARTBEAT_INTERVAL := 10.0
 
 static var instance: ZombieFlockCoordinator = null
+## Diagnostico de zumbis travados (`-- --debug-stuck-zombies`), lido tambem por zombie.gd.
+static var debug_stuck_zombies := "--debug-stuck-zombies" in OS.get_cmdline_user_args()
 
 var _spatial_cells: Dictionary = {}
 var _cached_players: Array[CharacterBody3D] = []
@@ -23,6 +26,7 @@ var _flock_update_elapsed := 0.0
 var _horde_members: Dictionary = {}
 var _next_horde_id := 1
 var _random_source := RandomNumberGenerator.new()
+var _chase_heartbeat_elapsed := 0.0
 
 
 func _enter_tree() -> void:
@@ -43,6 +47,29 @@ func _physics_process(delta: float) -> void:
 	_flock_update_elapsed = 0.0
 	_update_cached_players(update_delta)
 	_update_flock_clusters()
+	_log_chase_heartbeat(update_delta)
+
+
+## Diagnostico com --debug-stuck-zombies: prova que houve perseguicao quando o
+## log de zumbis travados sai vazio (sem alvo vivo, nenhum zumbi e medido).
+func _log_chase_heartbeat(delta: float) -> void:
+	if not debug_stuck_zombies or NetworkSession.is_client():
+		return
+	_chase_heartbeat_elapsed += delta
+	if _chase_heartbeat_elapsed < CHASE_HEARTBEAT_INTERVAL:
+		return
+	_chase_heartbeat_elapsed = 0.0
+	var alive := 0
+	var chasing := 0
+	var most_stalled := 0.0
+	for node in get_tree().get_nodes_in_group("zombies"):
+		if bool(node.get("is_dead")):
+			continue
+		alive += 1
+		if is_instance_valid(node.get("alert_target")):
+			chasing += 1
+			most_stalled = maxf(most_stalled, float(node.get("progress_watch").no_progress_seconds))
+	print(JSON.stringify({"event": "zombie_chase_heartbeat", "alive": alive, "chasing": chasing, "players_alive": _cached_players.size(), "max_no_progress_seconds": most_stalled}))
 
 
 func _update_cached_players(delta: float) -> void:

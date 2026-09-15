@@ -3,6 +3,8 @@ extends RefCounted
 
 const BUILDING_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/building_assembler.gd")
 const MESH_BATCHER: GDScript = preload("res://scripts/procedural/assemblers/mesh_batcher.gd")
+# Acima do ultimo andar: cobre telhado de casa e a casinha da escada do terraco.
+const ROOF_CLEARANCE := 3.0
 
 
 static func assemble(city, parent: Node3D) -> void:
@@ -48,7 +50,7 @@ static func _configure_building_cutout(building: StaticBody3D, blueprint) -> voi
 	var corner_a := building.to_global(Vector3.ZERO)
 	var corner_b := building.to_global(Vector3(blueprint.width, 0.0, blueprint.depth))
 	var building_min := Vector3(minf(corner_a.x, corner_b.x), building.global_position.y, minf(corner_a.z, corner_b.z))
-	var building_max := Vector3(maxf(corner_a.x, corner_b.x), building.global_position.y + blueprint.floors * blueprint.floor_height + 2.0, maxf(corner_a.z, corner_b.z))
+	var building_max := Vector3(maxf(corner_a.x, corner_b.x), building.global_position.y + blueprint.floors * blueprint.floor_height + ROOF_CLEARANCE, maxf(corner_a.z, corner_b.z))
 	configure_cutout_bounds(building, building_min, building_max)
 
 

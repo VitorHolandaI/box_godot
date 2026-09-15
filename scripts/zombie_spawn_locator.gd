@@ -10,6 +10,9 @@ const SURVIVAL_INNER_RADIUS := 18.0
 const SURVIVAL_OUTER_RADIUS := 27.0
 const SURVIVAL_MIN_PLAYER_DISTANCE := 8.0
 const SURVIVAL_MIN_ZOMBIE_DISTANCE := 1.2
+const NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation/building_navigation.gd")
+const SPAWN_CLEARANCE_RADIUS := 0.7
+const STATIC_WORLD_MASK := 1
 
 var random_source: RandomNumberGenerator
 
@@ -40,6 +43,8 @@ func _pick_survival_position(tree: SceneTree) -> Vector3:
 
 
 func _is_survival_clear(candidate: Vector3, tree: SceneTree) -> bool:
+	if not is_open_ground(candidate, tree):
+		return false
 	for player_node in tree.get_nodes_in_group("player"):
 		var player := player_node as Node3D
 		if player != null and candidate.distance_to(player.global_position) < SURVIVAL_MIN_PLAYER_DISTANCE:
@@ -69,6 +74,22 @@ func _pick_forest_position(tree: SceneTree) -> Vector3:
 			if _is_far_from_players(candidate, tree) and _is_clear_of_zombies(candidate, tree):
 				return candidate
 	return INVALID_SPAWN_POSITION
+
+
+## Ponto na rua: fora do volume de qualquer predio com navmesh (inclusive a
+## margem da calcada) e sem colisao estatica no raio do corpo. O anel de spawn
+## da sobrevivencia cruza lotes, e zumbis nasciam dentro de paredes e casas.
+## Uso: if locator.is_open_ground(Vector3(20.0, 1.0, 5.0), get_tree()): spawn()
+func is_open_ground(candidate: Vector3, tree: SceneTree) -> bool:
+	if NAVIGATION_SCRIPT.find_for_position(tree, candidate) != null:
+		return false
+	var sphere := SphereShape3D.new()
+	sphere.radius = SPAWN_CLEARANCE_RADIUS
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = sphere
+	query.transform = Transform3D(Basis.IDENTITY, candidate)
+	query.collision_mask = STATIC_WORLD_MASK
+	return tree.root.get_world_3d().direct_space_state.intersect_shape(query, 1).is_empty()
 
 
 func _is_far_from_players(candidate: Vector3, tree: SceneTree) -> bool:

@@ -8,28 +8,34 @@ extends Node
 ## isolado, entao consultas nunca atravessam paredes de um vizinho.
 ## Uso:
 ##   building.add_child(BuildingNavigation.new(Vector3(20.0, 20.4, 16.0)))
+##   safehouse.add_child(BuildingNavigation.new(Vector3(12.8, 6.6, 12.8), Vector3(-6.4, 0.0, -6.4)))
 ##   var path := BuildingNavigation.find_for_position(tree, zombie_pos).get_path_between(zombie_pos, target_pos)
 
 const GROUP_NAME := "building_navigation"
 const OUTDOOR_MARGIN := 2.5
 const CELL_SIZE := 0.15
 const CELL_HEIGHT := 0.1
-const AGENT_RADIUS := 0.45
+# Capsula do zumbi tem raio 0.56: com 0.45 a rota raspava quinas (batente da casa segura).
+const AGENT_RADIUS := 0.6
 const AGENT_HEIGHT := 2.0
 const AGENT_MAX_CLIMB := 0.3
 const AGENT_MAX_SLOPE := 40.0
 const FEET_OFFSET := 1.1
 
 var local_size := Vector3.ZERO
+## Canto minimo do volume no espaco local do corpo: predios procedurais nascem
+## no canto (zero); a casa segura tem a origem no centro.
+var local_min := Vector3.ZERO
 var map_rid := RID()
 var region_rid := RID()
 var navigation_mesh: NavigationMesh = null
 var global_bounds := AABB()
 
 
-func _init(building_local_size: Vector3 = Vector3.ZERO) -> void:
+func _init(building_local_size: Vector3 = Vector3.ZERO, building_local_min: Vector3 = Vector3.ZERO) -> void:
 	name = "BuildingNavigation"
 	local_size = building_local_size
+	local_min = building_local_min
 
 
 func _ready() -> void:
@@ -118,7 +124,7 @@ func build_source_geometry(building: StaticBody3D) -> NavigationMeshSourceGeomet
 		source.add_faces(box_mesh.get_faces(), shape_node.transform)
 	var ground := BoxMesh.new()
 	ground.size = Vector3(local_size.x + OUTDOOR_MARGIN * 2.0, 0.1, local_size.z + OUTDOOR_MARGIN * 2.0)
-	source.add_faces(ground.get_faces(), Transform3D(Basis.IDENTITY, Vector3(local_size.x * 0.5, -0.1, local_size.z * 0.5)))
+	source.add_faces(ground.get_faces(), Transform3D(Basis.IDENTITY, local_min + Vector3(local_size.x * 0.5, -0.1, local_size.z * 0.5)))
 	return source
 
 
@@ -131,10 +137,10 @@ func _create_navigation_mesh() -> NavigationMesh:
 	mesh.agent_max_climb = AGENT_MAX_CLIMB
 	mesh.agent_max_slope = AGENT_MAX_SLOPE
 	# O telhado fica fora do volume assado: nenhuma ilha inalcancavel no topo.
-	mesh.filter_baking_aabb = AABB(Vector3(-OUTDOOR_MARGIN, -0.5, -OUTDOOR_MARGIN), Vector3(local_size.x + OUTDOOR_MARGIN * 2.0, local_size.y - 0.3, local_size.z + OUTDOOR_MARGIN * 2.0))
+	mesh.filter_baking_aabb = AABB(local_min + Vector3(-OUTDOOR_MARGIN, -0.5, -OUTDOOR_MARGIN), Vector3(local_size.x + OUTDOOR_MARGIN * 2.0, local_size.y - 0.3, local_size.z + OUTDOOR_MARGIN * 2.0))
 	return mesh
 
 
 func _compute_global_bounds(building: StaticBody3D) -> AABB:
-	var local_box := AABB(Vector3(-OUTDOOR_MARGIN, -1.0, -OUTDOOR_MARGIN), Vector3(local_size.x + OUTDOOR_MARGIN * 2.0, local_size.y + 3.0, local_size.z + OUTDOOR_MARGIN * 2.0))
+	var local_box := AABB(local_min + Vector3(-OUTDOOR_MARGIN, -1.0, -OUTDOOR_MARGIN), Vector3(local_size.x + OUTDOOR_MARGIN * 2.0, local_size.y + 3.0, local_size.z + OUTDOOR_MARGIN * 2.0))
 	return building.global_transform * local_box
