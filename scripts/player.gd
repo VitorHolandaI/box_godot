@@ -445,7 +445,7 @@ func _fire_pellets(weapon_kind: int) -> void:
 			_spawn_pellet_visual(origin + pellet_direction * 0.12, pellet_direction, pellet_index, pellet_count, weapon_kind)
 	ZombieFlockCoordinator.relay_sound(get_tree(), origin, float(stats["noise_radius"]))
 	if NetworkSession.is_offline():
-		AudioFeedback.play_gunshot(origin)
+		AudioFeedback.play_gunshot(origin, weapon_kind)
 	if NetworkSession.is_server():
 		get_tree().current_scene.replicate_bullet_visual(origin, base_direction, pellet_count, spread_deg, weapon_kind)
 

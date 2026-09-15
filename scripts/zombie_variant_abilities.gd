@@ -19,6 +19,16 @@ const LEAP_SPEED := 8.5
 const LEAP_UP_SPEED := 3.2
 const LEAP_DURATION := 0.35
 const LEAP_COOLDOWN := 3.5
+const JUMP_MIN_RANGE := 4.0
+const JUMP_MAX_RANGE := 12.0
+const JUMP_FORWARD_SPEED := 6.5
+const JUMP_UP_SPEED := 11.0
+const JUMP_DURATION := 0.9
+const JUMP_COOLDOWN := 4.0
+## Bloater explode sozinho colado no alvo (kamikaze) e da uma arrancada curta.
+const BLOATER_DETONATE_DISTANCE := 1.8
+const BLOATER_LUNGE_MAX_RANGE := 6.0
+const BLOATER_LUNGE_SPEED := 7.0
 const CHARGE_MIN_RANGE := 5.0
 const CHARGE_MAX_RANGE := 14.0
 const CHARGE_SPEED := 9.0
@@ -119,6 +129,18 @@ class DashState extends RefCounted:
 class LeapState extends DashState:
 	func _init() -> void:
 		super(0.0, ZombieVariantAbilities.LEAP_RANGE, ZombieVariantAbilities.LEAP_SPEED, ZombieVariantAbilities.LEAP_UP_SPEED, ZombieVariantAbilities.LEAP_DURATION, ZombieVariantAbilities.LEAP_COOLDOWN)
+
+
+## Pulo alto do saltador: arco de ~5 m de altura de 4 a 12 m do alvo.
+class HighJumpState extends DashState:
+	func _init() -> void:
+		super(ZombieVariantAbilities.JUMP_MIN_RANGE, ZombieVariantAbilities.JUMP_MAX_RANGE, ZombieVariantAbilities.JUMP_FORWARD_SPEED, ZombieVariantAbilities.JUMP_UP_SPEED, ZombieVariantAbilities.JUMP_DURATION, ZombieVariantAbilities.JUMP_COOLDOWN)
+
+
+## Arrancada do bloater kamikaze: curta e baixa, para se jogar no jogador.
+class BloaterLungeState extends DashState:
+	func _init() -> void:
+		super(ZombieVariantAbilities.BLOATER_DETONATE_DISTANCE, ZombieVariantAbilities.BLOATER_LUNGE_MAX_RANGE, ZombieVariantAbilities.BLOATER_LUNGE_SPEED, 2.0, 0.5, 3.0)
 
 
 ## Investida do charger: arranca de longe, rente ao chao, por mais tempo.

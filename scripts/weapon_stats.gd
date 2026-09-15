@@ -38,6 +38,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.16,
 		"recoil_lift": 0.12,
 		"flash_scale": 1.3,
+		"sound": "shotgun",
+		"tracer_speed": 120.0,
 	},
 	Kind.UZI: {
 		"label": "Uzi",
@@ -61,6 +63,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.04,
 		"recoil_lift": 0.03,
 		"flash_scale": 0.7,
+		"sound": "smg",
+		"tracer_speed": 140.0,
 	},
 	Kind.MAGNUM: {
 		"label": "Magnum",
@@ -83,6 +87,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.2,
 		"recoil_lift": 0.25,
 		"flash_scale": 1.5,
+		"sound": "magnum",
+		"tracer_speed": 130.0,
 	},
 	Kind.DOUBLE_BARREL: {
 		"label": "Escopeta Dupla",
@@ -105,6 +111,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.24,
 		"recoil_lift": 0.18,
 		"flash_scale": 1.8,
+		"sound": "shotgun",
+		"tracer_speed": 120.0,
 	},
 	Kind.CARBINE: {
 		"label": "Carabina",
@@ -127,6 +135,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.1,
 		"recoil_lift": 0.06,
 		"flash_scale": 1.0,
+		"sound": "rifle",
+		"tracer_speed": 150.0,
 	},
 	Kind.SAWED_OFF: {
 		"label": "Escopeta Serrada",
@@ -149,6 +159,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.26,
 		"recoil_lift": 0.22,
 		"flash_scale": 2.0,
+		"sound": "shotgun",
+		"tracer_speed": 110.0,
 	},
 	Kind.AUTO_SHOTGUN: {
 		"label": "Escopeta Automatica",
@@ -172,6 +184,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.12,
 		"recoil_lift": 0.07,
 		"flash_scale": 1.2,
+		"sound": "shotgun",
+		"tracer_speed": 120.0,
 	},
 	Kind.LASER_RIFLE: {
 		"label": "Rifle Laser",
@@ -194,6 +208,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.03,
 		"recoil_lift": 0.02,
 		"flash_scale": 1.1,
+		"sound": "laser",
+		"tracer_speed": 300.0,
 	},
 	Kind.PLASMA_SMG: {
 		"label": "SMG de Plasma",
@@ -217,6 +233,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.04,
 		"recoil_lift": 0.03,
 		"flash_scale": 1.0,
+		"sound": "plasma",
+		"tracer_speed": 160.0,
 	},
 	## Railgun: tiro atravessa ate `pierce` alvos na mesma linha.
 	Kind.RAILGUN: {
@@ -241,6 +259,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.4,
 		"recoil_lift": 0.1,
 		"flash_scale": 2.2,
+		"sound": "railgun",
+		"tracer_speed": 320.0,
 	},
 	Kind.AK47: {
 		"label": "AK-47",
@@ -264,6 +284,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.07,
 		"recoil_lift": 0.06,
 		"flash_scale": 1.0,
+		"sound": "heavy_rifle",
+		"tracer_speed": 150.0,
 	},
 	Kind.M4: {
 		"label": "M4",
@@ -287,6 +309,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.05,
 		"recoil_lift": 0.04,
 		"flash_scale": 0.9,
+		"sound": "rifle",
+		"tracer_speed": 160.0,
 	},
 	Kind.AUG: {
 		"label": "AUG",
@@ -310,6 +334,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.05,
 		"recoil_lift": 0.035,
 		"flash_scale": 0.9,
+		"sound": "rifle",
+		"tracer_speed": 160.0,
 	},
 	Kind.BERETTA: {
 		"label": "Beretta",
@@ -332,6 +358,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.06,
 		"recoil_lift": 0.08,
 		"flash_scale": 0.8,
+		"sound": "pistol",
+		"tracer_speed": 130.0,
 	},
 	Kind.SNIPER: {
 		"label": "Sniper",
@@ -355,6 +383,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.3,
 		"recoil_lift": 0.2,
 		"flash_scale": 1.6,
+		"sound": "sniper",
+		"tracer_speed": 260.0,
 	},
 	## Bazuca: explode no primeiro impacto ferindo tudo em `explosive_radius`.
 	Kind.BAZOOKA: {
@@ -379,6 +409,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil": 0.35,
 		"recoil_lift": 0.3,
 		"flash_scale": 2.4,
+		"sound": "launcher",
+		"tracer_speed": 100.0,
 	},
 }
 
@@ -415,6 +447,20 @@ static func color_for(kind: int) -> Color:
 ## Uso: var escala := WeaponStats.tracer_scale_for(WeaponStats.Kind.SNIPER)
 static func tracer_scale_for(kind: int) -> Vector3:
 	return stats_for(kind).get("tracer_scale", Vector3.ONE)
+
+
+## Velocidade do tracer visual. Armas de crate dao dano na hora (hitscan): o
+## tracer lento (16 m/s) chegava depois do zumbi ja ferido/morto e parecia
+## dessincronizado. Faca/pistola (projetil real) seguem com a velocidade da bala.
+## Uso: bullet.speed = WeaponStats.tracer_speed_for(WeaponStats.Kind.LASER_RIFLE)
+static func tracer_speed_for(kind: int) -> float:
+	return float(stats_for(kind).get("tracer_speed", 0.0))
+
+
+## Perfil de som do tiro (WeaponSoundSynth); faca/pistola usam "pistol".
+## Uso: var perfil := WeaponStats.sound_for(WeaponStats.Kind.SNIPER)
+static func sound_for(kind: int) -> String:
+	return String(stats_for(kind).get("sound", "pistol"))
 
 
 ## Recuo da animacao: x = coice para tras (m), y = cano subindo (rad).

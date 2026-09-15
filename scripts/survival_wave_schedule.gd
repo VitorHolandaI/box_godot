@@ -36,9 +36,10 @@ func is_airdrop_wave(wave_index: int) -> bool:
 ## Cada fase adiciona variantes e reequilibra o resto da horda.
 const VARIANT_MIXES: Array[Dictionary] = [
 	# Hora 1-2: horda basica com especiais leves desde o comeco (pedido de jogo,
-	# estilo Left 4 Dead): leaper, cuspidor, bloater e investida.
+	# estilo Left 4 Dead): leaper, cuspidor, bloater, investida e saltador.
 	{
-		ZombieMutator.Type.WALKER: 55,
+		ZombieMutator.Type.WALKER: 50,
+		ZombieMutator.Type.JUMPER: 5,
 		ZombieMutator.Type.LIMPER: 10,
 		ZombieMutator.Type.ONE_ARM: 8,
 		ZombieMutator.Type.ONE_LEG: 5,
@@ -49,7 +50,8 @@ const VARIANT_MIXES: Array[Dictionary] = [
 	},
 	# Hora 3-6: corredores e rastejantes entram.
 	{
-		ZombieMutator.Type.WALKER: 28,
+		ZombieMutator.Type.WALKER: 24,
+		ZombieMutator.Type.JUMPER: 4,
 		ZombieMutator.Type.LEAPER: 5,
 		ZombieMutator.Type.LIMPER: 10,
 		ZombieMutator.Type.ONE_ARM: 10,
@@ -62,7 +64,8 @@ const VARIANT_MIXES: Array[Dictionary] = [
 	},
 	# Hora 7-10: brute tanque, cabecas divididas e mais especiais.
 	{
-		ZombieMutator.Type.WALKER: 16,
+		ZombieMutator.Type.WALKER: 12,
+		ZombieMutator.Type.JUMPER: 4,
 		ZombieMutator.Type.BLOATER: 6,
 		ZombieMutator.Type.LEAPER: 6,
 		ZombieMutator.Type.CRAWLER: 10,
@@ -76,7 +79,8 @@ const VARIANT_MIXES: Array[Dictionary] = [
 	},
 	# Hora 11+: screamer atrai a horda de longe; armored exige faca ou mais tiros.
 	{
-		ZombieMutator.Type.WALKER: 14,
+		ZombieMutator.Type.WALKER: 9,
+		ZombieMutator.Type.JUMPER: 5,
 		ZombieMutator.Type.BLOATER: 6,
 		ZombieMutator.Type.LEAPER: 7,
 		ZombieMutator.Type.ARMORED: 8,

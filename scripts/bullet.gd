@@ -155,6 +155,9 @@ static func _damageable_ancestor(node: Node) -> Node:
 ## Uso: Bullet.style_tracer(bullet, WeaponStats.Kind.LASER_RIFLE)
 static func style_tracer(bullet: Node3D, weapon_kind: int) -> void:
 	bullet.scale *= WeaponStats.tracer_scale_for(weapon_kind)
+	var tracer_speed := WeaponStats.tracer_speed_for(weapon_kind)
+	if tracer_speed > 0.0 and bullet is Bullet:
+		(bullet as Bullet).speed = tracer_speed
 	var color := WeaponStats.tracer_color_for(weapon_kind)
 	if color == WeaponStats.DEFAULT_TRACER_COLOR:
 		return
