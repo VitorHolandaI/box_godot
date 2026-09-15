@@ -31,7 +31,9 @@ Logica de jogo, rede, interface e testes automatizados.
 - `network_zombie_proxy_factory.gd`: cria o zumbi do cliente a partir do snapshot, com a variante sorteada pelo servidor aplicada antes do _ready.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
+- `shared_vision.gd`: visao compartilhada: zumbi visto por qualquer jogador (local ou aliado de rede) fica visivel para todos.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
+- `test_shared_vision.gd`: regressoes da visao compartilhada entre aliados.
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
