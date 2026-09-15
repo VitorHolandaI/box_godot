@@ -9,6 +9,7 @@ extends RefCounted
 ##   godot --headless --path . -- --bot-player=bitssand.blog --lag-probe=30
 
 const EXPECTED_SNAPSHOT_INTERVAL_MS := 100.0
+const WARMUP_SECONDS := 3.0
 
 var duration_seconds := 0.0
 var elapsed_seconds := 0.0
@@ -16,6 +17,9 @@ var rtt_samples: Array[float] = []
 var snapshot_interval_samples: Array[float] = []
 var zombie_count_samples: Array[int] = []
 var frame_time_samples: Array[float] = []
+var received_bytes_total := 0
+var received_packets_total := 0
+var _traffic_measure_seconds := 0.0
 var _last_complete_usec := -1
 var _current_sequence := -1
 var _current_packets: Dictionary = {}
@@ -64,14 +68,25 @@ func record_zombie_packet(sequence: int, packet_index: int, packet_count: int, z
 ## Registra a duracao de um frame renderizado (ms) para medir FPS do cliente.
 ## Uso: probe.record_frame_time(delta * 1000.0)
 func record_frame_time(frame_ms: float) -> void:
-	if elapsed_seconds > 3.0:
+	if elapsed_seconds > WARMUP_SECONDS:
 		frame_time_samples.append(frame_ms)
+
+
+## Soma trafego recebido (bytes e pacotes UDP do ENet) apos o aquecimento.
+## Uso: probe.record_received_traffic(bytes, packets)
+func record_received_traffic(bytes: int, packets: int) -> void:
+	if elapsed_seconds <= WARMUP_SECONDS:
+		return
+	received_bytes_total += maxi(bytes, 0)
+	received_packets_total += maxi(packets, 0)
 
 
 ## Avanca o relogio da sonda; devolve true quando a medicao terminou.
 ## Uso: if probe.tick(delta, rtt_ms): print(probe.build_report())
 func tick(delta: float, rtt_ms: float) -> bool:
 	elapsed_seconds += delta
+	# So a fracao do tick depois dos 3 s de aquecimento conta como janela de medida.
+	_traffic_measure_seconds += clampf(elapsed_seconds - WARMUP_SECONDS, 0.0, delta)
 	_rtt_sample_timer -= delta
 	if _rtt_sample_timer <= 0.0 and rtt_ms >= 0.0:
 		_rtt_sample_timer = 0.5
@@ -95,6 +110,8 @@ func build_report() -> Dictionary:
 		"late_snapshots": late_snapshots,
 		"zombies_last": zombie_count_samples.back() if not zombie_count_samples.is_empty() else 0,
 		"frame_ms_avg": snappedf(_average(frame_time_samples), 0.01),
+		"received_kbps": snappedf(float(received_bytes_total) / maxf(_traffic_measure_seconds, 0.001) / 1024.0, 0.1),
+		"received_packets_per_second": roundi(float(received_packets_total) / maxf(_traffic_measure_seconds, 0.001)),
 		"frame_ms_p95": snappedf(_percentile(frame_time_samples, 0.95), 0.01),
 	}
 

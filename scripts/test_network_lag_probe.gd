@@ -9,6 +9,8 @@ const LAG_PROBE_SCRIPT := preload("res://scripts/network_lag_probe.gd")
 func run(test_root: Node) -> void:
 	_test_argument_parsing(test_root)
 	_test_snapshot_intervals(test_root)
+	_test_received_traffic_rate(test_root)
+	_test_prespawn_option(test_root)
 
 
 func _test_argument_parsing(test_root: Node) -> void:
@@ -38,6 +40,34 @@ func _test_snapshot_intervals(test_root: Node) -> void:
 		_fail(test_root, "Relatorio da sonda inesperado: %s." % report)
 		return
 	print("PASS: Sonda mede snapshots atrasados e RTT.")
+
+
+func _test_received_traffic_rate(test_root: Node) -> void:
+	print("Testando taxa de trafego recebido da sonda...")
+	var probe = LAG_PROBE_SCRIPT.new()
+	probe.duration_seconds = 10.0
+	probe.tick(2.0, 50.0)
+	probe.record_received_traffic(999999, 999)
+	probe.tick(2.0, 50.0)
+	probe.tick(1.5, 50.0)
+	probe.record_received_traffic(1024 * 100, 50)
+	var report: Dictionary = probe.build_report()
+	# Aquecimento de 3 s: o trafego gravado aos 2 s e ignorado; mede 100 KB e 50 pacotes em 2.5 s.
+	if not is_equal_approx(float(report["received_kbps"]), 40.0) or int(report["received_packets_per_second"]) != 20:
+		_fail(test_root, "Taxa esperada 40 KB/s e 20 pacotes/s; relatorio=%s." % report)
+		return
+	print("PASS: Sonda mede KB/s e pacotes/s recebidos.")
+
+
+func _test_prespawn_option(test_root: Node) -> void:
+	print("Testando opcao --prespawn-zombies...")
+	var valid := LoadTestOptions.prespawn_zombie_count(PackedStringArray(["--server", "--prespawn-zombies=600"]))
+	var invalid := LoadTestOptions.prespawn_zombie_count(PackedStringArray(["--prespawn-zombies=-5"]))
+	var absent := LoadTestOptions.prespawn_zombie_count(PackedStringArray(["--server"]))
+	if valid != 600 or invalid != 0 or absent != 0:
+		_fail(test_root, "Prespawn esperado 600/0/0; veio %d/%d/%d." % [valid, invalid, absent])
+		return
+	print("PASS: Opcao de prespawn validada.")
 
 
 func _fail(test_root: Node, message: String) -> void:
