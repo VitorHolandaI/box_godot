@@ -20,9 +20,9 @@ func _physics_process(delta: float) -> void:
 		var mesh := piece as Node3D
 		if mesh == null:
 			continue
-		var velocity: Vector3 = velocities[piece.get_index()]
-		mesh.position += velocity * delta
-		mesh.position.y = maxf(mesh.position.y - GRAVITY * delta * delta, 0.0)
+		var index := piece.get_index()
+		velocities[index] = velocities[index] + Vector3.DOWN * GRAVITY * delta
+		mesh.position += velocities[index] * delta
 		mesh.rotate_y(delta * 4.0)
 	if elapsed >= LIFETIME:
 		queue_free()
