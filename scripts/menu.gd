@@ -16,6 +16,8 @@ const ACTIONS := [
 	["shotgun", "Equipar escopeta"],
 	["uzi", "Equipar Uzi"],
 	["magnum", "Equipar magnum"],
+	["double_barrel", "Equipar escopeta dupla"],
+	["carbine", "Equipar carabina"],
 	["drop_weapon", "Dropar arma da mao"],
 ]
 

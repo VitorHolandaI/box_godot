@@ -536,6 +536,16 @@ func _test_crate_weapon_family() -> void:
 		dropped_kinds.append(kind)
 	)
 
+	if WeaponStats.stats_for(WeaponStats.Kind.DOUBLE_BARREL).is_empty() or WeaponStats.stats_for(WeaponStats.Kind.CARBINE).is_empty():
+		push_error("FALHA: Escopeta dupla e carabina deveriam ter stats na tabela.")
+		_mark_failure()
+		player.queue_free()
+		return
+	if int(WeaponStats.stats_for(WeaponStats.Kind.DOUBLE_BARREL)["pellets"]) != 12 or int(WeaponStats.stats_for(WeaponStats.Kind.CARBINE)["pellets"]) != 1:
+		push_error("FALHA: Escopeta dupla deveria ter 12 pellets e carabina tiro unico.")
+		_mark_failure()
+		player.queue_free()
+		return
 	if player.take_crate_weapon(WeaponStats.Kind.SHOTGUN) != "granted":
 		push_error("FALHA: Escopeta deveria entrar no slot livre do jogador.")
 		_mark_failure()
