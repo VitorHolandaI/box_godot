@@ -28,10 +28,14 @@ const SNAPSHOT_INTERVAL := 1.0 / 10.0
 const GROUND_STATE_INTERVAL := 0.5
 # Payload binario por RPC abaixo do MTU do ENet (~1400 bytes com cabecalhos).
 const ZOMBIE_SNAPSHOT_PACKET_BYTES := 1100
-const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 2
+# Um jogador serializado ocupa ~810 bytes (armas, estados de animacao): dois
+# por pacote davam 1624 bytes, acima do MTU (1392), e o snapshot fragmentado se
+# perdia inteiro, deixando municao/vida velhas no cliente.
+const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
 ## Onda nova chega com centenas de zumbis: o cliente spawna no maximo N por
 ## frame (fila) para nao dar hitch de instantiates sincronos.
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 6
+const NETWORK_ZOMBIE_PROXY_FACTORY_SCRIPT := preload("res://scripts/network_zombie_proxy_factory.gd")
 const PLAYER_VISION_UPDATE_INTERVAL := 0.12
 ## Ray de oclusao de visao so dentro de 20m: alem disso o dissolve ja cobre
 ## e o estado anterior persiste (zumbi visto continua, oculto segue oculto).
@@ -66,6 +70,10 @@ var received_zombie_snapshot_chunks: Dictionary = {}
 var received_zombie_names: Dictionary = {}
 ## Fila de spawn do cliente (do snapshot -> mundo aos poucos) e cache de nos.
 var pending_zombie_spawns: Array[Dictionary] = []
+## Nomes ja na fila: snapshots seguintes nao duplicam o mesmo zumbi pendente.
+var pending_zombie_names: Dictionary = {}
+## Ultimo [onda, abates, restantes] enviado; reenvia so quando muda.
+var last_sent_wave_progress: Array[int] = []
 var zombie_cache: Dictionary = {}
 var smoke_test_mode := false
 var player_vision_elapsed := 0.0
@@ -159,6 +167,8 @@ func _process(delta: float) -> void:
 	if NetworkSession.survival_mode:
 		_check_survival_game_over()
 		if survival_wave_controller.game_over:
+			if survival_wave_controller.tick_game_over(delta, not get_tree().get_nodes_in_group("player").is_empty()):
+				_restart_survival()
 			return
 		survival_wave_controller.tick(delta)
 		return
@@ -188,10 +198,13 @@ func _physics_process(delta: float) -> void:
 		if ground_state_elapsed >= GROUND_STATE_INTERVAL:
 			ground_state_elapsed = 0.0
 			_send_ground_states()
+			_send_wave_progress()
 		snapshot_elapsed += delta
 		if snapshot_elapsed >= SNAPSHOT_INTERVAL:
 			snapshot_elapsed = 0.0
-			if not NetworkSession.peer_slots.is_empty() and _loaded_peers_match(NetworkSession.peer_slots, NetworkSession.loaded_peers):
+			# So para quem ja carregou; antes um jogador carregando a cidade
+			# congelava os snapshots de todos os outros ate terminar.
+			if not NetworkSession.loaded_peers.is_empty():
 				_send_door_states()
 				_send_player_snapshots(_collect_player_states())
 				_send_zombie_snapshots(_collect_zombie_states())
@@ -442,14 +455,29 @@ func _broadcast_wave_state(wave_index: int) -> void:
 	if not NetworkSession.is_server():
 		return
 	for peer_id in NetworkSession.loaded_peers:
-		_wave_state.rpc_id(int(peer_id), wave_index, survival_wave_controller.total_kills)
+		_wave_state.rpc_id(int(peer_id), wave_index, survival_wave_controller.total_kills, survival_wave_controller.alive_in_wave, survival_wave_controller.game_over)
+	last_sent_wave_progress = _wave_progress()
+
+
+## Restantes e abates mudam a cada morte: reenvia a 2 Hz so quando mudou, para o
+## HUD do cliente nao ficar parado no valor da entrada na onda.
+func _send_wave_progress() -> void:
+	if not NetworkSession.survival_mode or survival_wave_controller == null:
+		return
+	if _wave_progress() == last_sent_wave_progress:
+		return
+	_broadcast_wave_state(survival_wave_controller.wave_index)
+
+
+func _wave_progress() -> Array[int]:
+	return [survival_wave_controller.wave_index, survival_wave_controller.total_kills, survival_wave_controller.alive_in_wave, int(survival_wave_controller.game_over)]
 
 
 @rpc("authority", "call_remote", "reliable")
-func _wave_state(wave_index: int, total_kills: int) -> void:
+func _wave_state(wave_index: int, total_kills: int, alive_in_wave: int, is_game_over: bool) -> void:
 	if not NetworkSession.is_client():
 		return
-	survival_wave_controller.set_sync_state(wave_index, total_kills)
+	survival_wave_controller.set_sync_state(wave_index, total_kills, alive_in_wave, is_game_over)
 
 
 func _reconcile_network_players() -> void:
@@ -479,14 +507,14 @@ func _reconcile_network_players() -> void:
 func _on_peer_scene_loaded(peer_id: int) -> void:
 	if not NetworkSession.is_server() or survival_wave_controller == null:
 		return
-	if survival_wave_controller.wave_index <= 0:
-		return
-	_wave_state.rpc_id(peer_id, survival_wave_controller.wave_index, survival_wave_controller.total_kills)
+	# Antes saia cedo na onda 0: quem entrava num servidor em game over na onda 0
+	# nunca reiniciava a horda, e quem entrava cedo ficava sem os itens do chao.
+	if survival_wave_controller.game_over:
+		_restart_survival()
+	_wave_state.rpc_id(peer_id, survival_wave_controller.wave_index, survival_wave_controller.total_kills, survival_wave_controller.alive_in_wave, survival_wave_controller.game_over)
 	# Peer novo precisa da lista completa de itens no chao do primeiro sync.
 	SupplyNetworkState.mark_dirty()
 	GroundWeaponSync.mark_dirty()
-	if survival_wave_controller.game_over:
-		_restart_survival()
 
 
 ## Todo mundo caido/eliminado = GAME OVER: horda zerada (zumbis limpos,
@@ -494,18 +522,15 @@ func _on_peer_scene_loaded(peer_id: int) -> void:
 func _check_survival_game_over() -> void:
 	if survival_wave_controller.game_over:
 		return
-	for player_node in get_tree().get_nodes_in_group("player"):
-		var player := player_node as PlayerCharacter
-		if player == null or not is_instance_valid(player) or player.is_queued_for_deletion():
-			continue
-		if not bool(player.get("is_downed")) and not bool(player.get("is_eliminated")):
-			return
+	if not SURVIVAL_WAVE_CONTROLLER_SCRIPT.everyone_is_down(get_tree().get_nodes_in_group("player")):
+		return
 	# Ninguem de pe: zera.
 	for zombie_node in zombies.get_children():
 		zombie_cache.erase(String(zombie_node.name))
 		zombie_node.queue_free()
 	zombie_cache.clear()
 	pending_zombie_spawns.clear()
+	pending_zombie_names.clear()
 	survival_wave_controller.trigger_game_over()
 	for peer_id in NetworkSession.loaded_peers:
 		_game_over.rpc_id(int(peer_id))
@@ -519,6 +544,9 @@ func _game_over() -> void:
 
 func _restart_survival() -> void:
 	survival_wave_controller.restart()
+	# Quem caiu volta de pe com vidas cheias; sem isso o proximo frame ja
+	# disparava outro GAME OVER.
+	_reset_wave_lives(0)
 	_broadcast_wave_state(survival_wave_controller.wave_index)
 	_spawn_scattered_loot(0)
 
@@ -775,8 +803,9 @@ func _apply_zombie_states(states: Array) -> void:
 		if zombie == null:
 			# Fila: novos zumbis entram no mundo aos poucos (no maximo N por
 			# frame) para a nova onda nao instanciar centenas num frame so.
-			if pending_zombie_spawns.size() < 512:
+			if pending_zombie_spawns.size() < 512 and not pending_zombie_names.has(zombie_name):
 				pending_zombie_spawns.append({"name": zombie_name, "state": state})
+				pending_zombie_names[zombie_name] = true
 			continue
 		zombie.apply_network_state(state)
 
@@ -799,12 +828,11 @@ func _drain_zombie_spawn_queue() -> void:
 	while spawned < MAX_ZOMBIE_SPAWNS_PER_FRAME and not pending_zombie_spawns.is_empty():
 		var entry: Dictionary = pending_zombie_spawns.pop_front()
 		var zombie_name := String(entry["name"])
+		pending_zombie_names.erase(zombie_name)
 		if _client_zombie_by_name(zombie_name) != null:
 			continue
 		var state: Dictionary = entry["state"]
-		var zombie = ZOMBIE_SCENE.instantiate()
-		zombie.name = zombie_name
-		zombie.simulation_enabled = false
+		var zombie: CharacterBody3D = NETWORK_ZOMBIE_PROXY_FACTORY_SCRIPT.instantiate_proxy(ZOMBIE_SCENE, zombie_name, state)
 		zombies.add_child(zombie, true)
 		zombie_cache[zombie_name] = zombie
 		var initial_position: Variant = state.get("position")
@@ -973,15 +1001,6 @@ func _has_clear_player_vision(player: CharacterBody3D, zombie: CharacterBody3D) 
 
 func _player_key(peer_id: int, slot: int) -> String:
 	return "%d:%d" % [peer_id, slot]
-
-
-func _loaded_peers_match(expected: Dictionary, loaded: Dictionary) -> bool:
-	if expected.size() != loaded.size():
-		return false
-	for id in expected.keys():
-		if not loaded.has(id):
-			return false
-	return true
 
 
 func _on_server_lost() -> void:

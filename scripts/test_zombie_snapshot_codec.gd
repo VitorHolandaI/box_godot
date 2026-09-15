@@ -10,6 +10,7 @@ func run(test_root: Node) -> void:
 	_test_round_trip_keeps_state(test_root)
 	_test_packets_fit_budget(test_root)
 	_test_truncated_payload_is_rejected(test_root)
+	_test_round_trip_keeps_zombie_type(test_root)
 
 
 func _test_round_trip_keeps_state(test_root: Node) -> void:
@@ -51,6 +52,25 @@ func _test_packets_fit_budget(test_root: Node) -> void:
 		_fail(test_root, "600 zumbis deveriam caber em no maximo 10 pacotes; pacotes=%d zumbis=%d." % [packets.size(), total])
 		return
 	print("PASS: 600 zumbis cabem em %d pacotes abaixo do MTU." % packets.size())
+
+
+## O servidor sorteia a variante pela onda (forced_variant); o nome sozinho nao
+## basta e o cliente mostrava outro tipo (brute virava walker).
+func _test_round_trip_keeps_zombie_type(test_root: Node) -> void:
+	print("Testando tipo do zumbi no snapshot binario...")
+	var states: Array = []
+	for zombie_type in 11:
+		states.append({"network_id": 100 + zombie_type, "position": Vector3.ZERO, "is_dead": zombie_type == 10, "zombie_type": zombie_type})
+	var payload: PackedByteArray = CODEC_SCRIPT.encode(states)
+	var decoded: Array[Dictionary] = CODEC_SCRIPT.decode(payload)
+	var decoded_types: Array[int] = []
+	for state in decoded:
+		decoded_types.append(int(state.get("zombie_type", -1)))
+	var expected: Array[int] = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+	if decoded_types != expected or not bool(decoded[10]["is_dead"]) or payload.size() != CODEC_SCRIPT.ALIVE_RECORD_BYTES * 10 + CODEC_SCRIPT.DEAD_RECORD_BYTES:
+		_fail(test_root, "Tipos 0..10 deveriam voltar iguais sem crescer o registro; tipos=%s bytes=%d." % [decoded_types, payload.size()])
+		return
+	print("PASS: Snapshot binario carrega o tipo do zumbi sem bytes extras.")
 
 
 func _test_truncated_payload_is_rejected(test_root: Node) -> void:

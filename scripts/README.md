@@ -26,6 +26,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
 - `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT, atraso entre snapshots, KB/s e pacotes/s recebidos e FPS.
 - `network_session.gd`: sessao ENet, roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
+- `network_zombie_proxy_factory.gd`: cria o zumbi do cliente a partir do snapshot, com a variante sorteada pelo servidor aplicada antes do _ready.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
 - `weapon_stats.gd`: tabela de stats das armas de crate (escopeta, Uzi, magnum): dano, pellets, pente, reserva, desgaste e falha.
@@ -42,7 +43,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `run_4_bots.sh`: inicializa servidor dedicado e abre 4 janelas com bots jogando sozinhos em grade 2x2.
 - `server_entrypoint.sh`: cria a seed a partir do container e inicia o servidor dedicado.
 - `survival_map_builder.gd`: cria a arena compacta e suas barreiras para sobrevivencia.
-- `survival_wave_controller.gd`: controla spawning, limpeza e conclusao das ondas.
+- `survival_wave_controller.gd`: controla spawning, limpeza e conclusao das ondas, GAME OVER com reinicio automatico e sync de onda/restantes para o cliente.
 - `survival_wave_schedule.gd`: define a progressao ate a onda final de 600 zumbis.
 - `wave_supply_pickup.gd`: pickup interno autoritativo de vida ou municao.
 - `wave_supply_controller.gd`: renova quatro suprimentos da Safehouse e sorteia pontos internos por onda.
@@ -64,6 +65,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_unstuck.gd`: regressoes de zumbis presos: medidor de progresso, desvio de muro, casa segura contornada, realocacao, spawn em chao aberto e minimapa do fim de onda.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
+- `test_network_join_sync.gd`: regressoes de dessincronia online: variante do zumbi no cliente, pacote de jogador abaixo do MTU, regras e reinicio do GAME OVER, restantes da onda, cliques com pacotes agrupados e pontos de spawn livres.
 - `test_script_error_counter.gd`: logger que faz a suite falhar em qualquer erro de script.
 - `test_zombie_snapshot_codec.gd`: regressoes do snapshot binario de zumbis.
 - `test_survival_mode.gd`: regressoes de ondas, mapa com predominio de casas, portas, abates, audio real, alvos e skin do ragdoll.
@@ -78,6 +80,6 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie_flock_coordinator.gd`: hordas persistentes com um cerebro, drones, fusao aleatoria de lideres, Boids e LOD.
 - `zombie_mutator.gd`: configurador procedural de 9 variantes anatomicas (pedaco de braco, sem 1 braco, pedaco de perna, sem 1 perna, cabeca pela metade com cerebro exposto, rastejante, manco, corredor e classico) e animacoes de marcha e flinch.
 - `zombie_ragdoll.gd`: ragdoll articulado com pescoco limitado, camada propria de cadaver (nao prende o jogador) que some ao ser atingido, e suporte as amputacoes das 9 variantes.
-- `zombie_snapshot_codec.gd`: snapshot binario de zumbis (16 bytes por zumbi) em pacotes abaixo do MTU.
+- `zombie_snapshot_codec.gd`: snapshot binario de zumbis (16 bytes por zumbi, tipo nos 4 bits altos das flags) em pacotes abaixo do MTU.
 - `zombie_spawn_locator.gd`: escolhe pontos desocupados na floresta distante ou no anel da sobrevivencia, sempre em chao aberto (fora de paredes e predios).
 - `zombie_spawn_schedule.gd`: relogio de spawn gradual com alvo global de 600 zumbis vivos.
