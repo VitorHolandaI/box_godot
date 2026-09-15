@@ -149,16 +149,18 @@ static func _damageable_ancestor(node: Node) -> Node:
 	return null
 
 
-## Pinta o tracer visual com a cor da arma (laser, plasma, railgun). Materiais
-## em cache por cor: a horda de tracers nao cria material por bala.
-## Uso: Bullet.tint_tracer(bullet, WeaponStats.tracer_color_for(kind))
-static func tint_tracer(bullet: Node3D, color: Color) -> void:
+## Aparencia do tracer visual pela arma: cor e tamanho proprios (bala grossa,
+## feixe longo, foguete). Multiplica a escala ja aplicada (pellets menores).
+## Materiais em cache por cor: a horda de tracers nao cria material por bala.
+## Uso: Bullet.style_tracer(bullet, WeaponStats.Kind.LASER_RIFLE)
+static func style_tracer(bullet: Node3D, weapon_kind: int) -> void:
+	bullet.scale *= WeaponStats.tracer_scale_for(weapon_kind)
+	var color := WeaponStats.tracer_color_for(weapon_kind)
 	if color == WeaponStats.DEFAULT_TRACER_COLOR:
 		return
 	var mesh := bullet.get_node_or_null("Mesh") as MeshInstance3D
-	if mesh == null:
-		return
-	mesh.material_override = _tracer_material(color)
+	if mesh != null:
+		mesh.material_override = _tracer_material(color)
 
 
 static var _tracer_materials: Dictionary = {}

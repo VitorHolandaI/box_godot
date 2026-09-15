@@ -466,7 +466,7 @@ func _spawn_pellet_visual(origin: Vector3, direction: Vector3, pellet_index: int
 	bullet.scale = PELLET_VISUAL_SCALE
 	bullet.global_position = origin + _pellet_side_offset(direction, pellet_index, pellet_count)
 	bullet.setup(direction, 0, false)
-	Bullet.tint_tracer(bullet, WeaponStats.tracer_color_for(weapon_kind))
+	Bullet.style_tracer(bullet, weapon_kind)
 	bullet.add_to_group("network_bullet_visuals")
 
 
