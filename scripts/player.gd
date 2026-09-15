@@ -84,6 +84,8 @@ var gunshot_noise_time := 0.0
 var noise_radius := 0.0
 var pistol_stance_time := 0.0
 var pistol_recoil_time := 0.0
+## Arma de crate em maos mantem a pose de mira com duas maos por um tempo.
+var crate_weapon_stance_time := 0.0
 var knife_attack_time := 0.0
 var hit_reaction_time := 0.0
 var hit_direction := Vector3.ZERO
@@ -143,6 +145,7 @@ func _physics_process(delta: float) -> void:
 
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	unstuck_cooldown = maxf(unstuck_cooldown - delta, 0.0)
+	crate_weapon_stance_time = maxf(crate_weapon_stance_time - delta, 0.0)
 	muzzle_flash_time = maxf(muzzle_flash_time - delta, 0.0)
 	pistol_stance_time = maxf(pistol_stance_time - delta, 0.0)
 	pistol_recoil_time = maxf(pistol_recoil_time - delta, 0.0)
@@ -329,6 +332,7 @@ func _equip_weapon_from_input() -> void:
 		if requested == Weapon.KNIFE or requested == Weapon.PISTOL or weapon_slots.has_kind(requested):
 			current_weapon = requested
 			pistol_stance_time = 0.0
+			crate_weapon_stance_time = 10.0 if WeaponStats.is_crate_weapon(requested) else 0.0
 			_update_weapon_models()
 
 
@@ -352,6 +356,7 @@ func _fire_crate_weapon() -> void:
 	attack_cooldown = float(WeaponStats.stats_for(current_weapon)["attack_cooldown"])
 	muzzle_flash_time = 0.08
 	gunshot_noise_time = 0.6
+	crate_weapon_stance_time = 10.0
 	_fire_pellets(current_weapon)
 	if weapon_slots.wear(current_weapon) <= 0:
 		_break_crate_weapon(current_weapon)
@@ -490,6 +495,10 @@ func _find_nearest_ground_weapon() -> Node:
 	for node in get_tree().get_nodes_in_group("ground_weapons"):
 		var pickup := node as Node3D
 		if pickup == null or not is_instance_valid(pickup):
+			continue
+		# Crate vazia (ja aberta) nao deve "engolir" o botao E: as armas
+		# dela ficam espalhadas ao redor como pickups proprios.
+		if pickup is AirSupplyPickup and (pickup as AirSupplyPickup).weapon_kinds.is_empty():
 			continue
 		var distance := global_position.distance_to(pickup.global_position)
 		if distance < best_distance and pickup.has_method("interact_with"):
@@ -821,11 +830,24 @@ func _build_crate_weapon_models() -> void:
 		body.albedo_color = _crate_weapon_color(kind)
 		body.roughness = 0.45
 		body.metallic = 0.5
-		_add_weapon_box(weapon_node, Vector3(0.5, 0.12, 0.12), Vector3.ZERO, body)
-		_add_weapon_box(weapon_node, Vector3(0.12, 0.2, 0.1), Vector3(-0.12, -0.14, 0.0), body)
-		if int(stats["pellets"]) > 1:
-			_add_weapon_box(weapon_node, Vector3(0.2, 0.1, 0.1), Vector3(-0.28, 0.0, 0.0), body)
-		var flash := _add_weapon_box(weapon_node, Vector3(0.12, 0.08, 0.08), Vector3(0.3, 0.0, 0.0), _muzzle_material())
+		var wood := StandardMaterial3D.new()
+		wood.albedo_color = Color(0.45, 0.3, 0.16)
+		wood.roughness = 0.7
+		match kind:
+			Weapon.SHOTGUN:
+				# Escopeta grande: cano longo, bombeamento e coronha de madeira.
+				_add_weapon_box(weapon_node, Vector3(0.95, 0.14, 0.14), Vector3(0.08, 0.0, 0.0), body)
+				_add_weapon_box(weapon_node, Vector3(0.22, 0.16, 0.16), Vector3(-0.2, -0.05, 0.0), body)
+				_add_weapon_box(weapon_node, Vector3(0.3, 0.18, 0.14), Vector3(-0.5, -0.08, 0.0), wood)
+				_add_weapon_box(weapon_node, Vector3(0.14, 0.22, 0.12), Vector3(-0.72, -0.14, 0.0), wood)
+			Weapon.UZI:
+				_add_weapon_box(weapon_node, Vector3(0.55, 0.16, 0.14), Vector3.ZERO, body)
+				_add_weapon_box(weapon_node, Vector3(0.12, 0.3, 0.12), Vector3(-0.05, -0.2, 0.0), body)
+				_add_weapon_box(weapon_node, Vector3(0.1, 0.34, 0.08), Vector3(0.06, 0.22, 0.0), body)
+			_:
+				_add_weapon_box(weapon_node, Vector3(0.5, 0.15, 0.13), Vector3.ZERO, body)
+				_add_weapon_box(weapon_node, Vector3(0.13, 0.24, 0.1), Vector3(-0.14, -0.16, 0.0), wood)
+		var flash := _add_weapon_box(weapon_node, Vector3(0.12, 0.08, 0.08), Vector3(0.34, 0.0, 0.0), _muzzle_material())
 		flash.name = "Flash"
 		flash.visible = false
 		crate_weapon_models[kind] = weapon_node

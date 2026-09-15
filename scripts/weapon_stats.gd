@@ -22,8 +22,8 @@ const STATS_BY_KIND: Dictionary = {
 		"max_durability": 40,
 		"degraded_below": 16,
 		"jam_chance": 0.15,
-		"spread_deg": 6.0,
-		"degraded_spread_deg": 12.0,
+		"spread_deg": 9.0,
+		"degraded_spread_deg": 16.0,
 		"noise_radius": 75.0,
 	},
 	Kind.UZI: {
