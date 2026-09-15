@@ -48,6 +48,7 @@ func _process(delta: float) -> void:
 	if not NetworkSession.is_client():
 		lifetime_elapsed += delta
 		if lifetime_elapsed >= lifetime_seconds:
+			GroundWeaponSync.mark_dirty()
 			queue_free()
 			return
 	if model_root != null:
@@ -59,6 +60,7 @@ func _process(delta: float) -> void:
 func interact_with(player: Node) -> String:
 	var result: String = player.call("take_ground_weapon", weapon_kind, mag, reserve, durability)
 	if result != "full":
+		GroundWeaponSync.mark_dirty()
 		queue_free()
 	return result
 

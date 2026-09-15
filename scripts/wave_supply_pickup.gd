@@ -32,7 +32,10 @@ func _process(delta: float) -> void:
 ## Define a disponibilidade autoritativa do suprimento.
 ## Uso: pickup.set_available(false)
 func set_available(available: bool) -> void:
+	if is_available == available:
+		return
 	is_available = available
+	SupplyNetworkState.mark_dirty()
 	visible = available
 	if collision_shape != null:
 		collision_shape.set_deferred("disabled", not available)
