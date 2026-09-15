@@ -51,6 +51,19 @@ static func relay_sound(tree: SceneTree, origin: Vector3, radius: float) -> void
 	instance.notify_sound(origin, radius)
 
 
+## Lista de jogadores vivos em cache (0.25s): evita que cada zumbi refaca o
+## scan do grupo por melee/sentidos. Uso: ZombieFlockCoordinator.get_living_players(tree)
+static func get_living_players(tree: SceneTree) -> Array:
+	if instance != null and not instance._cached_players.is_empty():
+		return instance._cached_players
+	var players: Array = []
+	for node in tree.get_nodes_in_group("player"):
+		var player := node as CharacterBody3D
+		if player != null and not bool(player.get("is_eliminated")) and int(player.get("health")) > 0:
+			players.append(player)
+	return players
+
+
 func _enter_tree() -> void:
 	instance = self
 	_random_source.randomize()

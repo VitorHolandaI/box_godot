@@ -42,6 +42,7 @@ func _physics_process(delta: float) -> void:
 		return
 	lifetime_elapsed += delta
 	if lifetime_elapsed >= lifetime_seconds:
+		GroundWeaponSync.mark_dirty()
 		queue_free()
 		return
 	if model_root != null:
@@ -60,6 +61,7 @@ func _on_body_entered(body: Node3D) -> void:
 		received = int(body.call("add_ammo", amount))
 	# Reserva cheia / vida cheia deixa o item no chao para quem precisa.
 	if received > 0:
+		GroundWeaponSync.mark_dirty()
 		queue_free()
 
 

@@ -240,14 +240,15 @@ static func animate_variant_pose(
 	delta: float,
 	is_walking: bool,
 	attack_w: float,
-	walk_time: float
+	walk_time: float,
+	cached_nodes: Dictionary = {}
 ) -> void:
-	var left_arm := zombie.get_node_or_null("Model/LeftArm") as Node3D
-	var right_arm := zombie.get_node_or_null("Model/RightArm") as Node3D
-	var left_leg := zombie.get_node_or_null("Model/LeftLeg") as Node3D
-	var right_leg := zombie.get_node_or_null("Model/RightLeg") as Node3D
-	var model := zombie.get_node_or_null("Model") as Node3D
-	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	var left_arm := _pose_node(zombie, cached_nodes, "Model/LeftArm")
+	var right_arm := _pose_node(zombie, cached_nodes, "Model/RightArm")
+	var left_leg := _pose_node(zombie, cached_nodes, "Model/LeftLeg")
+	var right_leg := _pose_node(zombie, cached_nodes, "Model/RightLeg")
+	var model := _pose_node(zombie, cached_nodes, "Model")
+	var head := _pose_node(zombie, cached_nodes, "Model/Head")
 
 	if left_arm == null or right_arm == null or left_leg == null or right_leg == null or model == null:
 		return
@@ -307,6 +308,15 @@ static func animate_variant_pose(
 			right_leg.rotation.x = lerpf(right_leg.rotation.x, swing, minf(delta * 10.0, 1.0))
 
 
+## Nos de pose em cache: ~288k get_node_or_null/s com 600 zumbis viram
+## um lookup no Dictionary por zumbi. Chave = caminho; valor = no (ou null).
+static func _pose_node(zombie: Node3D, cache: Dictionary, path: String) -> Node3D:
+	var key := "pose_" + path
+	if not cache.has(key):
+		cache[key] = zombie.get_node_or_null(path) as Node3D
+	return cache.get(key, null)
+
+
 ## Aplica animacao de impacto / flinch no zumbi quando recebe dano.
 ## Uso:
 ##   ZombieMutator.animate_hit_reaction(zombie, delta, hit_time, 0.24, hit_dir, "bullet", z_type, attack_w)
@@ -318,10 +328,11 @@ static func animate_hit_reaction(
 	hit_dir: Vector3,
 	hit_kind: String,
 	z_type: int,
-	attack_w: float
+	attack_w: float,
+	cached_nodes: Dictionary = {}
 ) -> void:
-	var model := zombie.get_node_or_null("Model") as Node3D
-	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	var model := _pose_node(zombie, cached_nodes, "Model")
+	var head := _pose_node(zombie, cached_nodes, "Model/Head")
 	if model == null:
 		return
 
