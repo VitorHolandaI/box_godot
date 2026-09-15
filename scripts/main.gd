@@ -68,6 +68,8 @@ var wave_supply_controller
 var airdrop_controller
 ## Contador de nomes estaveis dos crates de airdrop.
 var crate_index := 0
+## Contador de nomes estaveis dos itens de vida/municao espalhados.
+var loot_index := 0
 var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
 
 
@@ -82,7 +84,9 @@ func _ready() -> void:
 		airdrop_controller.airdrop_requested.connect(_launch_airdrop)
 		survival_wave_controller.wave_started.connect(airdrop_controller.on_wave_started)
 		survival_wave_controller.wave_started.connect(_broadcast_wave_state)
+		survival_wave_controller.wave_started.connect(_spawn_scattered_loot)
 		wave_supply_controller.refresh_wave(0)
+		_spawn_scattered_loot()
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
 	coordinator.name = "ZombieFlockCoordinator"
 	add_child(coordinator)
@@ -99,6 +103,7 @@ func _ready() -> void:
 
 	NetworkSession.roster_changed.connect(_reconcile_network_players)
 	NetworkSession.server_lost.connect(_on_server_lost)
+	NetworkSession.peer_scene_loaded.connect(_on_peer_scene_loaded)
 	_configure_network_zombies()
 	_reconcile_network_players()
 	smoke_test_mode = NetworkSession.is_server() and "--smoke-test-zombie" in OS.get_cmdline_user_args()
@@ -338,9 +343,35 @@ func _drop_airdrop_crate(drop_position: Vector3, kinds: Array[int]) -> void:
 	crate.name = "AirCrate%d" % crate_index
 	crate_index += 1
 	crate.setup(kinds)
-	crate.starts_landed = true
+	# Nasce no ar (a _ready soma o DROP_HEIGHT) e desce de paraquedas.
 	crate.position = Vector3(drop_position.x, 0.02, drop_position.z)
 	add_child(crate)
+
+
+## Espalha itens de vida e municao pelas ruas a cada onda (e na partida).
+## Replica por nome via GroundWeaponSync; some sozinho em 3 minutos.
+## Uso: conectado ao sinal wave_started do SurvivalWaveController.
+func _spawn_scattered_loot(_wave_index: int = 0) -> void:
+	if NetworkSession.is_client():
+		return
+	var rng := RandomNumberGenerator.new()
+	rng.seed = NetworkSession.world_seed * 31337 + Time.get_ticks_msec()
+	for item_index in 3:
+		_spawn_loot_item(rng, GroundSupplyPickup.Kind.HEALTH, 35)
+	for item_index in 3:
+		_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO, 60)
+
+
+func _spawn_loot_item(rng: RandomNumberGenerator, kind: int, amount: int) -> void:
+	var position := AIRDROP_CONTROLLER_SCRIPT.pick_clear_position(get_tree(), rng, 20.0, 110.0)
+	if position == AIRDROP_CONTROLLER_SCRIPT.INVALID_DROP_POSITION:
+		return
+	var item := GroundSupplyPickup.new()
+	item.name = "Loot%d" % loot_index
+	loot_index += 1
+	item.setup(kind, amount)
+	add_child(item)
+	item.global_position = position
 
 
 ## Estado de onda para os clientes (hoje o HUD do cliente fica preso na
@@ -378,10 +409,18 @@ func _reconcile_network_players() -> void:
 		if is_instance_valid(player):
 			player.queue_free()
 	_refresh_local_views()
-	# Peer acabou de carregar a cena: recebe o estado atual da onda (senao o
-	# HUD dele fica preso na "Hora 1" ate a proxima mudanca de onda).
-	if NetworkSession.is_server() and survival_wave_controller != null and survival_wave_controller.wave_index > 0:
-		_broadcast_wave_state(survival_wave_controller.wave_index)
+
+
+## Peer reconectou no meio da partida: entrega o estado atual da onda na
+## hora certa (quando a cena dele ja carregou e ele esta em loaded_peers),
+## senao o HUD dele fica preso na "Hora 1".
+## Uso: conectado ao sinal peer_scene_loaded do NetworkSession.
+func _on_peer_scene_loaded(peer_id: int) -> void:
+	if not NetworkSession.is_server() or survival_wave_controller == null:
+		return
+	if survival_wave_controller.wave_index <= 0:
+		return
+	_wave_state.rpc_id(peer_id, survival_wave_controller.wave_index, survival_wave_controller.total_kills)
 
 
 func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
