@@ -325,7 +325,7 @@ func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pe
 		var side := Vector3.UP.cross(pellet_direction).normalized()
 		bullet.global_position = spawn_position + pellet_direction * 0.12 + side * (float(pellet_index) - float(pellet_total - 1) / 2.0) * 0.04
 		bullet.setup(pellet_direction, 0, false)
-		Bullet.tint_tracer(bullet, WeaponStats.tracer_color_for(weapon_kind))
+		Bullet.style_tracer(bullet, weapon_kind)
 		bullet.add_to_group("network_bullet_visuals")
 
 
