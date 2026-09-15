@@ -18,13 +18,17 @@ const DOOR_BREAKING_TESTS_SCRIPT := preload("res://scripts/test_door_breaking.gd
 const NETWORK_LAG_PROBE_TESTS_SCRIPT := preload("res://scripts/test_network_lag_probe.gd")
 const CITY_PROPS_TESTS_SCRIPT := preload("res://scripts/test_city_props.gd")
 const CORPSE_CLEANUP_TESTS_SCRIPT := preload("res://scripts/test_corpse_cleanup.gd")
+const ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT := preload("res://scripts/test_zombie_snapshot_codec.gd")
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
+const SCRIPT_ERROR_COUNTER_SCRIPT := preload("res://scripts/test_script_error_counter.gd")
 
 var failure_count := 0
+var script_error_counter = SCRIPT_ERROR_COUNTER_SCRIPT.new()
 
 
 func _ready() -> void:
+	OS.add_logger(script_error_counter)
 	print("--- INICIANDO TESTES DE COMBATE, FOGO AMIGO E VARIANTES ---")
 	_test_friendly_fire_knife()
 	_test_friendly_fire_bullet()
@@ -37,6 +41,7 @@ func _ready() -> void:
 	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
+	ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)
 	if bool(get_meta("unit_test_failed", false)):
 		failure_count += 1
 	_test_hit_reaction_flinch()
@@ -55,6 +60,9 @@ func _ready() -> void:
 	_test_zombie_flock_coordinator()
 	_test_global_zombie_spawn_schedule()
 
+	if script_error_counter.script_errors > 0:
+		push_error("FALHA: %d erro(s) de script durante a suite: %s" % [script_error_counter.script_errors, "\n".join(script_error_counter.messages)])
+		failure_count += 1
 	if failure_count > 0:
 		push_error("UNIT_TEST_FAIL: %d grupo(s) de teste falharam." % failure_count)
 		get_tree().quit(1)
