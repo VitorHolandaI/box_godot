@@ -22,6 +22,8 @@ func run(test_root: Node) -> void:
 	_test_airdrop_drop_and_pickup(test_root)
 	_test_ground_weapon_sync(test_root)
 	_test_client_wave_sync(test_root)
+	_test_variant_mix(test_root)
+	_test_forced_variant_spawn(test_root)
 	_test_wave_controller(test_root)
 	_test_wave_supplies(test_root)
 	_test_survival_hud(test_root)
@@ -185,6 +187,89 @@ func _test_client_wave_sync(test_root: Node) -> void:
 		_fail(test_root, "HUD do cliente deveria refletir a onda sincronizada; texto=%s." % hud_text)
 		return
 	print("PASS: Sync de onda para o cliente validado.")
+
+
+## Mix por fase soma 100 e pick_variant respeita as porcentagens.
+func _test_variant_mix(test_root: Node) -> void:
+	print("Testando mix percentual de variantes por fase...")
+	var schedule = SURVIVAL_WAVE_SCHEDULE_SCRIPT.new()
+	var early := schedule.variant_mix_for_wave(0)
+	var mid := schedule.variant_mix_for_wave(3)
+	var late := schedule.variant_mix_for_wave(7)
+	var endgame := schedule.variant_mix_for_wave(12)
+	for mix in [early, mid, late, endgame]:
+		var total := 0
+		for kind in mix:
+			total += int(mix[kind])
+		if total != 100:
+			_fail(test_root, "Mix da fase deveria somar 100; somou %d." % total)
+			return
+	if not early.has(ZombieMutator.Type.WALKER) or early.get(ZombieMutator.Type.BRUTE, 0) != 0:
+		_fail(test_root, "Hora 1-2 deveria ser horda basica sem brute.")
+		return
+	if mid.get(ZombieMutator.Type.SPRINTER, 0) == 0:
+		_fail(test_root, "Hora 3+ deveria liberar sprinters.")
+		return
+	if late.get(ZombieMutator.Type.BRUTE, 0) == 0:
+		_fail(test_root, "Hora 7+ deveria liberar o brute.")
+		return
+	if endgame.get(ZombieMutator.Type.SCREAMER, 0) == 0:
+		_fail(test_root, "Hora 11+ deveria liberar o screamer.")
+		return
+	# Faixas acumuladas do mix final: walker 0-34, brute 83-92, screamer 93-99.
+	if schedule.pick_variant(12, 0) != int(ZombieMutator.Type.WALKER):
+		_fail(test_root, "Rolagem 0 deveria cair no walker (maior faixa).")
+		return
+	if schedule.pick_variant(12, 83) != int(ZombieMutator.Type.BRUTE) or schedule.pick_variant(12, 92) != int(ZombieMutator.Type.BRUTE):
+		_fail(test_root, "Faixa do brute deveria cobrir rolagens 83-92.")
+		return
+	if schedule.pick_variant(12, 82) == int(ZombieMutator.Type.BRUTE):
+		_fail(test_root, "Rolagem 82 deveria ficar fora da faixa do brute.")
+		return
+	if schedule.pick_variant(12, 93) != int(ZombieMutator.Type.SCREAMER):
+		_fail(test_root, "Rolagem 93 deveria cair no screamer.")
+		return
+	print("PASS: Mix percentual de variantes validado.")
+
+
+## Spawn respeita a variante forçada e aplica os stats da tabela.
+func _test_forced_variant_spawn(test_root: Node) -> void:
+	print("Testando variante forçada com stats de brute e screamer...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.name = "ZombieForcedTest"
+	zombie.simulation_enabled = false
+	zombie.set("forced_variant", ZombieMutator.Type.BRUTE)
+	test_root.add_child(zombie)
+	if int(zombie.get("zombie_type")) != int(ZombieMutator.Type.BRUTE):
+		_fail(test_root, "Zumbi deveria nascer brute com variante forçada.")
+		zombie.free()
+		return
+	if int(zombie.get("max_health")) != 320 or float(zombie.get("speed")) > 1.3:
+		_fail(test_root, "Brute deveria ter 320 de vida e andar devagar; vida=%s speed=%s." % [zombie.get("max_health"), zombie.get("speed")])
+		zombie.free()
+		return
+	zombie.set("forced_variant", ZombieMutator.Type.SCREAMER)
+	var screamer := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	screamer.name = "ZombieScreamerTest"
+	screamer.simulation_enabled = false
+	screamer.set("forced_variant", ZombieMutator.Type.SCREAMER)
+	test_root.add_child(screamer)
+	if int(screamer.get("zombie_type")) != int(ZombieMutator.Type.SCREAMER):
+		_fail(test_root, "Zumbi deveria nascer screamer.")
+		zombie.free()
+		screamer.free()
+		return
+	# Grito atrai a horda: cooldown inicia e fire chama hear_gunshot no grupo.
+	screamer.set("scream_cooldown", 0.0)
+	screamer.call("_update_scream", 0.1)
+	if float(screamer.get("scream_cooldown")) <= 0.0:
+		_fail(test_root, "Grito deveria recarregar o cooldown do screamer.")
+		zombie.free()
+		screamer.free()
+		return
+	zombie.free()
+	screamer.free()
+	print("PASS: Variantes forçadas (brute e screamer) validadas.")
 
 
 func _test_wave_controller(test_root: Node) -> void:
