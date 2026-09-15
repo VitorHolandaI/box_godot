@@ -656,6 +656,11 @@ func _spawn_zombie(position_override: Variant = null) -> bool:
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	zombie.name = "%s%d" % [ZOMBIE_SNAPSHOT_CODEC_SCRIPT.NAME_PREFIX, spawn_index]
 	zombie.set_meta("network_id", spawn_index)
+	# Sobrevivencia: a onda sorteia a variante (mix percentual por fase) e o
+	# hash sincroniza o visual para os clientes pelo snapshot.
+	if NetworkSession.survival_mode and survival_wave_controller != null:
+		var roll := posmod(spawn_index * 37 + NetworkSession.world_seed * 13, 100)
+		zombie.set("forced_variant", survival_wave_controller.schedule.pick_variant(survival_wave_controller.wave_index, roll))
 	zombies.add_child(zombie, true)
 	zombie.died.connect(_on_zombie_died)
 	zombie.stranded.connect(_on_zombie_stranded)

@@ -60,6 +60,8 @@ enum ZombieType {
 	ONE_LEG = 6,
 	HALF_LEG = 7,
 	HALF_HEAD = 8,
+	BRUTE = 9,
+	SCREAMER = 10,
 }
 
 enum LodLevel {
@@ -90,6 +92,10 @@ var hit_reaction_time := 0.0
 var hit_direction := Vector3.ZERO
 var hit_kind := ""
 var walk_time := 0.0
+## Variante forçada pela onda (mix percentual); -1 = hash aleatorio original.
+var forced_variant := -1
+## Grito do screamer: intervalo aleatorio entre gritos.
+var scream_cooldown := 0.0
 var death_velocity := Vector3.ZERO
 var is_dead := false
 var simulation_enabled := true
@@ -161,6 +167,7 @@ func _physics_process(delta: float) -> void:
 		velocity.y -= gravity * delta
 
 	_update_senses(delta)
+	_update_scream(delta)
 	var target := alert_target
 	var is_walking := false
 	var melee_target := _find_nearest_melee_player() if attack_cooldown <= 0.0 else null
@@ -238,6 +245,19 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 	_animate_pose(delta, is_walking and is_on_floor())
 	_update_groan_audio(delta)
+
+
+## Screamer: grita de tempos em tempos e a horda ouve o grito a 30m.
+## Reusa a rota de ruido (hear_gunshot) para atrair os lideres de cluster.
+## Uso: chamado a cada tick de simulacao (server/offline).
+func _update_scream(delta: float) -> void:
+	if int(zombie_type) != ZombieType.SCREAMER:
+		return
+	scream_cooldown = maxf(scream_cooldown - delta, 0.0)
+	if scream_cooldown > 0.0:
+		return
+	scream_cooldown = randf_range(7.0, 11.0)
+	get_tree().call_group("zombies", "hear_gunshot", global_position, 28.0)
 
 
 func _update_senses(delta: float) -> void:
@@ -651,7 +671,12 @@ func _spawn_ragdoll() -> void:
 
 func _configure_variant() -> void:
 	appearance_hash = absi(name.hash())
-	zombie_type = (appearance_hash % 9) as ZombieType
+	if forced_variant >= 0:
+		# Onda escolhe a variante (mix percentual); hash vira visual coerente.
+		zombie_type = forced_variant as ZombieType
+		appearance_hash = appearance_hash + posmod(int(forced_variant) - appearance_hash % 11, 11)
+	else:
+		zombie_type = (appearance_hash % 11) as ZombieType
 	ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
 
 
