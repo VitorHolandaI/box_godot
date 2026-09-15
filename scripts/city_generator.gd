@@ -100,7 +100,8 @@ func _create_procedural_safehouse() -> void:
 	safehouse.position = Vector3(-10.5, 0.12, 10.5)
 	add_child(safehouse)
 	var safehouse_min := safehouse.global_position + Vector3(-6.4, 0.0, -6.4)
-	var safehouse_max := safehouse.global_position + Vector3(6.4, 6.6, 6.4)
+	# Ate o topo da mureta do telhado (6.47 + 1.0).
+	var safehouse_max := safehouse.global_position + Vector3(6.4, 7.6, 6.4)
 	PROCEDURAL_CITY_ASSEMBLER.configure_cutout_bounds(safehouse, safehouse_min, safehouse_max)
 	PROCEDURAL_CITY_ASSEMBLER.MESH_BATCHER.merge_static_meshes(safehouse)
 

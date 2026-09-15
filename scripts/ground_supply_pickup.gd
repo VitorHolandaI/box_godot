@@ -38,6 +38,9 @@ const CLASS_LABELS: Dictionary = {
 	Kind.AMMO_CARBINE: "CARABINA",
 }
 const DEFAULT_LIFETIME := 180.0
+## Municao de classe tocada por quem nao tem aquela arma vira balas de pistola:
+## antes o jogador passava por cima e nada acontecia ("municao nao conta").
+const PISTOL_ROUNDS_FROM_FOREIGN_CLASS := 12
 
 var supply_kind := Kind.HEALTH
 var amount := 35
@@ -87,7 +90,7 @@ func _on_body_entered(body: Node3D) -> void:
 	elif supply_kind == Kind.AMMO and body.has_method("add_ammo"):
 		received = int(body.call("add_ammo", amount))
 	elif KIND_TO_WEAPON.has(supply_kind) and body.has_method("add_crate_reserve"):
-		received = int(body.call("add_crate_reserve", int(KIND_TO_WEAPON[supply_kind]), amount))
+		received = _collect_class_ammo(body)
 	# Reserva cheia / vida cheia deixa o item no chao para quem precisa.
 	if received > 0:
 		GroundWeaponSync.mark_dirty()
@@ -98,6 +101,18 @@ func _on_body_entered(body: Node3D) -> void:
 ## Uso: var cor := GroundSupplyPickup.color_for(GroundSupplyPickup.Kind.AMMO_UZI)
 static func color_for(kind: int) -> Color:
 	return CLASS_COLORS.get(kind, Color(0.96, 0.96, 0.92))
+
+
+## Classe da arma que o jogador tem: vai para a reserva dela. Sem a arma: vira
+## balas de pistola. Reserva cheia retorna 0 e o item fica no chao.
+func _collect_class_ammo(player: Node) -> int:
+	var weapon_kind := int(KIND_TO_WEAPON[supply_kind])
+	var slots: Variant = player.get("weapon_slots")
+	if slots is WeaponSlots and (slots as WeaponSlots).has_kind(weapon_kind):
+		return int(player.call("add_crate_reserve", weapon_kind, amount))
+	if player.has_method("add_ammo"):
+		return int(player.call("add_ammo", PISTOL_ROUNDS_FROM_FOREIGN_CLASS))
+	return 0
 
 
 func _build_visuals() -> void:
