@@ -1,5 +1,8 @@
 extends Control
 
+## Pedido do botao "Destravar personagem"; main.gd resolve local ou pela rede.
+signal unstuck_requested
+
 @onready var title: Label = $MenuPanel/Content/Title
 @onready var status: Label = $MenuPanel/Content/Status
 
@@ -41,6 +44,11 @@ func close_menu() -> void:
 
 
 func _on_continue_pressed() -> void:
+	close_menu()
+
+
+func _on_unstuck_pressed() -> void:
+	unstuck_requested.emit()
 	close_menu()
 
 
