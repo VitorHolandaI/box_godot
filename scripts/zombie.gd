@@ -697,9 +697,11 @@ func _update_groan_audio(delta: float) -> void:
 
 
 func _has_nearby_player(max_distance: float) -> bool:
-	for player_node in get_tree().get_nodes_in_group("player"):
-		var player := player_node as Node3D
-		if player != null and global_position.distance_to(player.global_position) <= max_distance:
+	# Cache de jogadores vivos do coordenador (0.25s): 36k allocs/s de
+	# get_nodes_in_group apenas para decidir se geme viram 1 lookup.
+	for player in ZombieFlockCoordinator.get_living_players(get_tree()):
+		var player_node := player as Node3D
+		if player_node != null and global_position.distance_to(player_node.global_position) <= max_distance:
 			return true
 	return false
 
