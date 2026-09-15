@@ -86,7 +86,7 @@ func _process(_delta: float) -> void:
 		var player := players[index]
 		if not is_instance_valid(player):
 			continue
-		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\nZumbis: %d | Abates: %d\n%s\n%s" % [
+		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\n%s\nZumbis: %d | Abates: %d\n%s\n%s" % [
 			index + 1,
 			player.input_device_name,
 			player.get_lives_text(),
@@ -95,6 +95,7 @@ func _process(_delta: float) -> void:
 			player.get_stamina_text(),
 			player.get_weapon_name(),
 			player.get_ammo_text(),
+			player.get_weapon_slots_text(),
 			alive_zombies,
 			player.zombie_kills,
 			player.get_sonar_text(),
