@@ -31,6 +31,9 @@ const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 2
 ## frame (fila) para nao dar hitch de instantiates sincronos.
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 6
 const PLAYER_VISION_UPDATE_INTERVAL := 0.12
+## Ray de oclusao de visao so dentro de 20m: alem disso o dissolve ja cobre
+## e o estado anterior persiste (zumbi visto continua, oculto segue oculto).
+const VISION_RAY_MAX_RANGE_SQ := 400.0
 const PLAYER_SPAWN_POINTS := [
 	Vector3(-13.0, 1.18, 9.5),
 	Vector3(-11.0, 1.18, 9.5),
@@ -857,14 +860,21 @@ func _update_player_vision(delta: float) -> void:
 		# LOD FAR ja fica oculto por design: nenhum ray de visao nele.
 		if int(zombie.get("lod_level")) == 2: # LodLevel.FAR
 			continue
+		var already_visible := bool(zombie.get("vision_visible"))
 		var visible_to_player := false
 		# Zumbi ja visivel reconfirma o ray a cada 2 ticks: com a horda em
 		# cima do jogador (todos no cone), metade dos rays some e o atraso
 		# maximo de ocultacao passa de 0.12s para 0.24s (imperceptivel).
-		var needs_ray := bool(zombie.get("vision_visible")) == false or player_vision_tick % 2 == 0
+		var needs_ray := not already_visible or player_vision_tick % 2 == 0
 		for player_node in local_players:
 			var player := player_node as CharacterBody3D
 			if player == null or not is_instance_valid(player) or not player.can_see_position(zombie.global_position):
+				continue
+			# Alem de 20m o dissolve mal se percebe: nenhum ray — o estado
+			# anterior persiste (ja visto continua visivel, nunca visto segue
+			# oculto ate aproximar). O ray so paga quando muda algo perto.
+			if player.global_position.distance_squared_to(zombie.global_position) > VISION_RAY_MAX_RANGE_SQ:
+				visible_to_player = visible_to_player or already_visible
 				continue
 			if not needs_ray:
 				visible_to_player = true
