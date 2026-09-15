@@ -128,6 +128,9 @@ var progress_watch = PROGRESS_WATCH_SCRIPT.new()
 var wall_detour = WALL_DETOUR_SCRIPT.new()
 var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
 var boss_brain = null
+## So o chefe mostra vida flutuante. Com a horda cheia, 600 Label3D vermelhos
+## com o texto reescrito a cada snapshot regeravam malha de texto sem parar (lag).
+var shows_health_label := false
 var _watched_target: Node = null
 var _stuck_logged := false
 var _dissolve_visual = null
@@ -141,7 +144,8 @@ func _ready() -> void:
 	max_slides = 6
 	network_target_position = global_position
 	network_target_rotation = rotation.y
-	health_label.text = "%d/%d" % [health, max_health]
+	health_label.visible = false
+	_refresh_health_label()
 	_collect_fade_meshes()
 
 
@@ -575,7 +579,7 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 
 	amount = VARIANT_ABILITIES_SCRIPT.adjust_incoming_damage(int(zombie_type), amount, damage_kind)
 	health = maxi(health - mini(amount, max_health), 0)
-	health_label.text = "%d/%d" % [health, max_health]
+	_refresh_health_label()
 	hit_direction = attack_direction.normalized()
 	hit_kind = damage_kind
 	# O Tita nao recua com tiro: 10000 de vida empurrado a cada bala nunca chegaria.
@@ -717,7 +721,7 @@ func _update_visual_fade(delta: float) -> void:
 		return
 	visible = true
 	model.visible = true
-	health_label.visible = true
+	health_label.visible = shows_health_label
 	# Po so quando a desintegracao comeca por perda de visao, e nunca no servidor.
 	if was_whole and visual_opacity < 0.999 and not vision_visible and not is_dead and not NetworkSession.is_server():
 		DISSOLVE_VISUAL_SCRIPT.emit_dust(self, ZombieMutator.appearance_colors(appearance_hash)[1])
@@ -725,7 +729,18 @@ func _update_visual_fade(delta: float) -> void:
 	# zumbi (36 corpos no solver + material copiado = custo sem retorno).
 	if not NetworkSession.is_server():
 		_dissolve_visual.set_dissolve(1.0 - visual_opacity)
-	health_label.modulate.a = visual_opacity
+	if shows_health_label:
+		health_label.modulate.a = visual_opacity
+
+
+## Atualiza o texto so do chefe e so quando o valor muda (Label3D regera a malha
+## a cada troca de texto).
+func _refresh_health_label() -> void:
+	if not shows_health_label:
+		return
+	var text := "%d/%d" % [health, max_health]
+	if health_label.text != text:
+		health_label.text = text
 
 
 func _collect_fade_meshes() -> void:
@@ -748,7 +763,8 @@ func _configure_variant() -> void:
 		zombie_type = ZombieMutator.random_variant_for_hash(appearance_hash) as ZombieType
 	ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
 	# Grupo proprio: o minimapa mostra o chefe sempre sem varrer a horda inteira.
-	if int(zombie_type) == ZombieType.TITAN:
+	shows_health_label = int(zombie_type) == ZombieType.TITAN
+	if shows_health_label:
 		add_to_group(BOSS_GROUP)
 
 
@@ -821,7 +837,7 @@ func apply_network_state(state: Dictionary) -> void:
 			global_position = network_target_position
 	network_target_rotation = float(state.get("rotation", network_target_rotation))
 	health = clampi(int(state.get("health", health)), 0, max_health)
-	health_label.text = "%d/%d" % [health, max_health]
+	_refresh_health_label()
 	if state.has("zombie_type"):
 		var net_type := int(state.get("zombie_type"))
 		appearance_hash = int(state.get("appearance_hash", appearance_hash))
