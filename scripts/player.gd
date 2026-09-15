@@ -16,7 +16,7 @@ const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const KNIFE_ATTACK_DURATION := 0.4
 const KNIFE_DOOR_REACH := 1.8
 const MAX_LIVES := 3
-const MAX_RESERVE_AMMO := 96
+const MAX_RESERVE_AMMO := 144
 const VISION_RANGE := 32.0
 const VISION_HALF_ANGLE := deg_to_rad(70.0)
 const VISION_ARC_SEGMENTS := 32
@@ -77,7 +77,7 @@ var stamina_recovery_delay := 0.0
 var is_sprinting := false
 var current_weapon := Weapon.KNIFE
 var pistol_ammo := 12
-var reserve_ammo := 48
+var reserve_ammo := 96
 var attack_cooldown := 0.0
 var muzzle_flash_time := 0.0
 var gunshot_noise_time := 0.0
@@ -670,7 +670,7 @@ func respawn() -> void:
 	stamina = max_stamina
 	hit_reaction_time = 0.0
 	pistol_ammo = 12
-	reserve_ammo = 48
+	reserve_ammo = 96
 
 
 ## Botao "Destravar personagem": leva o boneco ao primeiro espaco livre acima

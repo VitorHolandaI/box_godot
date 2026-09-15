@@ -21,6 +21,7 @@ func run(test_root: Node) -> void:
 	_test_airdrop_schedule(test_root)
 	_test_airdrop_drop_and_pickup(test_root)
 	_test_ground_weapon_sync(test_root)
+	_test_crate_expires(test_root)
 	_test_client_wave_sync(test_root)
 	_test_variant_mix(test_root)
 	_test_forced_variant_spawn(test_root)
@@ -178,6 +179,30 @@ func _test_ground_weapon_sync(test_root: Node) -> void:
 
 
 ## Cliente recebe o estado da onda por RPC e o HUD acompanha.
+## Crate fica marcado e expira em lifetime_seconds sem coleta.
+func _test_crate_expires(test_root: Node) -> void:
+	print("Testando expiracao do crate sem coleta...")
+	var crate := AirSupplyPickup.new()
+	crate.name = "AirCrateExpire"
+	crate.setup([WeaponStats.Kind.MAGNUM])
+	crate.starts_landed = true
+	crate.lifetime_seconds = 0.3
+	test_root.add_child(crate)
+	crate.global_position = Vector3(10.0, 0.02, 10.0)
+	if not bool(crate.get("dropped")):
+		_fail(test_root, "Crate aterrissado deveria iniciar pronto para coleta.")
+		crate.free()
+		return
+	for _tick in 4:
+		crate.call("_physics_process", 0.1)
+	if not crate.is_queued_for_deletion():
+		_fail(test_root, "Crate deveria expirar apos lifetime_seconds sem coleta.")
+		crate.free()
+		return
+	crate.free()
+	print("PASS: Expiracao do crate validada.")
+
+
 func _test_client_wave_sync(test_root: Node) -> void:
 	print("Testando sync de onda para o HUD do cliente...")
 	var controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new()

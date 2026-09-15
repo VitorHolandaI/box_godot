@@ -13,6 +13,9 @@ var weapon_kinds: Array[int] = []
 var dropped := false
 ## Crates restauradas pelo sync chegam no nivel do chao: sem nova queda.
 var starts_landed := false
+## Crate fica marcado no minimapa e expira em 10 minutos sem coleta.
+var lifetime_seconds := 600.0
+var lifetime_elapsed := 0.0
 var model_root: Node3D
 var parachute_root: Node3D
 var elapsed := 0.0
@@ -49,6 +52,13 @@ func _physics_process(delta: float) -> void:
 			return
 		_update_parachute_sway(delta)
 		return
+	# Expiracao so na autoridade (offline/servidor); no cliente o no some
+	# quando o sync por nome nota a remocao no servidor.
+	if not NetworkSession.is_client():
+		lifetime_elapsed += delta
+		if lifetime_elapsed >= lifetime_seconds:
+			queue_free()
+			return
 	if model_root != null:
 		model_root.rotation.y += delta * 0.6
 
