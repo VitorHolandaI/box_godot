@@ -24,12 +24,19 @@ const APARTMENT_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_apartment_lay
 const ZOMBIE_UNSTUCK_TESTS_SCRIPT := preload("res://scripts/test_zombie_unstuck.gd")
 const PLAYER_UNSTUCK_TESTS_SCRIPT := preload("res://scripts/test_player_unstuck.gd")
 const NETWORK_JOIN_SYNC_TESTS_SCRIPT := preload("res://scripts/test_network_join_sync.gd")
+const AMMO_LOOT_TESTS_SCRIPT := preload("res://scripts/test_ammo_loot.gd")
+const ZOMBIE_NEW_VARIANTS_TESTS_SCRIPT := preload("res://scripts/test_zombie_new_variants.gd")
+const ZOMBIE_BOSS_TESTS_SCRIPT := preload("res://scripts/test_zombie_boss.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
 	"zombie_unstuck": ZOMBIE_UNSTUCK_TESTS_SCRIPT,
 	"player_unstuck": PLAYER_UNSTUCK_TESTS_SCRIPT,
 	"network_join_sync": NETWORK_JOIN_SYNC_TESTS_SCRIPT,
+	"ammo_loot": AMMO_LOOT_TESTS_SCRIPT,
+	"zombie_new_variants": ZOMBIE_NEW_VARIANTS_TESTS_SCRIPT,
+	"zombie_boss": ZOMBIE_BOSS_TESTS_SCRIPT,
+	"survival_mode": SURVIVAL_TESTS_SCRIPT,
 	"zombie_snapshot_codec": ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT,
 	"building_navigation": BUILDING_NAVIGATION_TESTS_SCRIPT,
 	"door_breaking": DOOR_BREAKING_TESTS_SCRIPT,
@@ -63,6 +70,9 @@ func _ready() -> void:
 	await ZOMBIE_UNSTUCK_TESTS_SCRIPT.new().run(self)
 	await PLAYER_UNSTUCK_TESTS_SCRIPT.new().run(self)
 	NETWORK_JOIN_SYNC_TESTS_SCRIPT.new().run(self)
+	AMMO_LOOT_TESTS_SCRIPT.new().run(self)
+	ZOMBIE_NEW_VARIANTS_TESTS_SCRIPT.new().run(self)
+	ZOMBIE_BOSS_TESTS_SCRIPT.new().run(self)
 	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
@@ -109,7 +119,13 @@ func _run_focused_group(group_name: String) -> void:
 		push_error("UNIT_TEST_FAIL: grupo '%s' desconhecido; esperado um de %s." % [group_name, FOCUSED_TEST_GROUPS.keys()])
 		get_tree().quit(1)
 		return
-	await FOCUSED_TEST_GROUPS[group_name].new().run(self)
+	var group_script: GDScript = FOCUSED_TEST_GROUPS[group_name]
+	# Script com erro de compilacao nao roda nenhum teste e antes saia PASS.
+	if not group_script.can_instantiate():
+		push_error("UNIT_TEST_FAIL: grupo '%s' nao compila (%s); rode `godot --headless --path . --import` se criou class_name novo." % [group_name, group_script.resource_path])
+		get_tree().quit(1)
+		return
+	await group_script.new().run(self)
 	var failed: bool = bool(get_meta("unit_test_failed", false)) or int(script_error_counter.script_errors) > 0
 	if script_error_counter.script_errors > 0:
 		push_error("FALHA: %d erro(s) de script: %s" % [script_error_counter.script_errors, "\n".join(script_error_counter.messages)])

@@ -19,6 +19,24 @@ const KIND_TO_WEAPON: Dictionary = {
 	Kind.AMMO_CARBINE: WeaponStats.Kind.CARBINE,
 }
 
+## Cor e etiqueta por classe: antes toda caixa de municao era igual e ninguem
+## sabia que aquela era da uzi ou da escopeta.
+const CLASS_COLORS: Dictionary = {
+	Kind.AMMO: Color(0.95, 0.78, 0.12),
+	Kind.AMMO_SHOTGUN: Color(0.9, 0.35, 0.1),
+	Kind.AMMO_UZI: Color(0.2, 0.75, 0.95),
+	Kind.AMMO_MAGNUM: Color(0.75, 0.3, 0.9),
+	Kind.AMMO_DOUBLE_BARREL: Color(0.95, 0.2, 0.25),
+	Kind.AMMO_CARBINE: Color(0.35, 0.9, 0.35),
+}
+const CLASS_LABELS: Dictionary = {
+	Kind.AMMO: "PISTOLA",
+	Kind.AMMO_SHOTGUN: "ESCOPETA",
+	Kind.AMMO_UZI: "UZI",
+	Kind.AMMO_MAGNUM: "MAGNUM",
+	Kind.AMMO_DOUBLE_BARREL: "DUPLA",
+	Kind.AMMO_CARBINE: "CARABINA",
+}
 const DEFAULT_LIFETIME := 180.0
 
 var supply_kind := Kind.HEALTH
@@ -76,6 +94,12 @@ func _on_body_entered(body: Node3D) -> void:
 		queue_free()
 
 
+## Cor de destaque do item (municao por classe); vida usa o branco da cruz.
+## Uso: var cor := GroundSupplyPickup.color_for(GroundSupplyPickup.Kind.AMMO_UZI)
+static func color_for(kind: int) -> Color:
+	return CLASS_COLORS.get(kind, Color(0.96, 0.96, 0.92))
+
+
 func _build_visuals() -> void:
 	model_root = Node3D.new()
 	model_root.name = "Model"
@@ -86,7 +110,7 @@ func _build_visuals() -> void:
 	primary.albedo_color = Color(0.78, 0.12, 0.12) if is_health else Color(0.24, 0.35, 0.18)
 	primary.roughness = 0.6
 	var bright := StandardMaterial3D.new()
-	bright.albedo_color = Color(0.96, 0.96, 0.92) if is_health else Color(0.95, 0.78, 0.12)
+	bright.albedo_color = color_for(supply_kind)
 	bright.emission_enabled = true
 	bright.emission = bright.albedo_color
 	bright.emission_energy_multiplier = 0.4
@@ -96,11 +120,26 @@ func _build_visuals() -> void:
 		_add_box(Vector3(0.06, 0.2, 0.03), Vector3(0.0, 0.0, -0.17), bright)
 	else:
 		_add_box(Vector3(0.38, 0.05, 0.3), Vector3(0.0, 0.16, 0.0), bright)
+		_add_class_label()
 	var light := OmniLight3D.new()
-	light.light_color = primary.albedo_color.lightened(0.35)
+	light.light_color = primary.albedo_color.lightened(0.35) if is_health else bright.albedo_color
 	light.light_energy = 0.5
 	light.omni_range = 2.2
 	model_root.add_child(light)
+
+
+func _add_class_label() -> void:
+	var label := Label3D.new()
+	label.name = "ClassLabel"
+	label.text = String(CLASS_LABELS.get(supply_kind, "MUNICAO"))
+	label.modulate = color_for(supply_kind)
+	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.9)
+	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
+	label.no_depth_test = true
+	label.font_size = 40
+	label.pixel_size = 0.006
+	label.position = Vector3(0.0, 0.55, 0.0)
+	model_root.add_child(label)
 
 
 func _build_collision() -> void:
