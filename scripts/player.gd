@@ -18,15 +18,9 @@ const KNIFE_ATTACK_DURATION := 0.4
 const KNIFE_DOOR_REACH := 1.8
 const MAX_LIVES := 3
 const MAX_RESERVE_AMMO := 144
-const VISION_RANGE := 32.0
-const VISION_HALF_ANGLE := deg_to_rad(70.0)
-const VISION_ARC_SEGMENTS := 32
-# Bolha curta em todas as direcoes: o jogador percebe o que chega por tras.
-const PROXIMITY_VISION_RADIUS := 4.0
-const PROXIMITY_ARC_SEGMENTS := 40
-const VISION_ARC_RADIUS := VISION_RANGE
-const VISION_ARC_Y := -0.85
-const VISION_OVERLAY_ALPHA := 0.18
+## Cone de visao aposentado (pedido de jogo): o jogador ve todo zumbi a ate
+## VIEW_RADIUS em qualquer direcao, sem raio de oclusao (mais barato que o cone).
+const VIEW_RADIUS := 35.0
 const SONAR_DURATION := 4.0
 const SONAR_INTERVAL := 10.0
 const SONAR_REVEAL_RADIUS := 45.0
@@ -100,7 +94,6 @@ var hit_reaction_time := 0.0
 var hit_direction := Vector3.ZERO
 var walk_time := 0.0
 var spawn_position := Vector3.ZERO
-var vision_overlay: MeshInstance3D
 var move_input := Vector2.ZERO
 var aim_input := Vector2.ZERO
 var jump_pressed := false
@@ -148,7 +141,6 @@ func _ready() -> void:
 	_apply_player_color()
 	_build_crate_weapon_models()
 	_update_weapon_models()
-	_create_vision_overlay()
 
 
 func _physics_process(delta: float) -> void:
@@ -893,14 +885,6 @@ func restore_wave_lives() -> void:
 	respawn()
 
 
-func configure_vision_overlay(layer: int) -> void:
-	if vision_overlay == null or layer < 1 or layer > 20:
-		return
-	vision_overlay.set_layer_mask_value(1, false)
-	vision_overlay.set_layer_mask_value(layer, true)
-	vision_overlay.visible = not is_eliminated
-
-
 ## Dispara o pulso sonar que revela os zumbis proximos no minimapa. O pulso e
 ## passivo (automatico a cada SONAR_INTERVAL) mas tambem pode ser antecipado
 ## manualmente. Uso: player.trigger_sonar()
@@ -927,17 +911,14 @@ func get_sonar_text() -> String:
 	return "Sonar: %ds" % ceili(sonar_interval_timer)
 
 
+## Zumbi dentro do raio de visao em qualquer direcao (sem cone e sem parede).
+## Uso: if player.can_see_position(zombie.global_position): mostrar()
 func can_see_position(target_position: Vector3) -> bool:
 	if is_eliminated:
 		return false
 	var offset := target_position - global_position
 	offset.y = 0.0
-	var distance := offset.length()
-	if distance <= PROXIMITY_VISION_RADIUS:
-		return true
-	if distance > VISION_RANGE:
-		return false
-	return -global_transform.basis.z.dot(offset / distance) >= cos(VISION_HALF_ANGLE)
+	return offset.length_squared() <= VIEW_RADIUS * VIEW_RADIUS
 
 
 func get_lives_text() -> String:
@@ -1012,47 +993,6 @@ func _muzzle_material() -> StandardMaterial3D:
 	material.emission = Color(1.0, 0.35, 0.02)
 	material.emission_energy_multiplier = 3.0
 	return material
-
-
-func _create_vision_overlay() -> void:
-	vision_overlay = MeshInstance3D.new()
-	vision_overlay.name = "VisionArc"
-	vision_overlay.visible = false
-	vision_overlay.position.y = VISION_ARC_Y
-	vision_overlay.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	vision_overlay.mesh = _build_vision_arc_mesh()
-	var material := StandardMaterial3D.new()
-	material.albedo_color = Color(1.0, 1.0, 1.0, VISION_OVERLAY_ALPHA)
-	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
-	material.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
-	material.cull_mode = BaseMaterial3D.CULL_DISABLED
-	vision_overlay.material_override = material
-	add_child(vision_overlay)
-
-
-func _build_vision_arc_mesh() -> ArrayMesh:
-	var surface := SurfaceTool.new()
-	surface.begin(Mesh.PRIMITIVE_TRIANGLES)
-	for segment in VISION_ARC_SEGMENTS:
-		var first_angle := lerpf(-VISION_HALF_ANGLE, VISION_HALF_ANGLE, float(segment) / VISION_ARC_SEGMENTS)
-		var second_angle := lerpf(-VISION_HALF_ANGLE, VISION_HALF_ANGLE, float(segment + 1) / VISION_ARC_SEGMENTS)
-		surface.add_vertex(Vector3.ZERO)
-		surface.add_vertex(_vision_arc_point(first_angle, VISION_ARC_RADIUS))
-		surface.add_vertex(_vision_arc_point(second_angle, VISION_ARC_RADIUS))
-	# Bolha de proximidade so fora do cone, para nao dobrar a opacidade na frente.
-	var proximity_start := VISION_HALF_ANGLE
-	var proximity_end := TAU - VISION_HALF_ANGLE
-	for segment in PROXIMITY_ARC_SEGMENTS:
-		var first_angle := lerpf(proximity_start, proximity_end, float(segment) / PROXIMITY_ARC_SEGMENTS)
-		var second_angle := lerpf(proximity_start, proximity_end, float(segment + 1) / PROXIMITY_ARC_SEGMENTS)
-		surface.add_vertex(Vector3.ZERO)
-		surface.add_vertex(_vision_arc_point(first_angle, PROXIMITY_VISION_RADIUS))
-		surface.add_vertex(_vision_arc_point(second_angle, PROXIMITY_VISION_RADIUS))
-	return surface.commit()
-
-
-func _vision_arc_point(angle: float, radius: float) -> Vector3:
-	return Vector3(sin(angle) * radius, 0.02, -cos(angle) * radius)
 
 
 func _update_noise(delta: float, direction: Vector3) -> void:
