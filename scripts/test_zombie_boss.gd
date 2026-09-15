@@ -20,6 +20,7 @@ func run(test_root: Node) -> void:
 	_test_summon_and_rage_fire_once(test_root)
 	_test_slam_damages_players_in_radius(test_root)
 	_test_wave_waits_for_boss(test_root)
+	_test_health_label_only_on_boss(test_root)
 
 
 func _test_titan_stats(test_root: Node) -> void:
@@ -131,6 +132,38 @@ func _test_wave_waits_for_boss(test_root: Node) -> void:
 		_fail(test_root, "Onda so avanca depois do chefe morrer; antes=%s onda_depois=%d." % [still_first_wave, controller.wave_index])
 		return
 	print("PASS: Onda so termina com o chefe morto.")
+
+
+## Vida flutuante so no chefe: 600 Label3D reescritos por snapshot davam lag.
+func _test_health_label_only_on_boss(test_root: Node) -> void:
+	print("Testando vida flutuante so no Tita...")
+	var walker := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	walker.name = "LabelWalker"
+	walker.set("forced_variant", ZombieMutator.Type.WALKER)
+	walker.set("simulation_enabled", false)
+	test_root.add_child(walker)
+	var walker_label := walker.get_node("HealthLabel") as Label3D
+	var default_text := walker_label.text
+	walker.apply_network_state({"health": 37})
+	walker.set_vision_visible(true)
+	walker.call("_update_visual_fade", 1.0)
+	var walker_hidden := not walker_label.visible and walker_label.text == default_text
+	var titan := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	titan.name = "LabelTitan"
+	titan.set("forced_variant", ZombieMutator.Type.TITAN)
+	titan.set("simulation_enabled", false)
+	test_root.add_child(titan)
+	titan.apply_network_state({"health": 9000})
+	titan.set_vision_visible(true)
+	titan.call("_update_visual_fade", 1.0)
+	var titan_label := titan.get_node("HealthLabel") as Label3D
+	var titan_shown := titan_label.visible and titan_label.text == "9000/10000"
+	walker.free()
+	titan.free()
+	if not walker_hidden or not titan_shown:
+		_fail(test_root, "Vida flutuante: zumbi comum oculto e sem reescrever texto, Tita visivel; comum_oculto=%s tita=%s." % [walker_hidden, titan_shown])
+		return
+	print("PASS: So o Tita mostra a vida flutuante.")
 
 
 func _fail(test_root: Node, message: String) -> void:
