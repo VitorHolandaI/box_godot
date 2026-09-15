@@ -9,6 +9,7 @@ const WINDOW_HEIGHT := 0.9
 const WINDOW_FRAME_THICKNESS := 0.08
 const BOX_BUILDER: GDScript = preload("res://scripts/procedural/assemblers/box_builder.gd")
 const HOUSE_ROOF_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/house_roof_assembler.gd")
+const ROOF_TERRACE_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/roof_terrace_assembler.gd")
 const STAIR_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/stair_assembler.gd")
 const BUILDING_NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation/building_navigation.gd")
 const BUILDING_MATERIALS: GDScript = preload("res://scripts/procedural/assemblers/building_materials.gd")
@@ -43,13 +44,16 @@ static func assemble(building) -> StaticBody3D:
 	STAIR_ASSEMBLER.add_flights(body, building)
 	if building.archetype.begins_with("House"):
 		HOUSE_ROOF_ASSEMBLER.add_gable_roof(body, building, wall_material)
+	elif building.has_roof_terrace:
+		ROOF_TERRACE_ASSEMBLER.add_terrace(body, building, floor_material, wall_material)
 	else:
 		BOX_BUILDER.add_box(body, "Roof", Vector3(building.width, 0.18, building.depth), Vector3(building.width * 0.5, building.floors * building.floor_height, building.depth * 0.5), ceiling_material, true)
 	if building.archetype == "Shop_A" or building.archetype == "Grocery_A":
 		_add_commercial_front(body, building)
 	_add_wave_supply(body, building)
 	# Adicionado por ultimo: o navmesh e assado no _ready a partir de todas as colisoes acima.
-	body.add_child(BUILDING_NAVIGATION_SCRIPT.new(Vector3(building.width, building.floors * building.floor_height, building.depth)))
+	var navigation_height: float = building.floors * building.floor_height + (ROOF_TERRACE_ASSEMBLER.NAVIGATION_HEADROOM if building.has_roof_terrace else 0.0)
+	body.add_child(BUILDING_NAVIGATION_SCRIPT.new(Vector3(building.width, navigation_height, building.depth)))
 	return body
 
 

@@ -19,6 +19,17 @@ const NETWORK_LAG_PROBE_TESTS_SCRIPT := preload("res://scripts/test_network_lag_
 const CITY_PROPS_TESTS_SCRIPT := preload("res://scripts/test_city_props.gd")
 const CORPSE_CLEANUP_TESTS_SCRIPT := preload("res://scripts/test_corpse_cleanup.gd")
 const ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT := preload("res://scripts/test_zombie_snapshot_codec.gd")
+const APARTMENT_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_apartment_layout.gd")
+const ZOMBIE_UNSTUCK_TESTS_SCRIPT := preload("res://scripts/test_zombie_unstuck.gd")
+# Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
+const FOCUSED_TEST_GROUPS := {
+	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
+	"zombie_unstuck": ZOMBIE_UNSTUCK_TESTS_SCRIPT,
+	"building_navigation": BUILDING_NAVIGATION_TESTS_SCRIPT,
+	"door_breaking": DOOR_BREAKING_TESTS_SCRIPT,
+	"city_props": CITY_PROPS_TESTS_SCRIPT,
+	"network_lag_probe": NETWORK_LAG_PROBE_TESTS_SCRIPT,
+}
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
 const SCRIPT_ERROR_COUNTER_SCRIPT := preload("res://scripts/test_script_error_counter.gd")
@@ -29,6 +40,10 @@ var script_error_counter = SCRIPT_ERROR_COUNTER_SCRIPT.new()
 
 func _ready() -> void:
 	OS.add_logger(script_error_counter)
+	var focused_group := _focused_test_group()
+	if not focused_group.is_empty():
+		await _run_focused_group(focused_group)
+		return
 	print("--- INICIANDO TESTES DE COMBATE, FOGO AMIGO E VARIANTES ---")
 	_test_friendly_fire_knife()
 	_test_friendly_fire_bullet()
@@ -38,6 +53,8 @@ func _ready() -> void:
 	SURVIVAL_TESTS_SCRIPT.new().run(self)
 	await BUILDING_NAVIGATION_TESTS_SCRIPT.new().run(self)
 	await DOOR_BREAKING_TESTS_SCRIPT.new().run(self)
+	await APARTMENT_LAYOUT_TESTS_SCRIPT.new().run(self)
+	await ZOMBIE_UNSTUCK_TESTS_SCRIPT.new().run(self)
 	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
@@ -69,6 +86,26 @@ func _ready() -> void:
 		return
 	print("UNIT_TEST_PASS: Todos os testes de combate, trajetoria, vidas, safehouse, som, hordas e populacao passaram!")
 	get_tree().quit(0)
+
+
+func _focused_test_group() -> String:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--test-group="):
+			return argument.trim_prefix("--test-group=")
+	return ""
+
+
+func _run_focused_group(group_name: String) -> void:
+	if not FOCUSED_TEST_GROUPS.has(group_name):
+		push_error("UNIT_TEST_FAIL: grupo '%s' desconhecido; esperado um de %s." % [group_name, FOCUSED_TEST_GROUPS.keys()])
+		get_tree().quit(1)
+		return
+	await FOCUSED_TEST_GROUPS[group_name].new().run(self)
+	var failed: bool = bool(get_meta("unit_test_failed", false)) or int(script_error_counter.script_errors) > 0
+	if script_error_counter.script_errors > 0:
+		push_error("FALHA: %d erro(s) de script: %s" % [script_error_counter.script_errors, "\n".join(script_error_counter.messages)])
+	print("UNIT_TEST_%s: grupo %s" % ["FAIL" if failed else "PASS", group_name])
+	get_tree().quit(1 if failed else 0)
 
 
 func _mark_failure() -> void:

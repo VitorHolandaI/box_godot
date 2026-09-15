@@ -32,3 +32,18 @@ static func apply(tree: SceneTree, states: Dictionary) -> void:
 		if not state is Array or state.size() != 2:
 			continue
 		door.apply_network_state(bool(state[0]), bool(state[1]))
+
+
+## Aplica mudancas pontuais recebidas do servidor; caminhos que nao existem
+## neste cliente sao ignorados.
+## Usage: DoorNetworkState.apply_changes(get_tree(), {"GeneratedCity/Lot_3/House_A/Door_h_75_0_1": [true, false]})
+static func apply_changes(tree: SceneTree, changes: Dictionary) -> void:
+	var scene := tree.current_scene
+	if scene == null:
+		return
+	for path in changes:
+		var state: Variant = changes[path]
+		var door := scene.get_node_or_null(NodePath(str(path)))
+		if door == null or not door.has_method("apply_network_state") or not state is Array or state.size() != 2:
+			continue
+		door.apply_network_state(bool(state[0]), bool(state[1]))

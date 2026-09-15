@@ -8,6 +8,7 @@ interiores antes de trocar a aparencia pelos assets finais.
 - `mesh_batcher.gd`: funde as caixas estaticas de cada edificio num unico no por material para cortar draw calls.
 - `box_builder.gd`: caixa visual com colisao opcional compartilhada pelos assemblers.
 - `building_assembler.gd`: monta casas com telhado, paredes internas, portas com nome deterministico, moveis por comodo, luzes, apartamentos e o navmesh do edificio.
+- `roof_terrace_assembler.gd`: terraco no topo dos predios com laje vazada pelo ultimo lance, mureta e casinha da escada.
 - `house_roof_assembler.gd`: telhado de duas aguas a 30 graus com empenas fechadas, cumeeira, testeiras, cor de telha e chamine.
 - `street_light_assembler.gd`: postes em escala real ao longo das ruas procedurais, fora de lotes e do asfalto.
 - `stair_assembler.gd`: lajes com vao, lances alternados, rampa de colisao alinhada a laje e guarda-corpos.
