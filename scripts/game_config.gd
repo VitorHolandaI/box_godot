@@ -259,7 +259,7 @@ const FALLBACK_JOY_BUTTONS: Dictionary = {
 
 ## Bindings antigos pode nao conter acoes novas (ex.: sonar, escopeta). Garante
 ## um controle padrao para o jogador nao ficar sem a acao.
-func _fallback_binding(slot: int, action: String, config: Dictionary) -> InputEvent:
+func _fallback_binding(_slot: int, action: String, config: Dictionary) -> InputEvent:
 	if not FALLBACK_KEYS.has(action):
 		return null
 	if String(config.get("device_type", "keyboard")) == "gamepad":

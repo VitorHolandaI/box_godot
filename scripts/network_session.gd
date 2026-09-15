@@ -332,7 +332,7 @@ func _poll_server_discovery() -> void:
 			_register_discovered_server(payload, _discovery_socket.get_packet_ip())
 
 
-func _respond_to_discovery(request: Dictionary) -> void:
+func _respond_to_discovery(_request: Dictionary) -> void:
 	var response := {
 		"protocol": DISCOVERY_PROTOCOL,
 		"kind": "status",
@@ -459,7 +459,9 @@ func get_latency_text() -> String:
 	return "--" if latency_ms < 0 else "%d ms" % latency_ms
 
 
-static func parse_server_port_value(raw_port: String) -> int:
+## Autoload e instancia, entao parse_* precisa ser metodo de instancia:
+## menu.gd e tests chamam via NetworkSession (singleton), nao pela classe.
+func parse_server_port_value(raw_port: String) -> int:
 	if raw_port.is_empty() or not raw_port.is_valid_int():
 		return -1
 	var parsed_port := int(raw_port)
@@ -467,7 +469,9 @@ static func parse_server_port_value(raw_port: String) -> int:
 
 
 static func parse_world_seed_value(raw_seed: String) -> Variant:
-	return int(raw_seed) if raw_seed.is_valid_int() else null
+	if raw_seed.is_valid_int():
+		return int(raw_seed)
+	return null
 
 
 @rpc("any_peer", "call_remote", "unreliable")
