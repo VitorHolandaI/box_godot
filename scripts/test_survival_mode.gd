@@ -24,6 +24,7 @@ func run(test_root: Node) -> void:
 	_test_crate_expires(test_root)
 	_test_ground_supply_pickup(test_root)
 	_test_building_lights_toggle(test_root)
+	_test_stale_player_cache_survives(test_root)
 	_test_client_wave_sync(test_root)
 	_test_variant_mix(test_root)
 	_test_forced_variant_spawn(test_root)
@@ -311,6 +312,36 @@ func _test_building_lights_toggle(test_root: Node) -> void:
 		_fail(test_root, "Cache de luzes deveria conter o filho unico.")
 	building.free()
 	print("PASS: Toggle de luzes de interior validado.")
+
+
+## Cache de jogadores (R8/R13) sobrevive a player liberado no meio do frame:
+## peer desconecta, node morre e o cache velho ainda e lido por melee/groan.
+## Uso: roda na suite; qualquer cast de objeto liberado aparece como erro.
+func _test_stale_player_cache_survives(test_root: Node) -> void:
+	print("Testando cache de jogadores com player liberado...")
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.reads_local_input = false
+	player.position = Vector3(0.0, 1.0, 0.0)
+	test_root.add_child(player)
+	# Enche o cache do coordenador com o jogador vivo.
+	ZombieFlockCoordinator.get_living_players(test_root.get_tree())
+	player.queue_free()
+	await test_root.get_tree().process_frame
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.name = "ZombieStaleCacheTest"
+	zombie.simulation_enabled = false
+	test_root.add_child(zombie)
+	zombie.global_position = Vector3(3.0, 1.0, 0.0)
+	# Os tres consumidores do cache: nenhum pode estourar cast de freed.
+	zombie.call("_find_nearest_melee_player")
+	zombie.call("_has_nearby_player", 18.0)
+	zombie.call("_find_closest_living_player")
+	if ZombieFlockCoordinator.instance != null and not ZombieFlockCoordinator.instance._cached_players.is_empty():
+		var pruned := ZombieFlockCoordinator.get_living_players(test_root.get_tree())
+		if pruned.size() != 0:
+			_fail(test_root, "Cache deveria podar o jogador liberado; restou %d." % pruned.size())
+	player.free()
+	print("PASS: Cache de jogadores poda objetos liberados sem erro de cast.")
 
 
 func _test_client_wave_sync(test_root: Node) -> void:
