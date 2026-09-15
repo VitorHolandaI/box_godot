@@ -68,21 +68,30 @@ func _test_airdrop_schedule(test_root: Node) -> void:
 		_fail(test_root, "Ondas fora da lista nao deveriam cair crate.")
 		return
 	var hora_3 := schedule.crate_kinds_for_wave(2, 777)
-	if hora_3 != [WeaponStats.Kind.SHOTGUN]:
-		_fail(test_root, "Hora 3 deveria cair escopeta; veio %s." % hora_3)
+	if hora_3 != [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM]:
+		_fail(test_root, "Hora 3 deveria cair 3 armas (escopeta, Uzi, magnum); veio %s." % [hora_3])
 		return
 	var hora_7 := schedule.crate_kinds_for_wave(6, 777)
-	if hora_7 != [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI]:
-		_fail(test_root, "Hora 7 deveria cair escopeta + Uzi; veio %s." % hora_7)
+	if hora_7 != [WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI, WeaponStats.Kind.DOUBLE_BARREL]:
+		_fail(test_root, "Hora 7 deveria cair escopeta + Uzi + dupla; veio %s." % [hora_7])
 		return
 	var hora_11 := schedule.crate_kinds_for_wave(10, 777)
-	if hora_11 != [WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM]:
-		_fail(test_root, "Hora 11 deveria cair Uzi + Magnum; veio %s." % hora_11)
+	if hora_11 != [WeaponStats.Kind.MAGNUM, WeaponStats.Kind.DOUBLE_BARREL, WeaponStats.Kind.CARBINE]:
+		_fail(test_root, "Hora 11 deveria cair magnum + dupla + carabina; veio %s." % [hora_11])
 		return
-	var first := schedule.crate_kinds_for_wave(18, 555)
-	var second := schedule.crate_kinds_for_wave(18, 777)
-	if first != second and first.is_empty():
+	var first := schedule.crate_kinds_for_wave(22, 555)
+	var second := schedule.crate_kinds_for_wave(22, 555)
+	if first != second:
 		_fail(test_root, "Sorteio das ondas altas deveria ser deterministico por seed.")
+		return
+	if first.size() != 3:
+		_fail(test_root, "Todo crate deveria cair com 3 armas; veio %d." % first.size())
+		return
+	var distinct := {}
+	for kind in first:
+		distinct[kind] = true
+	if distinct.size() != 3:
+		_fail(test_root, "As 3 armas do crate deveriam ser distintas; veio %s." % [first])
 		return
 	print("PASS: Agenda de airdrop validada.")
 
