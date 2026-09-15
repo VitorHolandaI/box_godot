@@ -33,6 +33,7 @@ const SAFEHOUSE_ROOF_TESTS_SCRIPT := preload("res://scripts/test_safehouse_roof.
 const ZOMBIE_BODY_SCALE_TESTS_SCRIPT := preload("res://scripts/test_zombie_body_scale.gd")
 const WEAPON_ARSENAL_TESTS_SCRIPT := preload("res://scripts/test_weapon_arsenal.gd")
 const ZOMBIE_SPECIALS_TESTS_SCRIPT := preload("res://scripts/test_zombie_specials.gd")
+const GROUND_WEAPON_PICKUP_TESTS_SCRIPT := preload("res://scripts/test_ground_weapon_pickup.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -48,6 +49,7 @@ const FOCUSED_TEST_GROUPS := {
 	"zombie_body_scale": ZOMBIE_BODY_SCALE_TESTS_SCRIPT,
 	"weapon_arsenal": WEAPON_ARSENAL_TESTS_SCRIPT,
 	"zombie_specials": ZOMBIE_SPECIALS_TESTS_SCRIPT,
+	"ground_weapon_pickup": GROUND_WEAPON_PICKUP_TESTS_SCRIPT,
 	"survival_mode": SURVIVAL_TESTS_SCRIPT,
 	"zombie_snapshot_codec": ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT,
 	"building_navigation": BUILDING_NAVIGATION_TESTS_SCRIPT,
@@ -91,6 +93,7 @@ func _ready() -> void:
 	await ZOMBIE_BODY_SCALE_TESTS_SCRIPT.new().run(self)
 	await WEAPON_ARSENAL_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SPECIALS_TESTS_SCRIPT.new().run(self)
+	await GROUND_WEAPON_PICKUP_TESTS_SCRIPT.new().run(self)
 	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)

@@ -36,6 +36,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
+- `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada por raio entre aliados.
 - `test_weapon_arsenal.gd`: regressoes do arsenal: cada arma de crate ligada em municao, drop, crate e modelo, railgun atravessando a fila e tracers futuristas.
@@ -47,7 +48,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `weapon_stats.gd`: tabela unica das 16 armas de crate (escopetas, AK-47, M4, AUG, Beretta, sniper, bazuca, laser, plasma, railgun...) com cor, modelo, tracer, perfuracao e explosao.
 - `weapon_slots.gd`: inventario do slot de arma de crate (pente, reserva, durabilidade) com revisao para o snapshot.
 - `weapon_break_debris.gd`: pedacos voxel da arma quebrada, visuais locais.
-- `ground_weapon_pickup.gd`: arma dropada no chao, coleta por interacao.
+- `ground_weapon_pickup.gd`: arma no chao com o modelo real ampliado, queda com quiques assentando no piso, nome grande para quem chega perto, pisca antes de sumir; coleta com E.
 - `ground_weapon_sync.gd`: reconciliacao por nome das armas no chao entre servidor e cliente.
 - `air_supply_pickup.gd`: crate de airdrop com varias armas, coleta por interacao e expiracao em 10 minutos (desce de paraquedas).
 - `ground_supply_pickup.gd`: item de vida/municao espalhado pelas ruas, com cor e etiqueta por classe; coleta ao tocar (municao de arma que o jogador nao tem vira bala de pistola), expira em 3 minutos.
