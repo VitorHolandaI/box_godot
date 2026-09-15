@@ -19,6 +19,9 @@ var weapon_kind := WeaponStats.Kind.SHOTGUN
 var mag := 0
 var reserve := 0
 var durability := 0
+## Arma no chao fica 10 minutos e some sozinha (autoridade).
+var lifetime_seconds := 600.0
+var lifetime_elapsed := 0.0
 var model_root: Node3D
 var elapsed := 0.0
 
@@ -42,6 +45,11 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	elapsed += delta
+	if not NetworkSession.is_client():
+		lifetime_elapsed += delta
+		if lifetime_elapsed >= lifetime_seconds:
+			queue_free()
+			return
 	if model_root != null:
 		model_root.position.y = 0.32 + sin(elapsed * 2.4) * 0.04
 
