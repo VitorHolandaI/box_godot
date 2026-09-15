@@ -249,19 +249,23 @@ func apply_network_input(state: Dictionary) -> void:
 	move_input = requested_move.limit_length(1.0) if requested_move is Vector2 else Vector2.ZERO
 	var requested_aim: Variant = state.get("aim", Vector2.ZERO)
 	aim_input = requested_aim.limit_length(1.0) if requested_aim is Vector2 else Vector2.ZERO
-	jump_pressed = _network_button_just_pressed("jump", bool(state.get("jump", false)))
+	# Cliques acumulam ate o tick de fisica consumir (_clear_transient_input):
+	# dois pacotes de input no mesmo frame (jitter da internet) faziam o segundo
+	# apagar o clique do primeiro, perdendo tiro, recarga ou coleta. A funcao vem
+	# antes do "or" para sempre atualizar o estado anterior do botao.
+	jump_pressed = _network_button_just_pressed("jump", bool(state.get("jump", false))) or jump_pressed
 	sprint_pressed = bool(state.get("sprint", false))
-	attack_pressed = _network_button_just_pressed("attack", bool(state.get("attack", false)))
-	knife_pressed = _network_button_just_pressed("knife", bool(state.get("knife", false)))
-	pistol_pressed = _network_button_just_pressed("pistol", bool(state.get("pistol", false)))
-	reload_pressed = _network_button_just_pressed("reload", bool(state.get("reload", false)))
-	interact_pressed = _network_button_just_pressed("interact", bool(state.get("interact", false)))
-	shotgun_pressed = _network_button_just_pressed("shotgun", bool(state.get("shotgun", false)))
-	uzi_pressed = _network_button_just_pressed("uzi", bool(state.get("uzi", false)))
-	magnum_pressed = _network_button_just_pressed("magnum", bool(state.get("magnum", false)))
-	double_barrel_pressed = _network_button_just_pressed("double_barrel", bool(state.get("double_barrel", false)))
-	carbine_pressed = _network_button_just_pressed("carbine", bool(state.get("carbine", false)))
-	drop_pressed = _network_button_just_pressed("drop", bool(state.get("drop", false)))
+	attack_pressed = _network_button_just_pressed("attack", bool(state.get("attack", false))) or attack_pressed
+	knife_pressed = _network_button_just_pressed("knife", bool(state.get("knife", false))) or knife_pressed
+	pistol_pressed = _network_button_just_pressed("pistol", bool(state.get("pistol", false))) or pistol_pressed
+	reload_pressed = _network_button_just_pressed("reload", bool(state.get("reload", false))) or reload_pressed
+	interact_pressed = _network_button_just_pressed("interact", bool(state.get("interact", false))) or interact_pressed
+	shotgun_pressed = _network_button_just_pressed("shotgun", bool(state.get("shotgun", false))) or shotgun_pressed
+	uzi_pressed = _network_button_just_pressed("uzi", bool(state.get("uzi", false))) or uzi_pressed
+	magnum_pressed = _network_button_just_pressed("magnum", bool(state.get("magnum", false))) or magnum_pressed
+	double_barrel_pressed = _network_button_just_pressed("double_barrel", bool(state.get("double_barrel", false))) or double_barrel_pressed
+	carbine_pressed = _network_button_just_pressed("carbine", bool(state.get("carbine", false))) or carbine_pressed
+	drop_pressed = _network_button_just_pressed("drop", bool(state.get("drop", false))) or drop_pressed
 	remote_input_age = 0.0
 
 
