@@ -266,28 +266,34 @@ func _ragdoll_position(ragdoll: Node) -> Vector3:
 	return torso.global_position if torso != null else (ragdoll as Node3D).global_position
 
 
-func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1) -> void:
+func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1, spread_deg: float = 0.0) -> void:
 	if not NetworkSession.is_server():
 		return
 	for peer_id in NetworkSession.loaded_peers:
-		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count)
+		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count, spread_deg)
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1) -> void:
+func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1, spread_deg: float = 0.0) -> void:
 	if not NetworkSession.is_client():
 		return
 	AudioFeedback.play_gunshot(spawn_position)
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 		bot_ai.notify_bullet()
-	for pellet_index in maxi(pellet_count, 1):
+	# Pellets recebem a MESMA matematica de leque do servidor: tracers
+	# divergentes em arco, nao tracos paralelos sobrepostos (parecia 1 bala).
+	var pellet_total := maxi(pellet_count, 1)
+	for pellet_index in pellet_total:
 		var bullet = BULLET_SCENE.instantiate()
 		add_child(bullet)
-		if pellet_count > 1:
-			bullet.scale = Vector3(0.55, 0.55, 0.45)
-		var side := Vector3.UP.cross(bullet_direction).normalized()
-		bullet.global_position = spawn_position + side * (float(pellet_index) - float(pellet_count - 1) / 2.0) * 0.05
-		bullet.setup(bullet_direction, 0, false)
+		var pellet_direction := bullet_direction
+		if pellet_total > 1:
+			bullet.scale = Vector3(0.5, 0.5, 0.4)
+			var angle_offset := deg_to_rad(spread_deg) * (float(pellet_index) - float(pellet_total - 1) / 2.0) / (float(pellet_total) / 2.0)
+			pellet_direction = bullet_direction.rotated(Vector3.UP, angle_offset)
+		var side := Vector3.UP.cross(pellet_direction).normalized()
+		bullet.global_position = spawn_position + pellet_direction * 0.12 + side * (float(pellet_index) - float(pellet_total - 1) / 2.0) * 0.04
+		bullet.setup(pellet_direction, 0, false)
 		bullet.add_to_group("network_bullet_visuals")
 
 

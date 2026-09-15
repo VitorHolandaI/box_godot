@@ -391,7 +391,7 @@ func _fire_pellets(weapon_kind: int) -> void:
 	if NetworkSession.is_offline():
 		AudioFeedback.play_gunshot(origin)
 	if NetworkSession.is_server():
-		get_tree().current_scene.replicate_bullet_visual(origin, base_direction, pellet_count)
+		get_tree().current_scene.replicate_bullet_visual(origin, base_direction, pellet_count, spread_deg)
 
 
 ## Tracer de pellet: menor e deslocado em leque, para NAO parecer o tracer
