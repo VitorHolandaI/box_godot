@@ -34,9 +34,9 @@ func _test_client_proxy_matches_server_variant(test_root: Node) -> void:
 	print("Testando variante do zumbi igual no servidor e no cliente...")
 	var server_zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	server_zombie.name = "ZombieSpawn55"
-	# Tipo diferente do que o nome sozinho daria (hash % 11).
-	var name_only_type := absi(String(server_zombie.name).hash()) % 11
-	server_zombie.set("forced_variant", (name_only_type + 4) % 11)
+	# Tipo diferente do que o nome sozinho daria (hash % TYPE_COUNT).
+	var name_only_type := absi(String(server_zombie.name).hash()) % ZombieMutator.TYPE_COUNT
+	server_zombie.set("forced_variant", (name_only_type + 4) % ZombieMutator.TYPE_COUNT)
 	test_root.add_child(server_zombie)
 	var state: Dictionary = server_zombie.get_network_state()
 	state["network_id"] = 55

@@ -311,7 +311,7 @@ func _add_walker_zombie(test_root: Node, position: Vector3) -> CharacterBody3D:
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	var suffix := 0
 	# 11 variantes desde o brute/screamer: garante hash que modula em WALKER.
-	while absi(("NavWalker%d" % suffix).hash()) % 11 != 0:
+	while absi(("NavWalker%d" % suffix).hash()) % ZombieMutator.TYPE_COUNT != 0:
 		suffix += 1
 	zombie.name = "NavWalker%d" % suffix
 	zombie.position = position
