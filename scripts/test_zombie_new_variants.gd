@@ -88,11 +88,12 @@ func _test_late_waves_mix_new_variants(test_root: Node) -> void:
 	var early: Dictionary = schedule.variant_mix_for_wave(0)
 	var late: Dictionary = schedule.variant_mix_for_wave(7)
 	var endgame: Dictionary = schedule.variant_mix_for_wave(12)
-	var early_clean := not early.has(ZombieMutator.Type.BLOATER) and not early.has(ZombieMutator.Type.ARMORED)
+	# Bloater e leaper entram desde a hora 1 (especiais estilo L4D); armored segue tardio.
+	var early_clean := not early.has(ZombieMutator.Type.ARMORED)
 	var late_ok := int(late.get(ZombieMutator.Type.BLOATER, 0)) > 0 and int(late.get(ZombieMutator.Type.LEAPER, 0)) > 0
 	var endgame_ok := int(endgame.get(ZombieMutator.Type.ARMORED, 0)) > 0 and int(endgame.get(ZombieMutator.Type.BLOATER, 0)) > 0
 	if not early_clean or not late_ok or not endgame_ok:
-		_fail(test_root, "Mix: inicio sem bloater/armored, hora 7+ com bloater e leaper, hora 11+ com armored; inicio=%s tarde=%s final=%s." % [early, late, endgame])
+		_fail(test_root, "Mix: inicio sem armored, hora 7+ com bloater e leaper, hora 11+ com armored; inicio=%s tarde=%s final=%s." % [early, late, endgame])
 		return
 	print("PASS: Ondas altas misturam bloater, leaper e armored.")
 

@@ -26,12 +26,14 @@ enum Type {
 	ARMORED = 13,
 	## Super zumbi (chefe): 10000 de vida, pisao, invocacao e furia.
 	TITAN = 14,
+	## Cuspidor: para a distancia e cospe uma poca de acido que queima.
+	SPITTER = 15,
+	## Investida: braco gigante, arranca em linha reta e arremessa o jogador.
+	CHARGER = 16,
 }
 
-## Quantidade de tipos. Cabe no nibble do snapshot (ZombieSnapshotCodec, ate 16).
-const TYPE_COUNT := 15
-## Tipos que podem sair no sorteio comum pelo hash: todos menos o chefe.
-const RANDOM_VARIANT_COUNT := 14
+## Quantidade de tipos (snapshot leva ate 127, ZombieSnapshotCodec).
+const TYPE_COUNT := 17
 ## Geometria base do zumbi (zombie.tscn): pes do modelo e capsula de colisao.
 const MODEL_FEET_Y := -0.82
 const BASE_CAPSULE_RADIUS := 0.56
@@ -47,6 +49,7 @@ const BODY_SCALES: Dictionary = {
 	Type.TITAN: Vector3(2.3, 2.3, 2.3),
 	Type.BLOATER: Vector3(1.1, 1.0, 1.1),
 	Type.LEAPER: Vector3(0.85, 1.0, 0.85),
+	Type.CHARGER: Vector3(1.2, 1.1, 1.2),
 }
 
 const SKIN_PALETTE: Array[Color] = [
@@ -80,7 +83,8 @@ static func apply_appearance(zombie: CharacterBody3D, z_type: int, hash_val: int
 ## Variante do sorteio comum (modo classico) pelo hash do nome; nunca o chefe.
 ## Uso: var tipo := ZombieMutator.random_variant_for_hash(absi(name.hash()))
 static func random_variant_for_hash(hash_val: int) -> int:
-	return posmod(hash_val, RANDOM_VARIANT_COUNT)
+	var variant := posmod(hash_val, TYPE_COUNT - 1)
+	return variant + 1 if variant >= Type.TITAN else variant
 
 
 ## Escala do corpo por tipo, usada pelo zumbi vivo e pelo cadaver.
@@ -213,6 +217,14 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			zombie.set("speed", 1.9)
 			zombie.set("max_health", 160)
 			_setup_armored(zombie)
+		Type.SPITTER:
+			zombie.set("speed", 2.0)
+			zombie.set("max_health", 80)
+			_setup_spitter(zombie)
+		Type.CHARGER:
+			zombie.set("speed", 1.9)
+			zombie.set("max_health", 220)
+			_setup_charger(zombie)
 		Type.TITAN:
 			zombie.set("speed", 1.7)
 			zombie.set("max_health", 10000)
@@ -291,6 +303,27 @@ static func _setup_titan(zombie: CharacterBody3D, _model: Node3D) -> void:
 	var label := zombie.get_node_or_null("HealthLabel") as Label3D
 	if label != null:
 		label.modulate = Color(1.0, 0.4, 0.2)
+
+
+## Cuspidor: pescoco esticado, pele amarelada e bolsa de acido na garganta.
+static func _setup_spitter(zombie: CharacterBody3D) -> void:
+	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	if head != null:
+		head.position.y += 0.18
+		_add_box(head, Vector3(0.3, 0.18, 0.2), Vector3(0.0, -0.3, -0.12), Color(0.75, 0.85, 0.2))
+	var torso := zombie.get_node_or_null("Model/Torso") as MeshInstance3D
+	if torso != null:
+		torso.material_override = _quick_mat(Color(0.55, 0.58, 0.3), 0.85)
+
+
+## Investida: braco direito enorme e ombro saltado; o corpo 1.2x vem de apply_body_scale.
+static func _setup_charger(zombie: CharacterBody3D) -> void:
+	var right_arm := zombie.get_node_or_null("Model/RightArm") as Node3D
+	if right_arm != null:
+		right_arm.scale = Vector3(1.9, 1.3, 1.9)
+	var torso := zombie.get_node_or_null("Model/Torso") as Node3D
+	if torso != null:
+		_add_box(torso, Vector3(0.36, 0.3, 0.46), Vector3(0.36, 0.3, 0.0), Color(0.45, 0.3, 0.28))
 
 
 ## Armored: capacete e colete de policia escuros com faixa refletiva.
