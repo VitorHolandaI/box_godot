@@ -366,15 +366,15 @@ func _test_player_three_lives_and_elimination() -> void:
 		_mark_failure()
 		return
 
-	# 3a morte: vidas caem para 0 e e eliminado
+	# 3a morte: vidas caem para 0 e fica CAIDO (visivel, deitado, reanimavel)
 	player.take_damage(100, Vector3.FORWARD, "bullet")
-	if player.lives != 0 or not player.is_eliminated or player.visible or player.collision_layer != 0:
-		push_error("FALHA: Apos perder 3 vidas, jogador deve ser eliminado e invisivel.")
+	if player.lives != 0 or not player.is_downed or player.is_eliminated or not player.visible:
+		push_error("FALHA: Apos perder 3 vidas, jogador deve ficar caido e reanimavel.")
 		_mark_failure()
 		return
 
-	if not player.get_lives_text().contains("ELIMINADO"):
-		push_error("FALHA: get_lives_text() deve indicar [ELIMINADO].")
+	if not player.get_lives_text().contains("CAIDO"):
+		push_error("FALHA: get_lives_text() deve indicar estado caido.")
 		_mark_failure()
 		return
 
@@ -480,14 +480,15 @@ func _test_wave_restores_three_lives() -> void:
 	player.take_damage(100, Vector3.FORWARD, "bullet")
 	player.take_damage(100, Vector3.FORWARD, "bullet")
 	player.take_damage(100, Vector3.FORWARD, "bullet")
-	if not player.is_eliminated or player.lives != 0:
-		push_error("FALHA: Jogador deveria estar eliminado antes da nova onda.")
+	# Fim das vidas agora deixa CAIDO (reanimavel), nao eliminado.
+	if not player.is_downed or player.is_eliminated or player.lives != 0 or not player.visible:
+		push_error("FALHA: Jogador deveria estar caido antes da nova onda.")
 		_mark_failure()
 		player.queue_free()
 		return
 	player.restore_wave_lives()
-	if player.lives != 3 or player.is_eliminated or not player.visible or player.health != player.max_health:
-		push_error("FALHA: Nova onda deveria devolver 3 vidas e reanimar o jogador.")
+	if player.lives != 3 or player.is_downed or player.is_eliminated or not player.visible or player.health != player.max_health:
+		push_error("FALHA: Nova onda deveria devolver 3 vidas e levantar o caido.")
 		_mark_failure()
 		player.queue_free()
 		return

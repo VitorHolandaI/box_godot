@@ -8,7 +8,16 @@ extends Area3D
 ##   item.setup(GroundSupplyPickup.Kind.HEALTH, 35)
 ##   tree.current_scene.add_child(item)
 
-enum Kind { HEALTH, AMMO }
+enum Kind { HEALTH, AMMO, AMMO_SHOTGUN, AMMO_UZI, AMMO_MAGNUM, AMMO_DOUBLE_BARREL, AMMO_CARBINE }
+
+## Item de municacao de classe alimenta a reserva da arma daquela classe.
+const KIND_TO_WEAPON: Dictionary = {
+	Kind.AMMO_SHOTGUN: WeaponStats.Kind.SHOTGUN,
+	Kind.AMMO_UZI: WeaponStats.Kind.UZI,
+	Kind.AMMO_MAGNUM: WeaponStats.Kind.MAGNUM,
+	Kind.AMMO_DOUBLE_BARREL: WeaponStats.Kind.DOUBLE_BARREL,
+	Kind.AMMO_CARBINE: WeaponStats.Kind.CARBINE,
+}
 
 const DEFAULT_LIFETIME := 180.0
 
@@ -59,6 +68,8 @@ func _on_body_entered(body: Node3D) -> void:
 		received = int(body.call("add_health", amount))
 	elif supply_kind == Kind.AMMO and body.has_method("add_ammo"):
 		received = int(body.call("add_ammo", amount))
+	elif KIND_TO_WEAPON.has(supply_kind) and body.has_method("add_crate_reserve"):
+		received = int(body.call("add_crate_reserve", int(KIND_TO_WEAPON[supply_kind]), amount))
 	# Reserva cheia / vida cheia deixa o item no chao para quem precisa.
 	if received > 0:
 		GroundWeaponSync.mark_dirty()
