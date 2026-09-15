@@ -16,6 +16,22 @@ const RESTOCK_INTERVAL := 30.0
 const MIN_ITEMS_PER_CLASS := 5
 const KILL_DROP_CHANCE := 0.08
 const KILL_DROP_AMOUNT_FACTOR := 0.5
+## Arma solta por zumbi (horda enorme: faz sentido achar armas nela), com pente
+## cheio, pouca reserva e ja desgastada. 30% por pedido de jogo; o limite e o
+## tempo curto no chao seguram o tamanho da lista replicada.
+const WEAPON_DROP_CHANCE := 0.3
+const MAX_ZOMBIE_WEAPON_DROPS := 30
+const ZOMBIE_WEAPON_LIFETIME := 90.0
+const WEAPON_DROP_RESERVE_FACTOR := 0.25
+const WEAPON_DROP_MIN_WEAR := 0.4
+const WEAPON_DROP_MAX_WEAR := 0.8
+const DROPPABLE_WEAPONS: Array[int] = [
+	WeaponStats.Kind.SHOTGUN,
+	WeaponStats.Kind.UZI,
+	WeaponStats.Kind.MAGNUM,
+	WeaponStats.Kind.DOUBLE_BARREL,
+	WeaponStats.Kind.CARBINE,
+]
 ## Tipos repostos pelo mapa: municao de pistola e de cada arma de crate.
 const RESTOCKED_KINDS: Array[int] = [
 	GroundSupplyPickup.Kind.AMMO,
@@ -60,6 +76,23 @@ static func drop_kind_for_kill(roll: float, pick: float) -> int:
 		return -1
 	var index := clampi(int(pick * RESTOCKED_KINDS.size()), 0, RESTOCKED_KINDS.size() - 1)
 	return RESTOCKED_KINDS[index]
+
+
+## Arma que o zumbi solta ao morrer: {"kind", "mag", "reserve", "durability"} ou
+## {} quando nao cai. `roll` decide se cai, `pick` a arma e `wear` o desgaste (0..1).
+## Uso: var arma := AmmoLootDirector.weapon_drop_for_kill(randf(), randf(), randf())
+static func weapon_drop_for_kill(roll: float, pick: float, wear: float) -> Dictionary:
+	if roll >= WEAPON_DROP_CHANCE:
+		return {}
+	var kind := DROPPABLE_WEAPONS[clampi(int(pick * DROPPABLE_WEAPONS.size()), 0, DROPPABLE_WEAPONS.size() - 1)]
+	var stats := WeaponStats.stats_for(kind)
+	var durability_fraction := lerpf(WEAPON_DROP_MIN_WEAR, WEAPON_DROP_MAX_WEAR, clampf(wear, 0.0, 1.0))
+	return {
+		"kind": kind,
+		"mag": int(stats["mag_size"]),
+		"reserve": roundi(float(stats["grant_reserve"]) * WEAPON_DROP_RESERVE_FACTOR),
+		"durability": maxi(roundi(float(stats["max_durability"]) * durability_fraction), 1),
+	}
 
 
 ## Carga do item solto por zumbi: metade da caixa espalhada pelo mapa.
