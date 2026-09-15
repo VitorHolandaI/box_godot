@@ -276,7 +276,10 @@ func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3,
 		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count, spread_deg)
 
 
-@rpc("authority", "call_remote", "unreliable_ordered")
+## any_peer: o visual de bala e cosmico (tracer, dano 0) e o handler roda
+## apenas no cliente; modo "authority" spamava erro quando o rpc chegava
+## de um peer que nao e o servidor. Uso: enviado por replicate_bullet_visual.
+@rpc("any_peer", "call_remote", "unreliable_ordered")
 func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1, spread_deg: float = 0.0) -> void:
 	if not NetworkSession.is_client():
 		return
