@@ -79,7 +79,6 @@ var last_sent_wave_progress: Array[int] = []
 var zombie_cache: Dictionary = {}
 var smoke_test_mode := false
 var player_vision_elapsed := 0.0
-var player_vision_tick := 0
 var corpse_cleanup_elapsed := 0.0
 ## Cadencia do sync dedicado de suprimentos/armas no chao (2 Hz).
 var ground_state_elapsed := 0.0
@@ -1105,30 +1104,16 @@ func _update_player_vision(delta: float) -> void:
 	if player_vision_elapsed < PLAYER_VISION_UPDATE_INTERVAL:
 		return
 	player_vision_elapsed = 0.0
-	player_vision_tick += 1
-	# Visao compartilhada: aliados (locais e de rede) revelam zumbis para todos.
+	# Visao compartilhada por raio: aliados (locais e de rede) revelam zumbis para todos.
 	var observers := SHARED_VISION_SCRIPT.observers(get_tree())
-	var clear_line := Callable(self, "_has_clear_player_vision")
 	for zombie_node in get_tree().get_nodes_in_group("zombies"):
 		var zombie := zombie_node as CharacterBody3D
 		if zombie == null or not is_instance_valid(zombie) or bool(zombie.get("is_dead")):
 			continue
-		# LOD FAR ja fica oculto por design: nenhum ray de visao nele.
+		# LOD FAR (alem de 50 m) ja fica oculto por design.
 		if int(zombie.get("lod_level")) == 2: # LodLevel.FAR
 			continue
-		var already_visible := bool(zombie.get("vision_visible"))
-		# Zumbi ja visivel reconfirma o ray a cada 2 ticks: com a horda em
-		# cima do jogador (todos no cone), metade dos rays some e o atraso
-		# maximo de ocultacao passa de 0.12s para 0.24s (imperceptivel).
-		var needs_ray := not already_visible or player_vision_tick % 2 == 0
-		zombie.set_vision_visible(SHARED_VISION_SCRIPT.is_seen_by_any(observers, zombie, already_visible, needs_ray, clear_line))
-
-
-func _has_clear_player_vision(player: CharacterBody3D, zombie: CharacterBody3D) -> bool:
-	var start := player.global_position + Vector3.UP * 1.1
-	var end := zombie.global_position + Vector3.UP * 1.1
-	var query := PhysicsRayQueryParameters3D.create(start, end, 1, [player, zombie])
-	return get_world_3d().direct_space_state.intersect_ray(query).is_empty()
+		zombie.set_vision_visible(SHARED_VISION_SCRIPT.is_seen_by_any(observers, zombie))
 
 
 func _player_key(peer_id: int, slot: int) -> String:

@@ -427,39 +427,25 @@ func _test_player_three_lives_and_elimination() -> void:
 	print("PASS: Sistema de 3 vidas e eliminacao validado com sucesso.")
 
 
+## Cone aposentado: o jogador ve em qualquer direcao ate VIEW_RADIUS.
 func _test_player_vision_cone() -> void:
-	print("Testando cone de visao ampliado e overlay translucido...")
+	print("Testando visao por raio em todas as direcoes (sem cone)...")
 	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
 	player.reads_local_input = false
-	player.position = Vector3.ZERO
+	player.is_local_controller = false
+	player.position = Vector3(0.0, 0.0, 400.0)
 	add_child(player)
-	var wide_target := Vector3(sin(deg_to_rad(60.0)) * 20.0, 1.0, -cos(deg_to_rad(60.0)) * 20.0)
-	if not player.can_see_position(Vector3(0.0, 1.0, -28.0)) or not player.can_see_position(wide_target):
-		push_error("FALHA: Jogador deveria enxergar ate 28m e 60 graus do centro.")
-		_mark_failure()
-		player.queue_free()
-		return
-	if player.can_see_position(Vector3(0.0, 1.0, 12.0)) or player.can_see_position(Vector3(0.0, 1.0, -33.0)):
-		push_error("FALHA: Jogador nao deveria enxergar zumbi atras ou fora do alcance.")
-		_mark_failure()
-		player.queue_free()
-		return
-	# Bolha de proximidade: logo atras (3 m) enxerga; atras mais longe (5 m) nao.
-	if not player.can_see_position(Vector3(0.0, 1.0, 3.0)) or player.can_see_position(Vector3(0.0, 1.0, 5.0)):
-		push_error("FALHA: Bolha de visao deveria revelar ate %.1f m atras do jogador e nada alem." % player.PROXIMITY_VISION_RADIUS)
-		_mark_failure()
-		player.queue_free()
-		return
-	var overlay := player.get_node_or_null("VisionArc") as MeshInstance3D
-	var material := overlay.material_override as StandardMaterial3D if overlay != null else null
-	player.configure_vision_overlay(17)
-	if overlay == null or overlay.mesh == null or material == null or not overlay.visible or material.transparency != BaseMaterial3D.TRANSPARENCY_ALPHA or material.albedo_color.a >= 0.5:
-		push_error("FALHA: Overlay de visao deveria ser branco translucido e manter o mapa legivel.")
-		_mark_failure()
-		player.queue_free()
-		return
+	var radius := PlayerCharacter.VIEW_RADIUS
+	var behind_inside := player.can_see_position(player.position + Vector3(0.0, 1.0, radius - 1.0))
+	var side_inside := player.can_see_position(player.position + Vector3(radius - 1.0, 1.0, 0.0))
+	var outside := player.can_see_position(player.position + Vector3(0.0, 1.0, -(radius + 1.0)))
+	var no_overlay := player.get_node_or_null("VisionArc") == null
 	player.queue_free()
-	print("PASS: Cone ampliado e overlay branco translucido validados.")
+	if not behind_inside or not side_inside or outside or not no_overlay:
+		push_error("FALHA: Visao deveria cobrir %.0f m em volta sem cone nem overlay; atras=%s lado=%s fora=%s sem_overlay=%s." % [radius, behind_inside, side_inside, outside, no_overlay])
+		_mark_failure()
+		return
+	print("PASS: Jogador ve zumbis a ate %.0f m em qualquer direcao, sem cone." % radius)
 
 
 func _test_zombie_vision_hides_entire_proxy() -> void:
