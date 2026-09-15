@@ -9,13 +9,6 @@ extends Area3D
 ##   pickup.setup(WeaponStats.Kind.UZI, 22, 80, 95)
 ##   tree.current_scene.add_child(pickup)
 
-const KIND_COLORS: Dictionary = {
-	WeaponStats.Kind.SHOTGUN: Color(0.55, 0.36, 0.14),
-	WeaponStats.Kind.UZI: Color(0.16, 0.17, 0.2),
-	WeaponStats.Kind.MAGNUM: Color(0.3, 0.1, 0.12),
-	WeaponStats.Kind.DOUBLE_BARREL: Color(0.42, 0.2, 0.1),
-	WeaponStats.Kind.CARBINE: Color(0.14, 0.22, 0.16),
-}
 
 var weapon_kind := WeaponStats.Kind.SHOTGUN
 var mag := 0
@@ -73,7 +66,7 @@ func _build_visuals() -> void:
 	model_root.position.y = 0.32
 	add_child(model_root)
 	var body := StandardMaterial3D.new()
-	body.albedo_color = KIND_COLORS.get(weapon_kind, Color(0.2, 0.2, 0.2))
+	body.albedo_color = WeaponStats.color_for(weapon_kind)
 	body.roughness = 0.5
 	var accent := StandardMaterial3D.new()
 	accent.albedo_color = Color(0.95, 0.78, 0.12)

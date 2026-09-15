@@ -10,7 +10,8 @@ signal crate_weapon_broken(kind: int)
 signal crate_weapon_dropped(kind: int, mag: int, reserve: int, durability: int)
 
 ## Ordem segue WeaponStats.Kind: as armas de crate ficam por ultimo.
-enum Weapon { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE }
+## Mesma ordem de WeaponStats.Kind (os inteiros viajam na rede e nos slots).
+enum Weapon { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE, SAWED_OFF, AUTO_SHOTGUN, LASER_RIFLE, PLASMA_SMG, RAILGUN, AK47, M4, AUG, BERETTA, SNIPER, BAZOOKA }
 
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const KNIFE_ATTACK_DURATION := 0.4
@@ -443,24 +444,29 @@ func _fire_pellets(weapon_kind: int) -> void:
 			angle_offset = deg_to_rad(spread_deg) * (float(pellet_index) - float(pellet_count - 1) / 2.0) / (float(pellet_count) / 2.0)
 		var pellet_direction := base_direction.rotated(Vector3.UP, angle_offset)
 		# Hitscan: 1 ray por pellet, dano na hora; sem node por pellet.
-		Bullet.hitscan_damage(origin + pellet_direction * 0.12, pellet_direction, int(stats["damage"]), self)
+		if stats.has("explosive_radius"):
+			var impact := Bullet.explosive_shot(origin + pellet_direction * 0.12, pellet_direction, int(stats["damage"]), self, float(stats["explosive_radius"]))
+			get_tree().current_scene.call("show_explosion", impact, float(stats["explosive_radius"]))
+		else:
+			Bullet.hitscan_damage(origin + pellet_direction * 0.12, pellet_direction, int(stats["damage"]), self, int(stats.get("pierce", 1)))
 		if NetworkSession.is_offline():
-			_spawn_pellet_visual(origin + pellet_direction * 0.12, pellet_direction, pellet_index, pellet_count)
+			_spawn_pellet_visual(origin + pellet_direction * 0.12, pellet_direction, pellet_index, pellet_count, weapon_kind)
 	ZombieFlockCoordinator.relay_sound(get_tree(), origin, float(stats["noise_radius"]))
 	if NetworkSession.is_offline():
 		AudioFeedback.play_gunshot(origin)
 	if NetworkSession.is_server():
-		get_tree().current_scene.replicate_bullet_visual(origin, base_direction, pellet_count, spread_deg)
+		get_tree().current_scene.replicate_bullet_visual(origin, base_direction, pellet_count, spread_deg, weapon_kind)
 
 
 ## Tracer de pellet: menor e deslocado em leque, para NAO parecer o tracer
 ## unico da pistola. Visual puro, sem dano.
-func _spawn_pellet_visual(origin: Vector3, direction: Vector3, pellet_index: int, pellet_count: int) -> void:
+func _spawn_pellet_visual(origin: Vector3, direction: Vector3, pellet_index: int, pellet_count: int, weapon_kind: int) -> void:
 	var bullet := BULLET_SCENE.instantiate() as Node3D
 	get_tree().current_scene.add_child(bullet)
 	bullet.scale = PELLET_VISUAL_SCALE
 	bullet.global_position = origin + _pellet_side_offset(direction, pellet_index, pellet_count)
 	bullet.setup(direction, 0, false)
+	Bullet.tint_tracer(bullet, WeaponStats.tracer_color_for(weapon_kind))
 	bullet.add_to_group("network_bullet_visuals")
 
 
@@ -993,63 +999,10 @@ func _update_weapon_models() -> void:
 			flash.visible = crate_model.visible and muzzle_flash_time > 0.0
 
 func _build_crate_weapon_models() -> void:
-	# Armado ao longo do Z: -Z e a frente do boneco, senao a arma fica uma
-	# "tabua" horizontal atravessada no corpo (o que o teste apontou).
-	var kinds := [Weapon.SHOTGUN, Weapon.UZI, Weapon.MAGNUM, Weapon.DOUBLE_BARREL, Weapon.CARBINE]
-	for kind in kinds:
-		var weapon_node := Node3D.new()
-		weapon_node.name = "CrateWeapon%d" % kind
-		weapon_node.visible = false
+	for kind in WeaponStats.crate_kinds():
+		var weapon_node := CrateWeaponModelBuilder.build(kind, _muzzle_material())
 		weapon_holder.add_child(weapon_node)
-		var body := StandardMaterial3D.new()
-		body.albedo_color = _crate_weapon_color(kind)
-		body.roughness = 0.45
-		body.metallic = 0.5
-		var wood := StandardMaterial3D.new()
-		wood.albedo_color = Color(0.45, 0.3, 0.16)
-		wood.roughness = 0.7
-		match kind:
-			Weapon.SHOTGUN:
-				# Cano longo para frente, bombeamento embaixo e coronha atras.
-				_add_weapon_box(weapon_node, Vector3(0.14, 0.14, 0.95), Vector3(0.0, 0.0, 0.12), body)
-				_add_weapon_box(weapon_node, Vector3(0.16, 0.1, 0.24), Vector3(0.0, -0.11, 0.18), body)
-				_add_weapon_box(weapon_node, Vector3(0.16, 0.18, 0.3), Vector3(0.0, -0.06, -0.42), wood)
-				_add_weapon_box(weapon_node, Vector3(0.12, 0.22, 0.14), Vector3(0.0, -0.13, -0.62), wood)
-			Weapon.UZI:
-				_add_weapon_box(weapon_node, Vector3(0.16, 0.16, 0.55), Vector3(0.0, 0.0, 0.0), body)
-				_add_weapon_box(weapon_node, Vector3(0.12, 0.3, 0.12), Vector3(0.0, -0.2, 0.05), body)
-				_add_weapon_box(weapon_node, Vector3(0.08, 0.34, 0.08), Vector3(0.0, 0.22, 0.06), body)
-			Weapon.MAGNUM:
-				_add_weapon_box(weapon_node, Vector3(0.13, 0.15, 0.5), Vector3(0.0, 0.0, 0.1), body)
-				_add_weapon_box(weapon_node, Vector3(0.13, 0.24, 0.1), Vector3(0.0, -0.16, -0.14), wood)
-				_add_weapon_box(weapon_node, Vector3(0.11, 0.11, 0.11), Vector3(0.0, -0.03, -0.02), body)
-			Weapon.DOUBLE_BARREL:
-				_add_weapon_box(weapon_node, Vector3(0.24, 0.12, 0.85), Vector3(0.0, 0.0, 0.1), body)
-				_add_weapon_box(weapon_node, Vector3(0.16, 0.16, 0.28), Vector3(0.0, -0.06, -0.42), wood)
-				_add_weapon_box(weapon_node, Vector3(0.12, 0.2, 0.12), Vector3(0.0, -0.14, -0.6), wood)
-			Weapon.CARBINE:
-				_add_weapon_box(weapon_node, Vector3(0.12, 0.12, 1.0), Vector3(0.0, 0.02, 0.14), body)
-				_add_weapon_box(weapon_node, Vector3(0.14, 0.14, 0.3), Vector3(0.0, -0.05, -0.45), wood)
-				_add_weapon_box(weapon_node, Vector3(0.1, 0.14, 0.3), Vector3(0.0, 0.14, -0.1), body)
-				_add_weapon_box(weapon_node, Vector3(0.12, 0.22, 0.12), Vector3(0.0, -0.14, -0.66), wood)
-		var flash := _add_weapon_box(weapon_node, Vector3(0.12, 0.08, 0.08), Vector3(0.0, 0.0, -0.55), _muzzle_material())
-		flash.name = "Flash"
-		flash.visible = false
 		crate_weapon_models[kind] = weapon_node
-
-
-func _crate_weapon_color(kind: int) -> Color:
-	match kind:
-		Weapon.SHOTGUN:
-			return Color(0.55, 0.36, 0.14)
-		Weapon.UZI:
-			return Color(0.16, 0.17, 0.2)
-		Weapon.MAGNUM:
-			return Color(0.3, 0.1, 0.12)
-		Weapon.DOUBLE_BARREL:
-			return Color(0.42, 0.2, 0.1)
-		_:
-			return Color(0.14, 0.22, 0.16)
 
 
 func _muzzle_material() -> StandardMaterial3D:
@@ -1059,17 +1012,6 @@ func _muzzle_material() -> StandardMaterial3D:
 	material.emission = Color(1.0, 0.35, 0.02)
 	material.emission_energy_multiplier = 3.0
 	return material
-
-
-func _add_weapon_box(parent: Node3D, size: Vector3, position: Vector3, material: Material) -> MeshInstance3D:
-	var mesh := BoxMesh.new()
-	mesh.size = size
-	mesh.material = material
-	var instance := MeshInstance3D.new()
-	instance.mesh = mesh
-	instance.position = position
-	parent.add_child(instance)
-	return instance
 
 
 func _create_vision_overlay() -> void:

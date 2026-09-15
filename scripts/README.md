@@ -15,6 +15,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis e do hitscan com esfera de tolerancia ao atraso de rede, mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
 - `corpse_cleanup_policy.gd`: escolhe quais ragdolls somem: so os longe de todos os jogadores, com teto que remove o mais distante.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
+- `crate_weapon_model_builder.gd`: modelos em caixas das armas de crate na mao do jogador (escopetas, fuzis, sniper, bazuca e armas futuristas com faixas brilhando).
 - `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores, tremida ao apanhar e arrombamento por zumbis, faca ou tiro que libera o vao.
 - `door_debris_effect.gd`: animacao visual de tabuas e lascas voando quando uma porta e arrombada.
 - `door_network_state.gd`: coleta e aplica estados autoritativos das portas comuns por caminho deterministico (completo ou so as mudancas).
@@ -36,11 +37,12 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada entre aliados.
+- `test_weapon_arsenal.gd`: regressoes do arsenal: cada arma de crate ligada em municao, drop, crate e modelo, railgun atravessando a fila e tracers futuristas.
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
 - `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
-- `weapon_stats.gd`: tabela de stats das armas de crate (escopeta, Uzi, magnum): dano, pellets, pente, reserva, desgaste e falha.
+- `weapon_stats.gd`: tabela unica das 16 armas de crate (escopetas, AK-47, M4, AUG, Beretta, sniper, bazuca, laser, plasma, railgun...) com cor, modelo, tracer, perfuracao e explosao.
 - `weapon_slots.gd`: inventario do slot de arma de crate (pente, reserva, durabilidade) com revisao para o snapshot.
 - `weapon_break_debris.gd`: pedacos voxel da arma quebrada, visuais locais.
 - `ground_weapon_pickup.gd`: arma dropada no chao, coleta por interacao.
