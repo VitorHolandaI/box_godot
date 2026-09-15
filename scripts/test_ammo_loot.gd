@@ -151,8 +151,15 @@ func _test_zombie_weapon_drops_are_capped(test_root: Node) -> void:
 		var pickup := GroundWeaponPickup.new()
 		pickups.append(pickup)
 		main.call("_track_zombie_weapon_drop", pickup)
+	# Arma ja coletada (liberada) nao pode quebrar o filtro do rastreio.
+	var collected := GroundWeaponPickup.new()
+	main.call("_track_zombie_weapon_drop", collected)
+	collected.free()
+	var after_collect := GroundWeaponPickup.new()
+	pickups.append(after_collect)
+	main.call("_track_zombie_weapon_drop", after_collect)
 	var tracked: int = (main.get("zombie_weapon_drops") as Array).size()
-	var oldest_removed := pickups[0].is_queued_for_deletion() and pickups[4].is_queued_for_deletion()
+	var oldest_removed := pickups[0].is_queued_for_deletion() and pickups[5].is_queued_for_deletion()
 	var newest_kept := not pickups[pickups.size() - 1].is_queued_for_deletion()
 	var short_life := is_equal_approx(pickups[pickups.size() - 1].lifetime_seconds, DIRECTOR_SCRIPT.ZOMBIE_WEAPON_LIFETIME)
 	for pickup in pickups:

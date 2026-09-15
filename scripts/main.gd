@@ -271,7 +271,7 @@ func _cleanup_far_ragdolls(delta: float) -> void:
 	if corpse_cleanup_elapsed < CORPSE_CLEANUP_INTERVAL:
 		return
 	corpse_cleanup_elapsed = 0.0
-	ragdolls = ragdolls.filter(func(node: Node) -> bool: return is_instance_valid(node) and not node.is_queued_for_deletion())
+	ragdolls = ragdolls.filter(func(node: Variant) -> bool: return is_instance_valid(node) and not (node as Node).is_queued_for_deletion())
 	var corpse_positions: Array[Vector3] = []
 	for ragdoll in ragdolls:
 		corpse_positions.append(_ragdoll_position(ragdoll))
@@ -377,7 +377,7 @@ func _add_ground_weapon(kind: int, mag: int, reserve: int, durability: int, drop
 ## inteira a cada mudanca) nao explodir.
 func _track_zombie_weapon_drop(pickup: GroundWeaponPickup) -> void:
 	pickup.lifetime_seconds = AMMO_LOOT_DIRECTOR_SCRIPT.ZOMBIE_WEAPON_LIFETIME
-	zombie_weapon_drops.assign(zombie_weapon_drops.filter(func(node: Node) -> bool: return is_instance_valid(node) and not node.is_queued_for_deletion()))
+	zombie_weapon_drops.assign(zombie_weapon_drops.filter(func(node: Variant) -> bool: return is_instance_valid(node) and not (node as Node).is_queued_for_deletion()))
 	zombie_weapon_drops.append(pickup)
 	while zombie_weapon_drops.size() > AMMO_LOOT_DIRECTOR_SCRIPT.MAX_ZOMBIE_WEAPON_DROPS:
 		var oldest: Node = zombie_weapon_drops.pop_front()
