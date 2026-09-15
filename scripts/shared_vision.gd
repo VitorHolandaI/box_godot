@@ -1,16 +1,12 @@
 class_name SharedVision
 extends RefCounted
 
-## Visao compartilhada entre aliados: um zumbi fica visivel para todos se
-## QUALQUER jogador vivo da partida o enxerga (cone ou bolha de proximidade e
-## linha de visao livre). Antes so os jogadores locais contavam, e o zumbi que
-## o aliado online via continuava invisivel na sua tela.
+## Visao compartilhada entre aliados: um zumbi fica visivel para todos se esta
+## no raio de visao (PlayerCharacter.VIEW_RADIUS) de QUALQUER jogador vivo da
+## partida. Sem cone e sem raio de oclusao: so distancia, para centenas de
+## zumbis nao custarem FPS.
 ## Uso:
-##   var visible := SharedVision.is_seen_by_any(SharedVision.observers(tree), zombie, ja_visivel, precisa_ray, ray_check)
-
-## Ray de oclusao de visao so dentro de 20m: alem disso o dissolve ja cobre
-## e o estado anterior persiste (zumbi visto continua, oculto segue oculto).
-const RAY_MAX_RANGE_SQ := 400.0
+##   var visible := SharedVision.is_seen_by_any(SharedVision.observers(tree), zombie)
 
 
 ## Todos os jogadores validos da partida (locais e aliados de rede).
@@ -24,17 +20,10 @@ static func observers(tree: SceneTree) -> Array[CharacterBody3D]:
 	return result
 
 
-## Verdadeiro quando algum observador enxerga o zumbi. `has_clear_line` recebe
-## (observador, zumbi) e so e chamado quando `needs_ray` e o observador esta perto.
-## Uso: SharedVision.is_seen_by_any(players, zombie, false, true, _has_clear_player_vision)
-static func is_seen_by_any(observer_list: Array[CharacterBody3D], zombie: Node3D, already_visible: bool, needs_ray: bool, has_clear_line: Callable) -> bool:
+## Verdadeiro quando o zumbi esta no raio de visao de algum observador.
+## Uso: SharedVision.is_seen_by_any(players, zombie)
+static func is_seen_by_any(observer_list: Array[CharacterBody3D], zombie: Node3D) -> bool:
 	for player in observer_list:
-		if not is_instance_valid(player) or not player.can_see_position(zombie.global_position):
-			continue
-		if player.global_position.distance_squared_to(zombie.global_position) > RAY_MAX_RANGE_SQ:
-			if already_visible:
-				return true
-			continue
-		if not needs_ray or bool(has_clear_line.call(player, zombie)):
+		if is_instance_valid(player) and player.can_see_position(zombie.global_position):
 			return true
 	return false
