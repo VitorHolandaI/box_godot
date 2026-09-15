@@ -1,41 +1,40 @@
 extends RefCounted
 
-## Regressoes da municao por classe: zumbi abatido solta municao da arma de
-## quem matou, reposicao periodica ate o minimo por classe e item com cor e
+## Regressoes da municao por classe: zumbi abatido solta de vez em quando
+## municao de qualquer classe, reposicao periodica ate o minimo por classe e item com cor e
 ## etiqueta da classe (antes toda caixa de municao parecia igual).
 ## Uso: AmmoLootTests.new().run(test_root)
 
-const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd")
 
 
 func run(test_root: Node) -> void:
-	_test_kill_drop_matches_killer_weapon(test_root)
+	_test_kill_drop_is_rare_and_any_class(test_root)
 	_test_restock_fills_each_class_to_minimum(test_root)
 	_test_restock_waits_for_interval(test_root)
 	_test_class_ammo_has_distinct_label(test_root)
 
 
-func _test_kill_drop_matches_killer_weapon(test_root: Node) -> void:
-	print("Testando municao solta pelo zumbi para a arma de quem matou...")
-	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
-	player.set("reads_local_input", false)
-	test_root.add_child(player)
-	player.call("take_crate_weapon", WeaponStats.Kind.UZI)
-	var director = DIRECTOR_SCRIPT.new()
-	var lucky: int = director.drop_kind_for_kill(player, 0.0)
-	var unlucky: int = director.drop_kind_for_kill(player, 0.99)
-	var pistol_only := PLAYER_SCENE.instantiate() as CharacterBody3D
-	pistol_only.set("reads_local_input", false)
-	test_root.add_child(pistol_only)
-	var pistol_drop: int = director.drop_kind_for_kill(pistol_only, 0.0)
-	var no_killer: int = director.drop_kind_for_kill(null, 0.0)
-	player.free()
-	pistol_only.free()
-	if lucky != GroundSupplyPickup.Kind.AMMO_UZI or unlucky != -1 or pistol_drop != GroundSupplyPickup.Kind.AMMO or no_killer != -1:
-		_fail(test_root, "Queda esperada uzi/nada/pistola/nada; veio %d/%d/%d/%d." % [lucky, unlucky, pistol_drop, no_killer])
+func _test_kill_drop_is_rare_and_any_class(test_root: Node) -> void:
+	print("Testando queda ocasional de municao de qualquer classe...")
+	var drops: Dictionary = {}
+	var dropped := 0
+	var samples := 1000
+	for index in samples:
+		var roll := (float(index) + 0.5) / float(samples)
+		var pick := fmod(float(index) * 0.618034, 1.0)
+		var supply_kind := DIRECTOR_SCRIPT.drop_kind_for_kill(roll, pick)
+		if supply_kind < 0:
+			continue
+		dropped += 1
+		drops[supply_kind] = true
+	var drop_rate := float(dropped) / float(samples)
+	var all_kinds := drops.size() == DIRECTOR_SCRIPT.RESTOCKED_KINDS.size()
+	var smaller := DIRECTOR_SCRIPT.drop_amount_for(GroundSupplyPickup.Kind.AMMO_UZI) < DIRECTOR_SCRIPT.amount_for(GroundSupplyPickup.Kind.AMMO_UZI)
+	if absf(drop_rate - DIRECTOR_SCRIPT.KILL_DROP_CHANCE) > 0.01 or not all_kinds or not smaller:
+		_fail(test_root, "Queda deveria ser rara (%.0f%%), de qualquer classe e com meia carga; taxa=%.3f classes=%d/%d menor=%s." % [DIRECTOR_SCRIPT.KILL_DROP_CHANCE * 100.0, drop_rate, drops.size(), DIRECTOR_SCRIPT.RESTOCKED_KINDS.size(), smaller])
 		return
-	print("PASS: Zumbi solta municao da arma que o jogador usa.")
+	print("PASS: Zumbi solta municao de qualquer classe em %.0f%% das mortes, com meia carga." % (drop_rate * 100.0))
 
 
 func _test_restock_fills_each_class_to_minimum(test_root: Node) -> void:
