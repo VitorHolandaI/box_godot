@@ -139,11 +139,16 @@ func _update_minimaps() -> void:
 			all_loot.append(node)
 	# Stragglers e calculado uma vez por tick (era revarrado por minimapa).
 	var stragglers: Array = stragglers_to_reveal(all_zombies, straggler_reveal_count)
+	# Super zumbi aparece sempre no minimapa.
+	var bosses := get_tree().get_nodes_in_group("boss_zombies")
 	for index in minimaps.size():
 		var view_player: Node = players[index] if index < players.size() else null
 		var reveal_zombies: Array = stragglers
 		if reveal_zombies.is_empty() and view_player != null and is_instance_valid(view_player) and view_player.has_method("is_sonar_active") and view_player.is_sonar_active():
 			reveal_zombies = _zombies_near(view_player as Node3D, all_zombies, float(view_player.get_sonar_reveal_radius()))
+		for boss in bosses:
+			if not reveal_zombies.has(boss):
+				reveal_zombies = reveal_zombies + [boss]
 		minimaps[index].tracked_players = all_players
 		minimaps[index].tracked_zombies = reveal_zombies
 		minimaps[index].tracked_crates = all_crates

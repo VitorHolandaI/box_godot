@@ -4,6 +4,9 @@ signal died(killer: Node)
 ## Perseguindo ha STRANDED_SECONDS sem chegar perto e longe do alvo: o servidor
 ## realoca em vez de deixar o zumbi escondido segurando o fim da onda.
 signal stranded(zombie: Node)
+## Super zumbi usou habilidade ("slam", "summon", "rage"); main replica o efeito
+## e executa a invocacao.
+signal boss_ability_used(zombie: Node, ability: String)
 
 const FlockCoordinatorClass = preload("res://scripts/zombie_flock_coordinator.gd")
 const INDOOR_ROUTER_SCRIPT: GDScript = preload("res://scripts/zombie_indoor_router.gd")
@@ -31,6 +34,12 @@ const DISSOLVE_VISUAL_SCRIPT: GDScript = preload("res://scripts/zombie_dissolve_
 const PROGRESS_WATCH_SCRIPT: GDScript = preload("res://scripts/zombie_progress_watch.gd")
 const WALL_DETOUR_SCRIPT: GDScript = preload("res://scripts/zombie_wall_detour.gd")
 const NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation/building_navigation.gd")
+const VARIANT_ABILITIES_SCRIPT: GDScript = preload("res://scripts/zombie_variant_abilities.gd")
+const BLOATER_BURST_EFFECT_SCRIPT: GDScript = preload("res://scripts/bloater_burst_effect.gd")
+const BOSS_BRAIN_SCRIPT: GDScript = preload("res://scripts/zombie_boss_brain.gd")
+const BLOATER_BURST_COLOR := Color(0.55, 0.8, 0.15)
+const BOSS_GROUP := "boss_zombies"
+const TITAN_SLAM_COLOR := Color(1.0, 0.45, 0.1)
 const STUCK_LOG_SECONDS := 15.0
 const STRANDED_SECONDS := 40.0
 const STRANDED_MIN_TARGET_DISTANCE := 30.0
@@ -62,6 +71,10 @@ enum ZombieType {
 	HALF_HEAD = 8,
 	BRUTE = 9,
 	SCREAMER = 10,
+	BLOATER = 11,
+	LEAPER = 12,
+	ARMORED = 13,
+	TITAN = 14,
 }
 
 enum LodLevel {
@@ -113,6 +126,8 @@ var visual_opacity := 1.0
 var indoor_router = INDOOR_ROUTER_SCRIPT.new()
 var progress_watch = PROGRESS_WATCH_SCRIPT.new()
 var wall_detour = WALL_DETOUR_SCRIPT.new()
+var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
+var boss_brain = null
 var _watched_target: Node = null
 var _stuck_logged := false
 var _dissolve_visual = null
@@ -171,6 +186,7 @@ func _physics_process(delta: float) -> void:
 
 	_update_senses(delta)
 	_update_scream(delta)
+	_update_boss(delta)
 	var target := alert_target
 	var is_walking := false
 	var melee_target := _find_nearest_melee_player() if attack_cooldown <= 0.0 else null
@@ -192,7 +208,10 @@ func _physics_process(delta: float) -> void:
 			if not indoor_router.has_route:
 				var line_clear: bool = wall_detour.is_active() and _has_line_of_sight(target)
 				direction = wall_detour.steer(delta, global_position, direction, progress_watch.blocked_seconds, get_wall_normal() if is_on_wall() else Vector3.ZERO, line_clear)
-			if is_on_wall() and _try_attack_blocking_door(direction):
+			var leap_velocity: Vector3 = leap_state.update(delta, velocity, direction, distance, is_on_floor()) if int(zombie_type) == ZombieType.LEAPER and same_level else Vector3.ZERO
+			if leap_state.is_leaping():
+				velocity = leap_velocity
+			elif is_on_wall() and _try_attack_blocking_door(direction):
 				# Zumbi nao abre porta: fica parado golpeando ate ela quebrar.
 				velocity.x = 0.0
 				velocity.z = 0.0
@@ -554,12 +573,15 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 	if is_dead or not simulation_enabled:
 		return
 
+	amount = VARIANT_ABILITIES_SCRIPT.adjust_incoming_damage(int(zombie_type), amount, damage_kind)
 	health = maxi(health - mini(amount, max_health), 0)
 	health_label.text = "%d/%d" % [health, max_health]
 	hit_direction = attack_direction.normalized()
 	hit_kind = damage_kind
-	hit_reaction_time = HIT_REACTION_DURATION
-	velocity += hit_direction * (4.2 if damage_kind == "bullet" else 3.2) + Vector3.UP * 1.0
+	# O Tita nao recua com tiro: 10000 de vida empurrado a cada bala nunca chegaria.
+	if int(zombie_type) != ZombieType.TITAN:
+		hit_reaction_time = HIT_REACTION_DURATION
+		velocity += hit_direction * (4.2 if damage_kind == "bullet" else 3.2) + Vector3.UP * 1.0
 	if health == 0:
 		_die(source)
 		return
@@ -616,6 +638,7 @@ func _die(killer: Node = null) -> void:
 	death_velocity = velocity
 	velocity = Vector3.ZERO
 	remove_from_group("zombies")
+	remove_from_group(BOSS_GROUP)
 	visible = false
 	vision_visible = false
 	visual_opacity = 0.0
@@ -625,11 +648,49 @@ func _die(killer: Node = null) -> void:
 	if killer != null and killer.has_method("register_zombie_kill"):
 		killer.register_zombie_kill()
 	died.emit(killer)
+	if int(zombie_type) == ZombieType.BLOATER:
+		VARIANT_ABILITIES_SCRIPT.bloater_burst(get_tree(), global_position, self)
+		_play_bloater_burst()
 	var scene := get_tree().current_scene
 	if scene.has_method("register_corpse"):
 		scene.register_corpse(self)
 	if not NetworkSession.is_server():
 		_spawn_ragdoll()
+
+
+## Nuvem verde da explosao; o servidor dedicado nao renderiza.
+func _play_bloater_burst() -> void:
+	play_area_effect(get_tree(), global_position, BLOATER_BURST_COLOR, VARIANT_ABILITIES_SCRIPT.BURST_RADIUS)
+
+
+## Esfera de efeito em area (explosao do bloater, pisao do Tita). So visual.
+## Uso: preload("res://scripts/zombie.gd").play_area_effect(get_tree(), pos, Color.ORANGE, 6.0)
+static func play_area_effect(tree: SceneTree, origin: Vector3, color: Color, radius: float) -> void:
+	if NetworkSession.is_server() or tree.current_scene == null:
+		return
+	var effect: Node3D = BLOATER_BURST_EFFECT_SCRIPT.new()
+	effect.configure(color, radius)
+	tree.current_scene.add_child(effect)
+	effect.global_position = origin
+
+
+## Super zumbi: consulta o cerebro e executa pisao e furia aqui; a invocacao
+## precisa do spawn do main e sai pelo sinal. Roda so onde ha simulacao.
+func _update_boss(delta: float) -> void:
+	if int(zombie_type) != ZombieType.TITAN:
+		return
+	if boss_brain == null:
+		boss_brain = BOSS_BRAIN_SCRIPT.new()
+	var nearest := _find_closest_living_player()
+	var nearest_distance := global_position.distance_to(nearest.global_position) if nearest != null else INF
+	for ability in boss_brain.tick(delta, float(health) / float(maxi(max_health, 1)), nearest_distance):
+		if ability == "slam":
+			VARIANT_ABILITIES_SCRIPT.area_damage(get_tree(), global_position, BOSS_BRAIN_SCRIPT.SLAM_RANGE, BOSS_BRAIN_SCRIPT.SLAM_PLAYER_DAMAGE, BOSS_BRAIN_SCRIPT.SLAM_ZOMBIE_DAMAGE, BOSS_BRAIN_SCRIPT.SLAM_DOOR_DAMAGE, self)
+			attack_animation_time = ATTACK_ANIMATION_DURATION
+			attack_sequence += 1
+		elif ability == "rage":
+			speed *= BOSS_BRAIN_SCRIPT.RAGE_SPEED_FACTOR
+		boss_ability_used.emit(self, ability)
 
 
 ## Marca se o zumbi deve estar visivel para o FOV do jogador. A transicao
@@ -682,10 +743,13 @@ func _configure_variant() -> void:
 	if forced_variant >= 0:
 		# Onda escolhe a variante (mix percentual); hash vira visual coerente.
 		zombie_type = forced_variant as ZombieType
-		appearance_hash = appearance_hash + posmod(int(forced_variant) - appearance_hash % 11, 11)
+		appearance_hash = appearance_hash + posmod(int(forced_variant) - appearance_hash % ZombieMutator.TYPE_COUNT, ZombieMutator.TYPE_COUNT)
 	else:
-		zombie_type = (appearance_hash % 11) as ZombieType
+		zombie_type = ZombieMutator.random_variant_for_hash(appearance_hash) as ZombieType
 	ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
+	# Grupo proprio: o minimapa mostra o chefe sempre sem varrer a horda inteira.
+	if int(zombie_type) == ZombieType.TITAN:
+		add_to_group(BOSS_GROUP)
 
 
 func _update_groan_audio(delta: float) -> void:
@@ -781,6 +845,7 @@ func apply_network_state(state: Dictionary) -> void:
 		death_velocity = death_velocity_value if death_velocity_value is Vector3 else Vector3.ZERO
 		velocity = Vector3.ZERO
 		remove_from_group("zombies")
+		remove_from_group(BOSS_GROUP)
 		visible = false
 		vision_visible = false
 		visual_opacity = 0.0
@@ -788,3 +853,5 @@ func apply_network_state(state: Dictionary) -> void:
 		collision_shape.set_deferred("disabled", true)
 		model.visible = false
 		_spawn_ragdoll()
+		if int(zombie_type) == ZombieType.BLOATER:
+			_play_bloater_burst()
