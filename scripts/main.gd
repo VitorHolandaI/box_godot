@@ -333,8 +333,11 @@ func _launch_airdrop(drop_position: Vector3, kinds: Array[int]) -> void:
 	var plane := AirdropPlane.new()
 	plane.configure(plane_start, plane_end, drop_position)
 	add_child(plane)
-	if NetworkSession.is_server():
+	if not NetworkSession.is_client():
+		# Partida local e servidor soltam o crate de verdade; no cliente o
+		# crate chega pelo sync por nome do snapshot.
 		plane.reached_drop_point.connect(_drop_airdrop_crate.bind(drop_position, kinds))
+	if NetworkSession.is_server():
 		for peer_id in NetworkSession.loaded_peers:
 			_airdrop_flyby.rpc_id(int(peer_id), plane_start, plane_end, drop_position)
 
@@ -351,14 +354,15 @@ func _airdrop_flyby(plane_start: Vector3, plane_end: Vector3, drop_position: Vec
 
 
 ## O crate nasce no ponto de queda e desce de paraquedas (AirSupplyPickup
-## anima); clientes spawnam a mesma crate pelo GroundWeaponSync no snapshot.
+## anima a queda a partir de DROP_HEIGHT); clientes spawnam a mesma crate
+## pelo GroundWeaponSync no snapshot. Uso: sinal reached_drop_point do aviao.
 func _drop_airdrop_crate(_origin: Variant, drop_position: Vector3, kinds: Array[int]) -> void:
 	var crate := AirSupplyPickup.new()
 	crate.name = "AirCrate%d" % crate_index
 	crate_index += 1
 	crate.setup(kinds)
+	crate.position = Vector3(drop_position.x, 0.02, drop_position.z)
 	add_child(crate)
-	crate.global_position = Vector3(drop_position.x, 0.02, drop_position.z)
 
 
 ## Estado de onda para os clientes (hoje o HUD do cliente fica preso na
