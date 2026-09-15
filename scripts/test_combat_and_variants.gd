@@ -7,6 +7,7 @@ extends Node3D
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
+const BULLET_SCRIPT := preload("res://scripts/bullet.gd")
 const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
@@ -73,6 +74,7 @@ func _ready() -> void:
 	_test_wave_restores_three_lives()
 	await _test_zombie_breaks_blocking_door()
 	_test_player_sonar_pulse()
+	_test_crate_weapon_family()
 	_test_corpse_does_not_block_player()
 	_test_network_ragdoll_is_unique_per_zombie()
 	_test_safehouse_structure_and_spawns()
@@ -515,6 +517,180 @@ func _test_zombie_breaks_blocking_door() -> void:
 	door.queue_free()
 	await get_tree().process_frame
 	print("PASS: Zumbi ataca a porta fechada que bloqueia a passagem.")
+
+
+func _test_crate_weapon_family() -> void:
+	print("Testando familia de armas de crate com slot, desgaste, falha e quebra...")
+	GameConfig.configure_local_players([GameConfig.create_keyboard_config(0)])
+	if not InputMap.has_action("player_1_shotgun") or not InputMap.has_action("player_1_uzi") or not InputMap.has_action("player_1_magnum") or not InputMap.has_action("player_1_drop_weapon"):
+		push_error("FALHA: Acoes das armas de crate deveriam estar mapeadas para o jogador 1.")
+		_mark_failure()
+		return
+	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
+	player.name = "PlayerCrate"
+	player.reads_local_input = false
+	add_child(player)
+
+	var dropped_kinds: Array[int] = []
+	player.crate_weapon_dropped.connect(func(kind: int, _mag: int, _reserve: int, _durability: int) -> void:
+		dropped_kinds.append(kind)
+	)
+
+	if player.take_crate_weapon(WeaponStats.Kind.SHOTGUN) != "granted":
+		push_error("FALHA: Escopeta deveria entrar no slot livre do jogador.")
+		_mark_failure()
+		player.queue_free()
+		return
+
+	# Disparo de escopeta: 8 pellets, gasta 1 bala e 1 de durabilidade.
+	player.current_weapon = PlayerCharacter.Weapon.SHOTGUN
+	var pellets_before := _count_bullets()
+	player.call("_fire_crate_weapon")
+	var pellets_after := _count_bullets()
+	if pellets_after - pellets_before != 8:
+		push_error("FALHA: Escopeta deveria disparar 8 pellets; saiu %d." % (pellets_after - pellets_before))
+		_mark_failure()
+		player.queue_free()
+		return
+	var shot_state: Dictionary = player.weapon_slots.state_of(WeaponStats.Kind.SHOTGUN)
+	var max_durability := int(WeaponStats.stats_for(WeaponStats.Kind.SHOTGUN)["max_durability"])
+	if int(shot_state.get("mag", 0)) != 5 or int(shot_state.get("durability", 0)) != max_durability - 1:
+		push_error("FALHA: Disparo deveria gastar 1 bala e 1 durabilidade; estado=%s." % shot_state)
+		_mark_failure()
+		player.queue_free()
+		return
+
+	# Arma degradada: abaixo do limiar a falha de disparo segue o seed fixo.
+	var degraded_state: Dictionary = player.weapon_slots.state_of(WeaponStats.Kind.SHOTGUN)
+	degraded_state["durability"] = int(WeaponStats.stats_for(WeaponStats.Kind.SHOTGUN)["degraded_below"]) - 1
+	var jam_seed := _find_seed_for_roll(0.15)
+	var reference := RandomNumberGenerator.new()
+	reference.seed = jam_seed
+	player.crate_weapon_rng.seed = jam_seed
+	var degraded_before := _count_bullets()
+	player.call("_fire_crate_weapon")
+	var fired_pellets := _count_bullets() - degraded_before
+	if reference.randf() < 0.15:
+		if player.attack_cooldown <= 0.0 or fired_pellets != 0:
+			push_error("FALHA: Falha de disparo deveria gastar cooldown e nao soltar pellets; pellets=%d." % fired_pellets)
+			_mark_failure()
+			player.queue_free()
+			return
+	else:
+		if fired_pellets != 8:
+			push_error("FALHA: Escopeta degradada sem falha deveria disparar 8 pellets; saiu %d." % fired_pellets)
+			_mark_failure()
+			player.queue_free()
+			return
+
+	# Quebra em 0: sai do slot, cai para a faca e solta pedacos voxel no chao.
+	var final_state: Dictionary = player.weapon_slots.state_of(WeaponStats.Kind.SHOTGUN)
+	final_state["durability"] = 1
+	final_state["mag"] = 2
+	player.crate_weapon_rng.seed = _find_seed_not_below_roll(0.15)
+	player.call("_fire_crate_weapon")
+	if player.weapon_slots.has_kind(WeaponStats.Kind.SHOTGUN) or player.current_weapon != PlayerCharacter.Weapon.KNIFE:
+		push_error("FALHA: Arma em durabilidade 0 deveria quebrar e voltar para a faca.")
+		_mark_failure()
+		player.queue_free()
+		return
+	if _count_group_nodes("weapon_debris") == 0:
+		push_error("FALHA: Quebra deveria spawnar pedacos voxel no grupo weapon_debris.")
+		_mark_failure()
+		player.queue_free()
+		return
+
+	# Drop manual: sinal carrega o estado e o slot esvazia.
+	if player.take_crate_weapon(WeaponStats.Kind.UZI) != "granted":
+		push_error("FALHA: Uzi deveria entrar no slot livre apos a quebra.")
+		_mark_failure()
+		player.queue_free()
+		return
+	player.current_weapon = PlayerCharacter.Weapon.UZI
+	player.call("_drop_current_crate_weapon")
+	if dropped_kinds != [WeaponStats.Kind.UZI] or player.weapon_slots.has_kind(WeaponStats.Kind.UZI):
+		push_error("FALHA: Drop deveria emitir o estado e esvaziar o slot; dropados=%s." % dropped_kinds)
+		_mark_failure()
+		player.queue_free()
+		return
+
+	# Slot cheio: coletar outra arma troca (a antiga cai no chao).
+	if player.take_ground_weapon(WeaponStats.Kind.MAGNUM, 6, 12, 30) != "granted":
+		push_error("FALHA: Magnum deveria entrar no slot livre.")
+		_mark_failure()
+		player.queue_free()
+		return
+	var swapped := player.take_ground_weapon(WeaponStats.Kind.UZI, 20, 90, 100)
+	if swapped != "swapped" or dropped_kinds != [WeaponStats.Kind.UZI, WeaponStats.Kind.MAGNUM]:
+		push_error("FALHA: Pegar Uzi com slot cheio deveria trocar; resultado=%s dropados=%s." % [swapped, dropped_kinds])
+		_mark_failure()
+		player.queue_free()
+		return
+
+	# Estado de arma sincroniza no snapshot (server -> cliente).
+	var sync_state: Dictionary = player.get_network_state()
+	var client_player := PLAYER_SCENE.instantiate() as PlayerCharacter
+	client_player.reads_local_input = false
+	add_child(client_player)
+	client_player.apply_network_state(sync_state)
+	if not client_player.weapon_slots.has_kind(WeaponStats.Kind.UZI):
+		push_error("FALHA: Inventario de armas deveria sincronizar pelo snapshot.")
+		_mark_failure()
+		player.queue_free()
+		client_player.queue_free()
+		return
+	var client_state: Dictionary = client_player.weapon_slots.state_of(WeaponStats.Kind.UZI)
+	var server_state: Dictionary = player.weapon_slots.state_of(WeaponStats.Kind.UZI)
+	if int(client_state.get("reserve", -1)) != int(server_state.get("reserve", -2)):
+		push_error("FALHA: Reserva sincronizada diverge: cliente=%s servidor=%s." % [client_state, server_state])
+		_mark_failure()
+		player.queue_free()
+		client_player.queue_free()
+		return
+
+	player.queue_free()
+	client_player.queue_free()
+	print("PASS: Familia de armas de crate validada (coleta, pellets, falha, quebra, drop e sync).")
+
+
+## Seed cujo primeiro randf() fica abaixo do limite (disparo com falha).
+## Uso: var seed := _find_seed_for_roll(0.15)
+func _find_seed_for_roll(roll_target: float) -> int:
+	for seed in range(1, 400):
+		var probe := RandomNumberGenerator.new()
+		probe.seed = seed
+		if probe.randf() < roll_target:
+			return seed
+	return 0
+
+
+## Seed cujo primeiro randf() fica no ou acima do limite (disparo normal).
+## Uso: var seed := _find_seed_not_below_roll(0.15)
+func _find_seed_not_below_roll(roll_target: float) -> int:
+	for seed in range(1, 400):
+		var probe := RandomNumberGenerator.new()
+		probe.seed = seed
+		if probe.randf() >= roll_target:
+			return seed
+	return 0
+
+
+## Conta nos com um dado script em um grupo. Uso: _count_group_nodes("weapon_debris")
+func _count_group_nodes(group_name: String) -> int:
+	var total := 0
+	for node in get_tree().get_nodes_in_group(group_name):
+		total += 1
+	return total
+
+
+## Conta balas ativas na cena (script bullet.gd). Uso: var n := _count_bullets()
+func _count_bullets() -> int:
+	var bullet_script: Script = BULLET_SCRIPT
+	var total := 0
+	for child in get_tree().current_scene.get_children():
+		if child.get_script() == bullet_script:
+			total += 1
+	return total
 
 
 func _test_player_sonar_pulse() -> void:

@@ -11,6 +11,12 @@ const ACTIONS := [
 	["knife", "Equipar faca"],
 	["pistol", "Equipar pistola"],
 	["reload", "Recarregar"],
+	["interact", "Interagir / pegar arma"],
+	["sonar", "Sonar"],
+	["shotgun", "Equipar escopeta"],
+	["uzi", "Equipar Uzi"],
+	["magnum", "Equipar magnum"],
+	["drop_weapon", "Dropar arma da mao"],
 ]
 
 @onready var selection: VBoxContainer = $MenuPanel/Selection

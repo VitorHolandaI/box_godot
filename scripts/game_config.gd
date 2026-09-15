@@ -1,6 +1,6 @@
 extends Node
 
-const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload", "interact", "sonar"]
+const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload", "interact", "sonar", "shotgun", "uzi", "magnum", "drop_weapon"]
 const SETTINGS_PATH := "user://settings.cfg"
 const MAX_SAVED_SERVERS := 12
 const MIN_SERVER_PORT := 1024
@@ -184,10 +184,10 @@ func configure_local_players(configs: Array[Dictionary]) -> void:
 
 func create_keyboard_config(slot: int) -> Dictionary:
 	var profiles := [
-		[KEY_W, KEY_S, KEY_A, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_F, KEY_1, KEY_2, KEY_R, KEY_E, KEY_Q],
-		[KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SHIFT, KEY_CTRL, KEY_ENTER, KEY_DELETE, KEY_END, KEY_PAGEDOWN, KEY_HOME, KEY_PAGEUP],
-		[KEY_I, KEY_K, KEY_J, KEY_L, KEY_U, KEY_Y, KEY_O, KEY_7, KEY_8, KEY_P, KEY_0, KEY_9],
-		[KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_G, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_Q, KEY_H],
+		[KEY_W, KEY_S, KEY_A, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_F, KEY_1, KEY_2, KEY_R, KEY_E, KEY_Q, KEY_3, KEY_4, KEY_5, KEY_G],
+		[KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SHIFT, KEY_CTRL, KEY_ENTER, KEY_DELETE, KEY_END, KEY_PAGEDOWN, KEY_HOME, KEY_PAGEUP, KEY_F1, KEY_F2, KEY_F3, KEY_F4],
+		[KEY_I, KEY_K, KEY_J, KEY_L, KEY_U, KEY_Y, KEY_O, KEY_7, KEY_8, KEY_P, KEY_0, KEY_9, KEY_F1, KEY_F2, KEY_F3, KEY_F4],
+		[KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_G, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_Q, KEY_H, KEY_F1, KEY_F2, KEY_F3, KEY_F4],
 	]
 	var bindings: Dictionary = {}
 	var profile: Array = profiles[slot % profiles.size()]
@@ -244,16 +244,26 @@ func _apply_input_map() -> void:
 				InputMap.action_add_event(mapped_action, event)
 
 
-## Bindings antigos pode nao conter acoes novas (ex.: sonar). Garante um
-## controle padrao para o jogador nao ficar sem a acao.
+const FALLBACK_KEYS: Dictionary = {"sonar": KEY_Q, "shotgun": KEY_3, "uzi": KEY_4, "magnum": KEY_5, "drop_weapon": KEY_G}
+const FALLBACK_JOY_BUTTONS: Dictionary = {
+	"sonar": JOY_BUTTON_DPAD_RIGHT,
+	"shotgun": JOY_BUTTON_DPAD_LEFT,
+	"uzi": JOY_BUTTON_DPAD_DOWN,
+	"magnum": JOY_BUTTON_RIGHT_STICK,
+	"drop_weapon": JOY_BUTTON_LEFT_STICK,
+}
+
+
+## Bindings antigos pode nao conter acoes novas (ex.: sonar, escopeta). Garante
+## um controle padrao para o jogador nao ficar sem a acao.
 func _fallback_binding(slot: int, action: String, config: Dictionary) -> InputEvent:
-	if action != "sonar":
+	if not FALLBACK_KEYS.has(action):
 		return null
 	if String(config.get("device_type", "keyboard")) == "gamepad":
 		var device_id := int(config.get("device_id", -1))
-		return _create_joy_button(device_id, JOY_BUTTON_DPAD_RIGHT)
+		return _create_joy_button(device_id, FALLBACK_JOY_BUTTONS.get(action, JOY_BUTTON_DPAD_RIGHT))
 	var key := InputEventKey.new()
-	key.physical_keycode = KEY_Q
+	key.physical_keycode = FALLBACK_KEYS[action]
 	return key
 
 
