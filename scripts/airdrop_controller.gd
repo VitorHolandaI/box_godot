@@ -59,6 +59,8 @@ func pick_drop_position(tree: SceneTree) -> Vector3:
 	var origin_player := players[rng.randi() % players.size()] as Node3D
 	if origin_player == null:
 		return INVALID_DROP_POSITION
+	# Lista de zumbis cacheada uma vez: 96 tentativas nao refazem o grupo.
+	var cached_zombies := tree.get_nodes_in_group("zombies")
 	for attempt in 96:
 		var radius := rng.randf_range(MIN_DROP_RADIUS, MAX_DROP_RADIUS)
 		if attempt >= ATTEMPTS_PER_RING * 2:
@@ -67,7 +69,7 @@ func pick_drop_position(tree: SceneTree) -> Vector3:
 			radius = rng.randf_range(MAX_DROP_RADIUS, MAX_DROP_RADIUS * 2.5)
 		var angle := rng.randf_range(0.0, TAU)
 		var candidate := origin_player.global_position + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
-		if is_drop_clear(candidate, tree):
+		if is_drop_clear(candidate, tree, cached_zombies):
 			return Vector3(candidate.x, 0.02, candidate.z)
 	return INVALID_DROP_POSITION
 
@@ -79,6 +81,7 @@ static func pick_clear_position(tree: SceneTree, rng: RandomNumberGenerator, min
 	var players := tree.get_nodes_in_group("player")
 	if players.is_empty():
 		return INVALID_DROP_POSITION
+	var cached_zombies := tree.get_nodes_in_group("zombies")
 	var origin_player := players[rng.randi() % players.size()] as Node3D
 	if origin_player == null:
 		return INVALID_DROP_POSITION
@@ -86,18 +89,18 @@ static func pick_clear_position(tree: SceneTree, rng: RandomNumberGenerator, min
 		var angle := rng.randf_range(0.0, TAU)
 		var radius := rng.randf_range(min_radius, max_radius)
 		var candidate := origin_player.global_position + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
-		if is_drop_clear(candidate, tree):
+		if is_drop_clear(candidate, tree, cached_zombies):
 			return Vector3(candidate.x, 0.02, candidate.z)
 	return INVALID_DROP_POSITION
 
 
 ## Folga de queda/caminhada: distancia de jogadores e zumbis e fora de predio.
-static func is_drop_clear(candidate: Vector3, tree: SceneTree) -> bool:
+static func is_drop_clear(candidate: Vector3, tree: SceneTree, cached_zombies: Array = []) -> bool:
 	for player_node in tree.get_nodes_in_group("player"):
 		var player := player_node as Node3D
 		if player != null and _distance_2d(candidate, player.global_position) < MIN_PLAYER_DISTANCE:
 			return false
-	for zombie_node in tree.get_nodes_in_group("zombies"):
+	for zombie_node in cached_zombies if not cached_zombies.is_empty() else tree.get_nodes_in_group("zombies"):
 		var zombie := zombie_node as Node3D
 		if zombie != null and _distance_2d(candidate, zombie.global_position) < MIN_ZOMBIE_DISTANCE:
 			return false
