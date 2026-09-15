@@ -79,6 +79,7 @@ enum ZombieType {
 	TITAN = 14,
 	SPITTER = 15,
 	CHARGER = 16,
+	JUMPER = 17,
 }
 
 enum LodLevel {
@@ -133,6 +134,8 @@ var wall_detour = WALL_DETOUR_SCRIPT.new()
 var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
 var charge_state = VARIANT_ABILITIES_SCRIPT.ChargeState.new()
 var spit_state = VARIANT_ABILITIES_SCRIPT.SpitState.new()
+var high_jump_state = VARIANT_ABILITIES_SCRIPT.HighJumpState.new()
+var bloater_lunge_state = VARIANT_ABILITIES_SCRIPT.BloaterLungeState.new()
 var _charge_hit_done := false
 var boss_brain = null
 ## So o chefe mostra vida flutuante. Com a horda cheia, 600 Label3D vermelhos
@@ -200,6 +203,8 @@ func _physics_process(delta: float) -> void:
 	_update_boss(delta)
 	var target := alert_target
 	var is_walking := false
+	if _bloater_detonates_on(target):
+		return
 	var melee_target := _find_nearest_melee_player() if attack_cooldown <= 0.0 else null
 	if hit_reaction_time > 0.0:
 		velocity.x = move_toward(velocity.x, hit_direction.x * 3.5, 18.0 * delta)
@@ -503,7 +508,21 @@ func _dash_for_type() -> RefCounted:
 		if not charge_state.is_leaping():
 			_charge_hit_done = false
 		return charge_state
+	if int(zombie_type) == ZombieType.JUMPER:
+		return high_jump_state
+	if int(zombie_type) == ZombieType.BLOATER:
+		return bloater_lunge_state
 	return null
+
+
+## Bloater colado no alvo explode sozinho (kamikaze), antes de qualquer golpe.
+func _bloater_detonates_on(target: CharacterBody3D) -> bool:
+	if int(zombie_type) != ZombieType.BLOATER or not is_instance_valid(target):
+		return false
+	if global_position.distance_to(target.global_position) > VARIANT_ABILITIES_SCRIPT.BLOATER_DETONATE_DISTANCE:
+		return false
+	_die(null)
+	return true
 
 
 ## Charger correndo: o primeiro jogador no caminho leva dano e e arremessado.
