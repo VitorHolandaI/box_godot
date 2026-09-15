@@ -13,6 +13,7 @@ const DOOR_STATE_REPLICATOR_SCRIPT := preload("res://scripts/door_state_replicat
 const WAVE_SUPPLY_CONTROLLER_SCRIPT := preload("res://scripts/wave_supply_controller.gd")
 const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state.gd")
 const AIRDROP_CONTROLLER_SCRIPT := preload("res://scripts/airdrop_controller.gd")
+const AIRDROP_PLANE_SCRIPT := preload("res://scripts/airdrop_plane.gd")
 const CORPSE_CLEANUP_POLICY_SCRIPT := preload("res://scripts/corpse_cleanup_policy.gd")
 const ZOMBIE_SNAPSHOT_CODEC_SCRIPT := preload("res://scripts/zombie_snapshot_codec.gd")
 const LOAD_TEST_OPTIONS_SCRIPT := preload("res://scripts/load_test_options.gd")
@@ -328,14 +329,34 @@ func _weapon_broke(player_key: String, _kind: int, origin: Vector3) -> void:
 		WeaponBreakDebris.spawn(get_tree().current_scene, origin)
 
 
-## Crate de airdrop nasce direto no chao (sem aviao), aterrissado, marcado no
-## minimapa e expira em 10 minutos. No offline/servidor nasce de verdade; no
-## cliente chega pelo sync por nome do snapshot.
+## Aviao cruza o mapa BAIXO (visivel) e solta o crate no ponto sorteado; o
+## crate desce de paraquedas com fisica e abre espalhando as armas no chao.
+## Clientes recebem o mesmo voo cosmico por RPC.
 ## Uso: conectado ao sinal airdrop_requested do AirdropController.
 func _launch_airdrop(drop_position: Vector3, kinds: Array[int]) -> void:
-	if NetworkSession.is_client():
+	var plane_start := drop_position + Vector3(-190.0, 16.0, -24.0)
+	var plane_end := drop_position + Vector3(190.0, 16.0, 24.0)
+	var plane := AirdropPlane.new()
+	plane.configure(plane_start, plane_end, drop_position)
+	add_child(plane)
+	if not NetworkSession.is_client():
+		# Partida local e servidor soltam o crate de verdade; no cliente o
+		# crate chega pelo sync por nome do snapshot.
+		plane.reached_drop_point.connect(_drop_airdrop_crate.bind(drop_position, kinds))
+	if NetworkSession.is_server():
+		for peer_id in NetworkSession.loaded_peers:
+			_airdrop_flyby.rpc_id(int(peer_id), plane_start, plane_end, drop_position)
+
+
+## Voo cosmico no cliente: mesmo aviao, sem soltar crate (o crate chega pelo
+## sync por nome do snapshot). Uso: rpc do servidor.
+@rpc("authority", "call_remote", "reliable")
+func _airdrop_flyby(plane_start: Vector3, plane_end: Vector3, drop_position: Vector3) -> void:
+	if not NetworkSession.is_client():
 		return
-	_drop_airdrop_crate(drop_position, kinds)
+	var plane := AirdropPlane.new()
+	plane.configure(plane_start, plane_end, drop_position)
+	add_child(plane)
 
 
 func _drop_airdrop_crate(drop_position: Vector3, kinds: Array[int]) -> void:

@@ -21,6 +21,7 @@ class MinimapView extends Control:
 	var tracked_players: Array = []
 	var tracked_zombies: Array = []
 	var tracked_crates: Array = []
+	var tracked_loot: Array = []
 	var own_player: Node = null
 	var world_extent := 160.0
 	var colors: Array = []
@@ -53,6 +54,12 @@ class MinimapView extends Control:
 			if crate == null or not is_instance_valid(crate):
 				continue
 			_draw_crate_widget(crate.global_position, center, scale_value)
+		for loot_node in tracked_loot:
+			var loot := loot_node as Node3D
+			if loot == null or not is_instance_valid(loot):
+				continue
+			var loot_point := (center + Vector2(loot.global_position.x, loot.global_position.z) * scale_value).clamp(Vector2.ONE * 8.0, size - Vector2.ONE * 8.0)
+			draw_rect(Rect2(loot_point - Vector2(3.0, 3.0), Vector2(6.0, 6.0)), Color(0.95, 0.8, 0.2, 0.9), true)
 
 
 
@@ -106,9 +113,12 @@ func _process(_delta: float) -> void:
 	var all_players := get_tree().get_nodes_in_group("player")
 	var all_zombies := get_tree().get_nodes_in_group("zombies")
 	var all_crates: Array = []
+	var all_loot: Array = []
 	for node in get_tree().get_nodes_in_group("ground_weapons"):
 		if node is AirSupplyPickup:
 			all_crates.append(node)
+		elif node is GroundWeaponPickup:
+			all_loot.append(node)
 	for index in minimaps.size():
 		var view_player: Node = players[index] if index < players.size() else null
 		var reveal_zombies: Array = stragglers_to_reveal(all_zombies, straggler_reveal_count)
@@ -117,6 +127,7 @@ func _process(_delta: float) -> void:
 		minimaps[index].tracked_players = all_players
 		minimaps[index].tracked_zombies = reveal_zombies
 		minimaps[index].tracked_crates = all_crates
+		minimaps[index].tracked_loot = all_loot
 		minimaps[index].queue_redraw()
 	for index in players.size():
 		var player := players[index]

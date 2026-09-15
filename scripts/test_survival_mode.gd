@@ -87,8 +87,10 @@ func _test_airdrop_schedule(test_root: Node) -> void:
 
 ## Crate desce, coleta por interacao entrega uma arma por pegada e a troca
 ## dropa a da mao. Uso: roda na suite.
+## Crate BR-style: cai, abre e ejeta as armas no chao; cada pickup entrega
+## uma arma por interacao e o slot cheio troca.
 func _test_airdrop_drop_and_pickup(test_root: Node) -> void:
-	print("Testando crate de airdrop com coleta por interacao...")
+	print("Testando crate de airdrop que abre e ejeta armas...")
 	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
 	player.reads_local_input = false
 	player.position = Vector3(0.0, 1.0, 0.0)
@@ -97,41 +99,56 @@ func _test_airdrop_drop_and_pickup(test_root: Node) -> void:
 	crate.name = "AirCrateTest"
 	crate.setup([WeaponStats.Kind.SHOTGUN, WeaponStats.Kind.UZI])
 	test_root.add_child(crate)
-	crate.global_position = Vector3(0.0, 20.0, 0.0)
+	crate.global_position = Vector3(0.0, 0.7, 0.0)
 	if not crate.is_in_group("ground_weapons"):
 		_fail(test_root, "Crate deveria entrar no grupo ground_weapons.")
 		player.free()
 		crate.free()
 		return
-	crate.call("interact_with", player)
-	if not player.weapon_slots.has_kind(WeaponStats.Kind.SHOTGUN):
-		_fail(test_root, "Primeira pegada do crate deveria entregar a escopeta.")
+	crate.call("land")
+	if not bool(crate.get("dropped")):
+		_fail(test_root, "Crate deveria abrir ao aterrissar.")
 		player.free()
 		crate.free()
 		return
-	var remaining: Array[int] = crate.get("weapon_kinds")
-	if remaining != [WeaponStats.Kind.UZI]:
-		_fail(test_root, "Crate deveria manter a Uzi para a proxima pegada; restou %s." % [remaining])
+	var ejected: Array = []
+	for node in test_root.get_tree().get_nodes_in_group("ground_weapons"):
+		if node is GroundWeaponPickup:
+			ejected.append(node)
+	if ejected.size() != 2:
+		_fail(test_root, "Crate deveria ejectar 2 pickups de arma; saiu %d." % ejected.size())
 		player.free()
+		for node in ejected:
+			node.free()
 		crate.free()
 		return
-	crate.call("interact_with", player)
-	if player.current_weapon != PlayerCharacter.Weapon.UZI:
-		_fail(test_root, "Pegada da Uzi com slot cheio deveria trocar e equipar a arma.")
+	# Primeira arma: entra no slot livre e equipa na mao.
+	var first := ejected[0] as GroundWeaponPickup
+	var first_result := String(first.call("interact_with", player))
+	if first_result != "granted" or player.current_weapon != PlayerCharacter.Weapon.SHOTGUN:
+		_fail(test_root, "Primeira pegada deveria entregar a escopeta; resultado=%s." % first_result)
 		player.free()
+		for node in ejected:
+			node.free()
 		crate.free()
 		return
-	if not crate.get("weapon_kinds").is_empty():
-		_fail(test_root, "Crate esvaziado deveria liberar o no.")
+	# Segunda arma (slot cheio): troca e dropa a da mao no chao.
+	var second := ejected[1] as GroundWeaponPickup
+	var swap_result := String(second.call("interact_with", player))
+	if swap_result != "swapped" or player.current_weapon != PlayerCharacter.Weapon.UZI:
+		_fail(test_root, "Pegar Uzi com slot cheio deveria trocar; resultado=%s." % swap_result)
 		player.free()
+		for node in ejected:
+			node.free()
 		crate.free()
 		return
 	crate.free()
+	for node in ejected:
+		node.free()
 	player.free()
-	print("PASS: Crate de airdrop com coleta por interacao validado.")
+	print("PASS: Crate de airdrop com armas espalhadas no chao validado.")
 
 
-## Sync por nome concilia o cliente sem duplicar nos nem perder drops.
 func _test_ground_weapon_sync(test_root: Node) -> void:
 	print("Testando sync por nome das armas no chao...")
 	var tree := test_root.get_tree()
