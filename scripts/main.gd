@@ -24,6 +24,8 @@ const MAX_CORPSES := 20
 const SPAWN_INTERVAL := 1.0
 const INPUT_INTERVAL := 1.0 / 30.0
 const SNAPSHOT_INTERVAL := 1.0 / 10.0
+## Suprimentos/armas no chao sao lentos: 2 Hz basta e mantem o pacote fino.
+const GROUND_STATE_INTERVAL := 0.5
 # Payload binario por RPC abaixo do MTU do ENet (~1400 bytes com cabecalhos).
 const ZOMBIE_SNAPSHOT_PACKET_BYTES := 1100
 const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 2
@@ -69,6 +71,8 @@ var smoke_test_mode := false
 var player_vision_elapsed := 0.0
 var player_vision_tick := 0
 var corpse_cleanup_elapsed := 0.0
+## Cadencia do sync dedicado de suprimentos/armas no chao (2 Hz).
+var ground_state_elapsed := 0.0
 var bot_ai := PlayerBotAI.new()
 var lag_probe := NetworkLagProbe.from_arguments(OS.get_cmdline_user_args())
 var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
@@ -177,6 +181,10 @@ func _physics_process(delta: float) -> void:
 			_submit_inputs.rpc_id(NetworkSession.SERVER_ID, _collect_local_inputs())
 		_drain_zombie_spawn_queue()
 	elif NetworkSession.is_server():
+		ground_state_elapsed += delta
+		if ground_state_elapsed >= GROUND_STATE_INTERVAL:
+			ground_state_elapsed = 0.0
+			_send_ground_states()
 		snapshot_elapsed += delta
 		if snapshot_elapsed >= SNAPSHOT_INTERVAL:
 			snapshot_elapsed = 0.0
@@ -457,7 +465,8 @@ func _on_peer_scene_loaded(peer_id: int) -> void:
 	if survival_wave_controller.wave_index <= 0:
 		return
 	_wave_state.rpc_id(peer_id, survival_wave_controller.wave_index, survival_wave_controller.total_kills)
-	# Peer novo precisa da lista completa de itens no chao do primeiro snapshot.
+	# Peer novo precisa da lista completa de itens no chao do primeiro sync.
+	SupplyNetworkState.mark_dirty()
 	GroundWeaponSync.mark_dirty()
 
 
@@ -577,19 +586,39 @@ func _collect_zombie_states() -> Array:
 	return states
 
 
-func _send_player_snapshots(states: Array) -> void:
-	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
-	var door_open := safehouse_door != null and bool(safehouse_door.call("is_open_requested"))
-	# Snapshot sujo: suprimentos e itens no chao so viajam quando mudam
-	# (pacote identico a 10Hz x pacotes x peers era desperdicio puro).
+## Suprimentos e itens no chao: RPC confiavel proprio a 2 Hz, so quando
+## sujo. Iam no pacote de players e estouravam o MTU (1645 > 1392 bytes).
+## Uso: roda via _process do servidor. Uso: _send_ground_states()
+func _send_ground_states() -> void:
+	if not NetworkSession.is_server():
+		return
 	var supply_states: Array = []
+	var ground_weapons: Array = []
 	if SupplyNetworkState.dirty:
 		supply_states = SUPPLY_NETWORK_STATE_SCRIPT.collect(get_tree())
 		SupplyNetworkState.dirty = false
-	var ground_weapons: Array = []
 	if GroundWeaponSync.dirty:
 		ground_weapons = GroundWeaponSync.collect(get_tree())
 		GroundWeaponSync.dirty = false
+	if supply_states.is_empty() and ground_weapons.is_empty():
+		return
+	for peer_id in NetworkSession.loaded_peers:
+		_apply_ground_snapshot.rpc_id(int(peer_id), supply_states, ground_weapons)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _apply_ground_snapshot(supply_states: Array, ground_weapons: Array) -> void:
+	if not NetworkSession.is_client():
+		return
+	if not supply_states.is_empty():
+		SUPPLY_NETWORK_STATE_SCRIPT.apply(get_tree(), supply_states)
+	if not ground_weapons.is_empty():
+		GroundWeaponSync.apply(get_tree(), ground_weapons)
+
+
+func _send_player_snapshots(states: Array) -> void:
+	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
+	var door_open := safehouse_door != null and bool(safehouse_door.call("is_open_requested"))
 	for packet_index in packet_count:
 		var packet_states: Array = []
 		var first_state := packet_index * MAX_PLAYERS_PER_SNAPSHOT_PACKET
@@ -597,7 +626,7 @@ func _send_player_snapshots(states: Array) -> void:
 		for state_index in range(first_state, state_limit):
 			packet_states.append(states[state_index])
 		for peer_id in NetworkSession.loaded_peers:
-			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open, supply_states, ground_weapons)
+			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open)
 
 
 ## Portas dos predios: estado completo (confiavel) para quem acabou de carregar
@@ -637,17 +666,11 @@ func _send_zombie_snapshots(states: Array) -> void:
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func _apply_player_snapshot(player_states: Array, door_open: bool, supply_states: Array, ground_weapons: Array) -> void:
+func _apply_player_snapshot(player_states: Array, door_open: bool) -> void:
 	if not NetworkSession.is_client():
 		return
 	if safehouse_door != null:
 		safehouse_door.call("apply_network_open_state", door_open)
-	# Array vazio = "nada mudou desde o ultimo snapshot" (dirty-flag do lado
-	# do servidor); aplicar uma lista vazia resetaria estados.
-	if not supply_states.is_empty():
-		SUPPLY_NETWORK_STATE_SCRIPT.apply(get_tree(), supply_states)
-	if not ground_weapons.is_empty():
-		GroundWeaponSync.apply(get_tree(), ground_weapons)
 	for state_value in player_states:
 		if not state_value is Dictionary:
 			continue
