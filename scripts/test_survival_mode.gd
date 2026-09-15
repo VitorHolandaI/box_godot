@@ -23,6 +23,7 @@ func run(test_root: Node) -> void:
 	_test_ground_weapon_sync(test_root)
 	_test_crate_expires(test_root)
 	_test_ground_supply_pickup(test_root)
+	_test_building_lights_toggle(test_root)
 	_test_client_wave_sync(test_root)
 	_test_variant_mix(test_root)
 	_test_forced_variant_spawn(test_root)
@@ -282,6 +283,34 @@ func _test_ground_supply_pickup(test_root: Node) -> void:
 	for node in tree.get_nodes_in_group("ground_supplies"):
 		node.free()
 	print("PASS: Itens de vida e municao espalhados validados.")
+
+
+## G7-fase1: toggle de luzes preserva no e o cache em meta reaproveita filhos.
+func _test_building_lights_toggle(test_root: Node) -> void:
+	print("Testando toggle de luzes de interior por predio...")
+	var building := StaticBody3D.new()
+	building.name = "BuildingLightTest"
+	test_root.add_child(building)
+	var light := OmniLight3D.new()
+	light.name = "InteriorLight"
+	light.position = Vector3(2.0, 2.8, 2.0)
+	building.add_child(light)
+	ProceduralBuildingAssembler.set_building_lights_enabled(building, false)
+	if light.visible:
+		_fail(test_root, "Toggle deveria apagar a luz de interior do predio.")
+		building.free()
+		return
+	ProceduralBuildingAssembler.set_building_lights_enabled(building, true)
+	if not light.visible:
+		_fail(test_root, "Toggle deveria reacender a luz de interior.")
+		building.free()
+		return
+	# Cache em meta: a segunda chamada nao refaz find_children.
+	var cached: Variant = building.get_meta("light_cache", null)
+	if not cached is Array or (cached as Array).size() != 1:
+		_fail(test_root, "Cache de luzes deveria conter o filho unico.")
+	building.free()
+	print("PASS: Toggle de luzes de interior validado.")
 
 
 func _test_client_wave_sync(test_root: Node) -> void:
