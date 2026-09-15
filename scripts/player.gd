@@ -379,7 +379,7 @@ func _fire_pellets(weapon_kind: int) -> void:
 		get_tree().current_scene.add_child(bullet)
 		bullet.global_position = origin + pellet_direction * 0.12
 		bullet.setup(pellet_direction, int(stats["damage"]), true, self)
-	get_tree().call_group("zombies", "hear_gunshot", origin, float(stats["noise_radius"]))
+	ZombieFlockCoordinator.relay_sound(get_tree(), origin, float(stats["noise_radius"]))
 	if NetworkSession.is_offline():
 		AudioFeedback.play_gunshot(origin)
 	if NetworkSession.is_server():
@@ -586,7 +586,7 @@ func _fire_pistol() -> Node3D:
 	get_tree().current_scene.add_child(bullet)
 	bullet.global_position = origin + bullet_direction * 0.12
 	bullet.setup(bullet_direction, pistol_damage, true, self)
-	get_tree().call_group("zombies", "hear_gunshot", origin, 65.0)
+	ZombieFlockCoordinator.relay_sound(get_tree(), origin, 65.0)
 	if NetworkSession.is_offline():
 		AudioFeedback.play_gunshot(origin)
 	if NetworkSession.is_server():

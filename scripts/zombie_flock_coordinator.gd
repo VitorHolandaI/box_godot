@@ -27,6 +27,28 @@ var _horde_members: Dictionary = {}
 var _next_horde_id := 1
 var _random_source := RandomNumberGenerator.new()
 var _chase_heartbeat_elapsed := 0.0
+## Lideres de cluster da ultima passada do enxame (0.2s); canal do som.
+var _leader_cache: Array[CharacterBody3D] = []
+
+
+## Som no mapa (tiro, grito de screamer) chega apenas aos lideres de cluster:
+## cada um investiga e o cerebro da horda passa o alvo para os seguidores,
+## em vez de 600 zumbis rodando hear_gunshot por call_group.
+## Uso: coordinator.notify_sound(origem_tiro, 65.0)
+func notify_sound(origin: Vector3, radius: float) -> void:
+	for leader in _leader_cache:
+		if is_instance_valid(leader) and not bool(leader.get("is_dead")):
+			leader.call("hear_gunshot", origin, radius)
+
+
+## Canal estatico de som: usa o coordenador quando existe (mundo real) e cai
+## no caminho antigo em testes/mundos sem enxame.
+## Uso: ZombieFlockCoordinator.relay_sound(get_tree(), origem, raio)
+static func relay_sound(tree: SceneTree, origin: Vector3, radius: float) -> void:
+	if instance == null:
+		tree.call_group("zombies", "hear_gunshot", origin, radius)
+		return
+	instance.notify_sound(origin, radius)
 
 
 func _enter_tree() -> void:
@@ -89,6 +111,16 @@ func _update_flock_clusters() -> void:
 	var zombie_nodes := get_tree().get_nodes_in_group("zombies")
 	if zombie_nodes.is_empty():
 		return
+
+	# Lideres validos desta passada: o relay de som (tiro/grito) so acorda
+	# eles em vez de 600 zumbis por call_group.
+	_leader_cache.clear()
+	for node in zombie_nodes:
+		var z := node as CharacterBody3D
+		if z == null or not is_instance_valid(z) or z.is_queued_for_deletion() or bool(z.get("is_dead")):
+			continue
+		if bool(z.get("is_cluster_leader")):
+			_leader_cache.append(z)
 
 	# Agrupamento espacial em celulas de 16m
 	for node in zombie_nodes:
