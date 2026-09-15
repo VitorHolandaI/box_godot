@@ -11,9 +11,11 @@ const CORPSE_COLLISION_LAYER := 32
 var torso_body: RigidBody3D
 
 
-## Corpo assentado sai do solver: apos 6s congelamos os RigidBody3D em posicao.
+## Corpo sai do solver assim que assenta (parado) e, no limite, apos 6s.
 ## A remocao continua sendo do corpse_cleanup_policy (mantem os 50m).
 const SETTLE_FREEZE_TIME := 6.0
+const SETTLE_CHECK_DELAY := 1.2
+const SETTLE_VELOCITY_SQ := 0.06
 
 var settle_age := 0.0
 var froze := false
@@ -38,8 +40,24 @@ func _physics_process(delta: float) -> void:
 	if froze:
 		return
 	settle_age += delta
-	if settle_age < SETTLE_FREEZE_TIME:
+	# Congela cedo quando o corpo ja esta parado (tipico 1-2s); no pior caso,
+	# o teto de 6s. Derruba o spike do solver em pico de mortes.
+	if settle_age >= SETTLE_FREEZE_TIME:
+		_freeze_all()
 		return
+	if settle_age >= SETTLE_CHECK_DELAY and _all_limbs_still():
+		_freeze_all()
+
+
+func _all_limbs_still() -> bool:
+	for child in get_children():
+		var limb_body := child as RigidBody3D
+		if limb_body != null and is_instance_valid(limb_body) and limb_body.linear_velocity.length_squared() > SETTLE_VELOCITY_SQ:
+			return false
+	return true
+
+
+func _freeze_all() -> void:
 	froze = true
 	for child in get_children():
 		var limb_body := child as RigidBody3D
