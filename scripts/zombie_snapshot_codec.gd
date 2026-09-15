@@ -3,11 +3,11 @@ extends RefCounted
 
 ## Codifica o estado dos zumbis em bytes compactos para o snapshot de rede.
 ## Um Dictionary serializado custava 324 bytes por zumbi; aqui sao 16 (22 se
-## morto). O tipo viaja nos 4 bits altos de `flags`: desde o mix de variantes
+## morto). O tipo viaja nos 7 bits altos de `flags` (ate 127): desde o mix de variantes
 ## por onda o nome sozinho nao determina o tipo (o cliente mostrava outro). A
 ## aparencia o cliente deriva do nome + tipo, igual ao servidor.
 ## Layout little-endian por zumbi:
-##   u32 id | i16 x | i16 y | i16 z | u8 rotacao | u16 vida | u8 flags (bit0 morto, bits4-7 tipo) | u16 seq. ataque
+##   u32 id | i16 x | i16 y | i16 z | u8 rotacao | u16 vida | u8 flags (bit0 morto, bits1-7 tipo) | u16 seq. ataque
 ##   [i16 vx | i16 vy | i16 vz]  somente quando flags tem IS_DEAD
 ## Uso:
 ##   var bytes := ZombieSnapshotCodec.encode(states)
@@ -17,8 +17,9 @@ const NAME_PREFIX := "ZombieSpawn"
 const POSITION_SCALE := 0.02
 const VELOCITY_SCALE := 0.01
 const FLAG_IS_DEAD := 1
-const TYPE_SHIFT := 4
-const MAX_ENCODED_TYPE := 15
+# Eram 4 bits (16 tipos); com cuspidor e investida passou de 16.
+const TYPE_SHIFT := 1
+const MAX_ENCODED_TYPE := 127
 const ALIVE_RECORD_BYTES := 16
 const DEAD_RECORD_BYTES := 22
 
