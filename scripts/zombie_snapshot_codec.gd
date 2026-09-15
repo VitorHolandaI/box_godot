@@ -3,10 +3,11 @@ extends RefCounted
 
 ## Codifica o estado dos zumbis em bytes compactos para o snapshot de rede.
 ## Um Dictionary serializado custava 324 bytes por zumbi; aqui sao 16 (22 se
-## morto). Tipo e aparencia nao viajam: o cliente deriva os dois do nome
-## "ZombieSpawn<id>", igual ao servidor.
+## morto). O tipo viaja nos 4 bits altos de `flags`: desde o mix de variantes
+## por onda o nome sozinho nao determina o tipo (o cliente mostrava outro). A
+## aparencia o cliente deriva do nome + tipo, igual ao servidor.
 ## Layout little-endian por zumbi:
-##   u32 id | i16 x | i16 y | i16 z | u8 rotacao | u16 vida | u8 flags | u16 seq. ataque
+##   u32 id | i16 x | i16 y | i16 z | u8 rotacao | u16 vida | u8 flags (bit0 morto, bits4-7 tipo) | u16 seq. ataque
 ##   [i16 vx | i16 vy | i16 vz]  somente quando flags tem IS_DEAD
 ## Uso:
 ##   var bytes := ZombieSnapshotCodec.encode(states)
@@ -16,6 +17,8 @@ const NAME_PREFIX := "ZombieSpawn"
 const POSITION_SCALE := 0.02
 const VELOCITY_SCALE := 0.01
 const FLAG_IS_DEAD := 1
+const TYPE_SHIFT := 4
+const MAX_ENCODED_TYPE := 15
 const ALIVE_RECORD_BYTES := 16
 const DEAD_RECORD_BYTES := 22
 
@@ -39,7 +42,8 @@ static func encode(states: Array) -> PackedByteArray:
 		_put_quantized(buffer, position.z, POSITION_SCALE)
 		buffer.put_u8(_encode_angle(float(state.get("rotation", 0.0))))
 		buffer.put_u16(clampi(int(state.get("health", 0)), 0, 65535))
-		buffer.put_u8(FLAG_IS_DEAD if is_dead else 0)
+		var zombie_type := clampi(int(state.get("zombie_type", 0)), 0, MAX_ENCODED_TYPE)
+		buffer.put_u8((FLAG_IS_DEAD if is_dead else 0) | (zombie_type << TYPE_SHIFT))
 		buffer.put_u16(posmod(int(state.get("attack_sequence", 0)), 65536))
 		if is_dead:
 			var velocity: Vector3 = state.get("death_velocity", Vector3.ZERO)
@@ -70,6 +74,7 @@ static func decode(payload: PackedByteArray) -> Array[Dictionary]:
 			"rotation": rotation,
 			"health": health,
 			"is_dead": flags & FLAG_IS_DEAD != 0,
+			"zombie_type": flags >> TYPE_SHIFT,
 			"attack_sequence": attack_sequence,
 		}
 		if flags & FLAG_IS_DEAD != 0:
