@@ -157,6 +157,9 @@ func _process(delta: float) -> void:
 	if NetworkSession.is_client() or smoke_test_mode:
 		return
 	if NetworkSession.survival_mode:
+		_check_survival_game_over()
+		if survival_wave_controller.game_over:
+			return
 		survival_wave_controller.tick(delta)
 		return
 	if not zombie_spawn_schedule.is_spawn_due(delta):
@@ -405,10 +408,16 @@ func _spawn_scattered_loot(_wave_index: int = 0) -> void:
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = NetworkSession.world_seed * 31337 + Time.get_ticks_msec()
-	for item_index in 3:
+	for item_index in 2:
 		_spawn_loot_item(rng, GroundSupplyPickup.Kind.HEALTH, 35)
-	for item_index in 3:
+	for item_index in 2:
 		_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO, 60)
+	# Municao para CADA classe de arma de crate: um refresh completo por onda.
+	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_SHOTGUN, 12)
+	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_UZI, 90)
+	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_MAGNUM, 8)
+	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_DOUBLE_BARREL, 6)
+	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_CARBINE, 30)
 
 
 func _spawn_loot_item(rng: RandomNumberGenerator, kind: int, amount: int) -> void:
@@ -462,9 +471,8 @@ func _reconcile_network_players() -> void:
 
 
 ## Peer reconectou no meio da partida: entrega o estado atual da onda na
-## hora certa (quando a cena dele ja carregou e ele esta em loaded_peers),
-## senao o HUD dele fica preso na "Hora 1".
-## Uso: conectado ao sinal peer_scene_loaded do NetworkSession.
+## Alguem entrou de novo: entrega o estado da onda e, em GAME OVER, zera a
+## horda e recomeca do inicio. Uso: sinal peer_scene_loaded.
 func _on_peer_scene_loaded(peer_id: int) -> void:
 	if not NetworkSession.is_server() or survival_wave_controller == null:
 		return
@@ -474,6 +482,42 @@ func _on_peer_scene_loaded(peer_id: int) -> void:
 	# Peer novo precisa da lista completa de itens no chao do primeiro sync.
 	SupplyNetworkState.mark_dirty()
 	GroundWeaponSync.mark_dirty()
+	if survival_wave_controller.game_over:
+		_restart_survival()
+
+
+## Todo mundo caido/eliminado = GAME OVER: horda zerada (zumbis limpos,
+## contadores zero) e a partida espera novo jogador entrar.
+func _check_survival_game_over() -> void:
+	if survival_wave_controller.game_over:
+		return
+	for player_node in get_tree().get_nodes_in_group("player"):
+		var player := player_node as PlayerCharacter
+		if player == null or not is_instance_valid(player) or player.is_queued_for_deletion():
+			continue
+		if not bool(player.get("is_downed")) and not bool(player.get("is_eliminated")):
+			return
+	# Ninguem de pe: zera.
+	for zombie_node in zombies.get_children():
+		zombie_cache.erase(String(zombie_node.name))
+		zombie_node.queue_free()
+	zombie_cache.clear()
+	pending_zombie_spawns.clear()
+	survival_wave_controller.trigger_game_over()
+	for peer_id in NetworkSession.loaded_peers:
+		_game_over.rpc_id(int(peer_id))
+
+
+@rpc("authority", "call_remote", "reliable")
+func _game_over() -> void:
+	if NetworkSession.is_client() and NetworkSession.survival_mode:
+		survival_wave_controller.trigger_game_over()
+
+
+func _restart_survival() -> void:
+	survival_wave_controller.restart()
+	_broadcast_wave_state(survival_wave_controller.wave_index)
+	_spawn_scattered_loot(0)
 
 
 func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
