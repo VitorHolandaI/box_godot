@@ -20,9 +20,10 @@ Logica de jogo, rede, interface e testes automatizados.
 - `in_game_menu.gd`: pausa local e navegacao durante a partida.
 - `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
 - `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos que so somem longe dos jogadores e bot de teste.
+- `load_test_options.gd`: opcao `--prespawn-zombies=N` do servidor dedicado para teste de carga.
 - `menu.gd`: selecao local/multiplayer, navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
-- `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT e atraso entre snapshots de um servidor remoto.
+- `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT, atraso entre snapshots, KB/s e pacotes/s recebidos e FPS.
 - `network_session.gd`: sessao ENet, roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede.
@@ -50,6 +51,8 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_door_breaking.gd`: regressoes de destrocos, vao liberado, tremida, faca do jogador e replicacao da quebra.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
+- `test_script_error_counter.gd`: logger que faz a suite falhar em qualquer erro de script.
+- `test_zombie_snapshot_codec.gd`: regressoes do snapshot binario de zumbis.
 - `test_survival_mode.gd`: regressoes de ondas, mapa com predominio de casas, portas, abates, audio real, alvos e skin do ragdoll.
 - `test_container.sh`: smoke test do servidor Docker.
 - `test_dedicated.sh`: smoke test do servidor Godot nativo executando testes unitarios e teste com bot.
@@ -59,5 +62,6 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie_flock_coordinator.gd`: hordas persistentes com um cerebro, drones, fusao aleatoria de lideres, Boids e LOD.
 - `zombie_mutator.gd`: configurador procedural de 9 variantes anatomicas (pedaco de braco, sem 1 braco, pedaco de perna, sem 1 perna, cabeca pela metade com cerebro exposto, rastejante, manco, corredor e classico) e animacoes de marcha e flinch.
 - `zombie_ragdoll.gd`: ragdoll articulado com pescoco limitado, camada propria de cadaver (nao prende o jogador) que some ao ser atingido, e suporte as amputacoes das 9 variantes.
+- `zombie_snapshot_codec.gd`: snapshot binario de zumbis (16 bytes por zumbi) em pacotes abaixo do MTU.
 - `zombie_spawn_locator.gd`: escolhe pontos desocupados exclusivamente na floresta distante, entre as arvores.
 - `zombie_spawn_schedule.gd`: relogio de spawn gradual com alvo global de 600 zumbis vivos.
