@@ -511,15 +511,16 @@ func _test_wave_controller(test_root: Node) -> void:
 	)
 	var started_waves: Array[int] = []
 	controller.wave_started.connect(func(wave_index: int) -> void: started_waves.append(wave_index))
-	for _index in 10:
+	var target0: int = int(controller.schedule.target_for(0))
+	for _index in target0:
 		controller.tick(SURVIVAL_WAVE_CONTROLLER_SCRIPT.SPAWN_INTERVAL + 0.01)
-	if controller.spawned_in_wave != 10 or controller.alive_in_wave != 10:
-		_fail(test_root, "Controle deveria produzir 10 zumbis e manter 10 vivos; produziu %d/%d." % [controller.spawned_in_wave, controller.alive_in_wave])
+	if controller.spawned_in_wave != target0 or controller.alive_in_wave != target0:
+		_fail(test_root, "Controle deveria produzir %d zumbis e manter %d vivos; produziu %d/%d." % [target0, target0, controller.spawned_in_wave, controller.alive_in_wave])
 		return
-	for _index in 10:
+	for _index in target0:
 		controller.register_death()
 	controller.tick(0.01)
-	if controller.wave_index != 1 or controller.total_kills != 10 or started_waves != [1]:
+	if controller.wave_index != 1 or controller.total_kills != target0 or started_waves != [1]:
 		_fail(test_root, "Controle deveria avançar para a segunda onda apos limpar a primeira.")
 		return
 	print("PASS: Controle de ondas e abates validado.")

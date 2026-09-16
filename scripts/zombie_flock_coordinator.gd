@@ -14,6 +14,7 @@ const LOD_MID_DIST_SQ := 2500.0 # 50.0 * 50.0
 const PLAYER_SCAN_INTERVAL := 0.25
 const FLOCK_UPDATE_INTERVAL := 0.2
 const CHASE_HEARTBEAT_INTERVAL := 10.0
+const FLOCK_ENABLED := true
 
 static var instance: ZombieFlockCoordinator = null
 ## Diagnostico de zumbis travados (`-- --debug-stuck-zombies`), lido tambem por zombie.gd.
@@ -131,6 +132,8 @@ func _exit_tree() -> void:
 
 func _physics_process(delta: float) -> void:
 	_update_building_lights(delta)
+	if not FLOCK_ENABLED:
+		return
 	_flock_update_elapsed += delta
 	if _flock_update_elapsed < FLOCK_UPDATE_INTERVAL:
 		return
