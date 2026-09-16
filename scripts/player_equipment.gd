@@ -12,6 +12,8 @@ enum Item { GRENADE, THROWING_KNIFE, AIR_STRIKE, SWAT }
 
 const START_COUNTS := {Item.GRENADE: 2, Item.THROWING_KNIFE: 3, Item.AIR_STRIKE: 0, Item.SWAT: 0}
 const MAX_COUNTS := {Item.GRENADE: 5, Item.THROWING_KNIFE: 8, Item.AIR_STRIKE: 2, Item.SWAT: 1}
+const AIR_STRIKE_EVERY_WAVES := 3
+const SWAT_EVERY_WAVES := 5
 const HUD_LABELS := {Item.GRENADE: "Granadas", Item.THROWING_KNIFE: "Facas", Item.AIR_STRIKE: "Aereo", Item.SWAT: "SWAT"}
 
 var counts: Dictionary = {}
@@ -61,6 +63,22 @@ func apply_counts(values: PackedByteArray) -> void:
 	for item in Item.values():
 		if item < values.size():
 			counts[item] = clampi(values[item], 0, int(MAX_COUNTS[item]))
+
+
+## Cargas de chamada por onda: ataque aereo a cada AIR_STRIKE_EVERY_WAVES e
+## SWAT a cada SWAT_EVERY_WAVES (contando a partir da onda 1 = indice 0).
+## Uso: PlayerEquipment.grant_wave_rewards([player.equipment], wave_index)
+static func grant_wave_rewards(equipments: Array, wave_index: int) -> void:
+	var air := (wave_index + 1) % AIR_STRIKE_EVERY_WAVES == 0
+	var swat := (wave_index + 1) % SWAT_EVERY_WAVES == 0
+	for equipment_value in equipments:
+		var equipment := equipment_value as PlayerEquipment
+		if equipment == null:
+			continue
+		if air:
+			equipment.add(Item.AIR_STRIKE, 1)
+		if swat:
+			equipment.add(Item.SWAT, 1)
 
 
 ## Linha do HUD: "Granadas 2 | Facas 3 | Aereo 0 | SWAT 0".
