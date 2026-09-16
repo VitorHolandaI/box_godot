@@ -110,6 +110,8 @@ var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
 var ammo_loot_director = AMMO_LOOT_DIRECTOR_SCRIPT.new()
 var player_slots_replication := PlayerSlotsReplication.new()
 var player_snapshot_sequence := 0
+## Id dos esquadroes SWAT (nome do no igual no servidor e nos clientes).
+var swat_squad_index := 0
 var loot_rng := RandomNumberGenerator.new()
 ## Armas soltas por zumbis ainda no chao, da mais antiga para a mais nova.
 var zombie_weapon_drops: Array[Node] = []
@@ -410,6 +412,66 @@ func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3,
 		return
 	for peer_id in NetworkSession.loaded_peers:
 		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count, spread_deg, weapon_kind)
+
+
+## Ataque aereo pedido pelo jogador (autoridade): alvo a frente na mira.
+## Uso: chamado por PlayerThrowables via has_method("call_air_strike").
+func call_air_strike(caller: Node3D, direction: Vector3) -> void:
+	var target := caller.global_position + direction * AirStrike.TARGET_DISTANCE
+	var strike := AirStrike.new()
+	add_child(strike)
+	strike.setup(target, direction, true)
+	if not NetworkSession.is_server():
+		return
+	for peer_id in NetworkSession.loaded_peers:
+		_spawn_air_strike_marker.rpc_id(int(peer_id), target, direction)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _spawn_air_strike_marker(target: Vector3, direction: Vector3) -> void:
+	if not NetworkSession.is_client():
+		return
+	var strike := AirStrike.new()
+	add_child(strike)
+	strike.setup(target, direction, false)
+
+
+## SWAT pedido pelo jogador (autoridade): 3 soldados por 20 s.
+## Uso: chamado por PlayerThrowables via has_method("call_swat").
+func call_swat(caller: Node3D, _direction: Vector3) -> void:
+	swat_squad_index += 1
+	var squad := SwatSquad.new()
+	add_child(squad)
+	squad.setup(swat_squad_index, caller, true)
+	if not NetworkSession.is_server():
+		return
+	for peer_id in NetworkSession.loaded_peers:
+		_spawn_swat_squad.rpc_id(int(peer_id), swat_squad_index)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _spawn_swat_squad(squad_id: int) -> void:
+	if not NetworkSession.is_client():
+		return
+	var squad := SwatSquad.new()
+	add_child(squad)
+	squad.setup(squad_id, null, false)
+
+
+## Posicoes dos soldados do esquadrao para os clientes (10 Hz).
+## Uso: chamado por SwatSquad no servidor.
+func replicate_swat_positions(squad_id: int, positions: PackedVector3Array) -> void:
+	for peer_id in NetworkSession.loaded_peers:
+		_apply_swat_positions.rpc_id(int(peer_id), squad_id, positions)
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _apply_swat_positions(squad_id: int, positions: PackedVector3Array) -> void:
+	if not NetworkSession.is_client():
+		return
+	var squad := get_node_or_null("SwatSquad%d" % squad_id) as SwatSquad
+	if squad != null:
+		squad.apply_network_positions(positions)
 
 
 ## Granada arremessada na autoridade: clientes veem o mesmo arco (so visual).
@@ -1200,8 +1262,21 @@ func _on_wave_transition(wave_index: int) -> void:
 	_schedule_wave_task(0.12, func() -> void: if wave_supply_controller != null: wave_supply_controller.refresh_wave(wave_index))
 	_schedule_wave_task(0.24, func() -> void: if airdrop_controller != null: airdrop_controller.on_wave_started(wave_index))
 	_schedule_wave_task(0.36, func() -> void: _spawn_scattered_loot(wave_index))
+	_schedule_wave_task(0.48, func() -> void: _grant_support_calls(wave_index))
 	if survival_wave_controller.schedule.is_boss_wave(wave_index):
 		_schedule_wave_task(3.0, _spawn_boss)
+
+
+## Ataque aereo a cada 3 ondas e SWAT a cada 5 para cada jogador (autoridade).
+func _grant_support_calls(wave_index: int) -> void:
+	if NetworkSession.is_client():
+		return
+	var equipments: Array = []
+	for player_node in get_tree().get_nodes_in_group("player"):
+		var equipment: Variant = player_node.get("equipment")
+		if equipment is PlayerEquipment:
+			equipments.append(equipment)
+	PlayerEquipment.grant_wave_rewards(equipments, wave_index)
 
 
 ## Hora 10, 20, 30: o super zumbi entra fora da cota e a onda espera ele morrer.
