@@ -92,6 +92,7 @@ var corpse_cleanup_elapsed := 0.0
 var ground_state_elapsed := 0.0
 var bot_ai := PlayerBotAI.new()
 var lag_probe := NetworkLagProbe.from_arguments(OS.get_cmdline_user_args())
+var flow_audit := NetworkFlowAudit.from_arguments(OS.get_cmdline_user_args())
 var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
 var zombie_spawn_locator = ZOMBIE_SPAWN_LOCATOR_SCRIPT.new()
 var survival_wave_controller
@@ -218,6 +219,8 @@ func _log_stutter(delta: float) -> void:
 
 func _process(delta: float) -> void:
 	_log_stutter(delta)
+	if flow_audit.is_enabled():
+		flow_audit.tick(delta, self)
 	if lag_probe.is_enabled():
 		lag_probe.record_frame_time(delta * 1000.0)
 	_update_player_vision(delta)
