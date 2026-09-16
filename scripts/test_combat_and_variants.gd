@@ -66,6 +66,7 @@ const FOCUSED_TEST_GROUPS := {
 	"server_tick_policy": SERVER_TICK_POLICY_TESTS_SCRIPT,
 	"local_host_launcher": LOCAL_HOST_LAUNCHER_TESTS_SCRIPT,
 	"zombie_tick_budget": ZOMBIE_TICK_BUDGET_TESTS_SCRIPT,
+	"corpse_cleanup": CORPSE_CLEANUP_TESTS_SCRIPT,
 }
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")

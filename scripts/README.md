@@ -79,7 +79,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_building_navigation.gd`: regressoes da escada alternada, navmesh por edificio, zumbi subindo/descendo, jogador subindo e zumbi saindo de casa arrombando portas.
 - `test_city_props.gd`: regressoes da altura/posicao dos postes e do telhado das casas.
-- `test_corpse_cleanup.gd`: regressoes do sumico de cadaveres por distancia.
+- `test_corpse_cleanup.gd`: regressoes do sumico de cadaveres por distancia. Inclui a fila de corpos com o mais antigo ja liberado.
 - `test_collision_boundaries.gd`: regressao focada para faca, tiro e ataque de zumbi bloqueados por paredes.
 - `test_door_breaking.gd`: regressoes de destrocos, vao liberado, tremida, faca do jogador, replicacao da quebra e envio so das portas que mudaram.
 - `test_apartment_layout.gd`: regressoes da planta dos predios: vao de porta sem parede atravessada, comodos alcancaveis, tamanho para o boneco e terraco acessivel.
