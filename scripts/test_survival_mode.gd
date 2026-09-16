@@ -512,7 +512,7 @@ func _test_wave_controller(test_root: Node) -> void:
 	var started_waves: Array[int] = []
 	controller.wave_started.connect(func(wave_index: int) -> void: started_waves.append(wave_index))
 	for _index in 10:
-		controller.tick(0.2)
+		controller.tick(SURVIVAL_WAVE_CONTROLLER_SCRIPT.SPAWN_INTERVAL + 0.01)
 	if controller.spawned_in_wave != 10 or controller.alive_in_wave != 10:
 		_fail(test_root, "Controle deveria produzir 10 zumbis e manter 10 vivos; produziu %d/%d." % [controller.spawned_in_wave, controller.alive_in_wave])
 		return
