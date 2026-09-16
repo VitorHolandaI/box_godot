@@ -47,6 +47,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
 - `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
+- `test_zombie_crowd_slots.gd`: regressoes da fila de ataque (anel cheio, vaga expirando, atacante sem esperar a propria vaga, zumbi real parado na fila).
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
 - `test_zombie_specials.gd`: regressoes do cuspidor, da investida, dos tipos acima de 15 no snapshot e das especiais desde a hora 1.
 - `test_zombie_tick_budget.gd`: regressoes do orcamento de tick, teto global, zumbi parado batendo, proxy leve no client, alvo desconectado liberado e flock espalhando hordas entre ticks.
@@ -98,6 +99,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_dedicated.sh`: smoke test do servidor Godot nativo executando testes unitarios e teste com bot.
 - `zombie.gd`: IA de zumbi com perseguicao global do jogador, rota pelo navmesh do edificio (sai de comodos, usa escadas, quebra portas sem abri-las), empurrao de bando limitado, desintegracao por FOV, sentidos, combate bloqueado por paredes, knockback e variantes anatomicas.
 - `zombie_boss_brain.gd`: cerebro do super zumbi Tita: pisao em area, invocacao de sprinters em 66%/33% e furia abaixo de 25%.
+- `zombie_crowd_slots.gd`: fila de ataque estilo Left 4 Dead: no maximo 8 zumbis batem no mesmo jogador; os outros a 3 m esperam parados sem move_and_slide ate abrir vaga.
 - `zombie_dissolve_visual.gd`: materiais de dissolucao compartilhados por cor e po ao desintegrar zumbis fora da visao.
 - `zombie_indoor_router.gd`: caminho do zumbi pelo navmesh do edificio, replanejado em intervalos com jitter.
 - `player_unstuck_locator.gd`: acha espaco livre acima ou ao redor do jogador para o botao "Destravar personagem".
