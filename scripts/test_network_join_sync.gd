@@ -23,6 +23,7 @@ const PLAYER_PACKET_BUDGET_BYTES := 1200
 func run(test_root: Node) -> void:
 	_test_client_proxy_matches_server_variant(test_root)
 	_test_player_snapshot_packet_fits_mtu(test_root)
+	_test_bullet_from_disconnected_shooter(test_root)
 	_test_game_over_rule(test_root)
 	_test_client_wave_sync_uses_alive_count(test_root)
 	_test_game_over_restarts_with_players(test_root)
@@ -59,24 +60,50 @@ func _test_client_proxy_matches_server_variant(test_root: Node) -> void:
 
 func _test_player_snapshot_packet_fits_mtu(test_root: Node) -> void:
 	print("Testando pacote de snapshot de jogador abaixo do MTU...")
-	var players: Array[CharacterBody3D] = []
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.set("reads_local_input", false)
+	test_root.add_child(player)
+	player.call("take_crate_weapon", WeaponStats.Kind.UZI)
+	var template: Dictionary = player.get_network_state()
+	player.free()
+	# Pior caso: 4 jogadores com slots de arma no mesmo snapshot.
 	var states: Array = []
-	for index in MAIN_SCRIPT.MAX_PLAYERS_PER_SNAPSHOT_PACKET:
-		var player := PLAYER_SCENE.instantiate() as CharacterBody3D
-		player.set("reads_local_input", false)
-		test_root.add_child(player)
-		player.call("take_crate_weapon", WeaponStats.Kind.UZI)
-		var state: Dictionary = player.get_network_state()
+	var include_slots: Dictionary = {}
+	for index in 4:
+		var state := template.duplicate(true)
 		state["key"] = "%d:%d" % [2147483647, index]
 		states.append(state)
-		players.append(player)
-	var packet_bytes := var_to_bytes(states).size()
-	for player in players:
-		player.free()
-	if packet_bytes > PLAYER_PACKET_BUDGET_BYTES:
-		_fail(test_root, "Pacote com %d jogador(es) tem %d bytes; esperado <= %d para nao fragmentar (MTU 1392)." % [MAIN_SCRIPT.MAX_PLAYERS_PER_SNAPSHOT_PACKET, packet_bytes, PLAYER_PACKET_BUDGET_BYTES])
+		include_slots[state["key"]] = true
+	for packet in PlayerSnapshotCodec.split_into_packets(states, include_slots, MAIN_SCRIPT.PLAYER_SNAPSHOT_PACKET_BYTES):
+		var packet_bytes := PlayerSnapshotCodec.encode(packet, include_slots).size()
+		if packet_bytes > PLAYER_PACKET_BUDGET_BYTES:
+			_fail(test_root, "Pacote de jogadores tem %d bytes; esperado <= %d para nao fragmentar (MTU 1392)." % [packet_bytes, PLAYER_PACKET_BUDGET_BYTES])
+			return
+	print("PASS: Pacotes de jogador com slots cabem no MTU.")
+
+
+## Bala em voo de quem desconectou: o atirador liberado ia tipado para
+## zombie.take_damage e dava SCRIPT ERROR (teste local com 3 bots, 6f9d385).
+func _test_bullet_from_disconnected_shooter(test_root: Node) -> void:
+	print("Testando bala de atirador desconectado acertando zumbi...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	test_root.add_child(zombie)
+	zombie.global_position = Vector3(800.0, 40.0, 800.0)
+	var shooter := PLAYER_SCENE.instantiate() as CharacterBody3D
+	test_root.add_child(shooter)
+	var bullet := preload("res://scenes/bullet.tscn").instantiate() as Node3D
+	test_root.add_child(bullet)
+	bullet.call("setup", Vector3.FORWARD, 10, true, shooter)
+	shooter.free()
+	var health_before := int(zombie.get("health"))
+	bullet.call("_apply_damage", zombie)
+	var damaged := int(zombie.get("health")) < health_before
+	bullet.free()
+	zombie.free()
+	if not damaged:
+		_fail(test_root, "Bala de atirador desconectado deveria ainda causar dano (vida %d)." % health_before)
 		return
-	print("PASS: Pacote de jogador com %d bytes cabe no MTU." % packet_bytes)
+	print("PASS: Bala de atirador desconectado acerta sem erro.")
 
 
 func _test_game_over_rule(test_root: Node) -> void:
