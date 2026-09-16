@@ -1217,7 +1217,9 @@ func _get_player_spawn_position(slot: int) -> Vector3:
 	var spawn_slot := slot % PLAYER_SPAWN_POINTS.size()
 	var marker_path := "GeneratedCity/CentralSafehouse/PlayerSpawn%d" % (spawn_slot + 1)
 	var marker := get_node_or_null(marker_path) as Marker3D
-	return marker.global_position if marker != null else PLAYER_SPAWN_POINTS[spawn_slot]
+	var base: Vector3 = marker.global_position if marker != null else PLAYER_SPAWN_POINTS[spawn_slot]
+	# Servidor com mais de 4 jogadores: nao nascer em cima de outro no marcador.
+	return base + PlayerCapacity.spawn_offset(slot, PLAYER_SPAWN_POINTS.size())
 
 
 func _update_player_vision(delta: float) -> void:
