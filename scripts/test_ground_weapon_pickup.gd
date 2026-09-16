@@ -11,6 +11,9 @@ func run(test_root: Node) -> void:
 	await _test_swap_while_holding_crate_weapon(test_root)
 	await _test_swap_while_holding_pistol(test_root)
 	await _test_pickup_is_big_with_name_near_player(test_root)
+	_test_split_ammo_takes_reserve_then_mag(test_root)
+	_test_walking_over_same_weapon_takes_ammo(test_root)
+	_test_other_weapon_or_far_player_keeps_ammo(test_root)
 
 
 func _test_swap_while_holding_crate_weapon(test_root: Node) -> void:
@@ -70,6 +73,82 @@ func _test_pickup_is_big_with_name_near_player(test_root: Node) -> void:
 		_fail(test_root, "Arma no chao: nome so perto, assentada no piso, modelo grande e tempo no sync; longe_oculto=%s perto_visivel=%s no_chao=%s grande=%s tempo=%s." % [hidden_far, shown_near, on_floor, big, has_lifetime])
 		return
 	print("PASS: Arma no chao grande, no piso e com nome para quem chega perto.")
+
+
+func _test_split_ammo_takes_reserve_then_mag(test_root: Node) -> void:
+	print("Testando divisao da municao da arma no chao...")
+	var partial: Dictionary = GroundWeaponPickup.split_ammo(22, 80, 50)
+	var drained: Dictionary = GroundWeaponPickup.split_ammo(22, 10, 50)
+	var no_space: Dictionary = GroundWeaponPickup.split_ammo(22, 80, 0)
+	var partial_ok := int(partial["taken"]) == 50 and int(partial["reserve"]) == 30 and int(partial["mag"]) == 22
+	var drained_ok := int(drained["taken"]) == 32 and int(drained["reserve"]) == 0 and int(drained["mag"]) == 0
+	var no_space_ok := int(no_space["taken"]) == 0 and int(no_space["reserve"]) == 80 and int(no_space["mag"]) == 22
+	if not partial_ok or not drained_ok or not no_space_ok:
+		_fail(test_root, "Municao do chao sai da reserva e depois do pente ate o espaco; parcial=%s esvaziada=%s sem_espaco=%s." % [partial, drained, no_space])
+		return
+	print("PASS: Municao do chao sai da reserva e depois do pente.")
+
+
+## Pedido: com uma Uzi na mao, passar por cima de outra Uzi pega a municao dela
+## sem apertar E; o que nao cabe fica na arma do chao.
+func _test_walking_over_same_weapon_takes_ammo(test_root: Node) -> void:
+	print("Testando passar por cima da mesma arma pegando a municao...")
+	var origin := Vector3(-740.0, 1.0, -800.0)
+	var player := _ammo_player(test_root, origin, 200)
+	var pickup := GroundWeaponPickup.new()
+	pickup.setup(WeaponStats.Kind.UZI, 20, 30, 150)
+	test_root.add_child(pickup)
+	pickup.global_position = origin
+	pickup.absorb_ammo_from_nearby_players(test_root.get_tree())
+	var reserve := int((player.get("weapon_slots") as WeaponSlots).state_of(WeaponStats.Kind.UZI)["reserve"])
+	var left_mag := pickup.mag
+	var left_reserve := pickup.reserve
+	var still_there := not pickup.is_queued_for_deletion()
+	player.free()
+	var empty_player := _ammo_player(test_root, origin, 100)
+	pickup.absorb_ammo_from_nearby_players(test_root.get_tree())
+	var emptied := pickup.is_queued_for_deletion()
+	empty_player.free()
+	pickup.free()
+	if reserve != 240 or left_mag != 10 or left_reserve != 0 or not still_there or not emptied:
+		_fail(test_root, "Uzi no chao: reserva do jogador=%d (esperado 240), sobra pente=%d reserva=%d (esperado 10/0), ficou=%s, some ao esvaziar=%s." % [reserve, left_mag, left_reserve, still_there, emptied])
+		return
+	print("PASS: Passar pela mesma arma pega a municao e deixa o resto.")
+
+
+func _test_other_weapon_or_far_player_keeps_ammo(test_root: Node) -> void:
+	print("Testando arma diferente ou jogador longe sem pegar municao...")
+	var origin := Vector3(-720.0, 1.0, -800.0)
+	var player := _ammo_player(test_root, origin + Vector3(GroundWeaponPickup.AMMO_ABSORB_RADIUS + 1.0, 0.0, 0.0), 200)
+	var far_uzi := GroundWeaponPickup.new()
+	far_uzi.setup(WeaponStats.Kind.UZI, 20, 30, 150)
+	test_root.add_child(far_uzi)
+	far_uzi.global_position = origin
+	far_uzi.absorb_ammo_from_nearby_players(test_root.get_tree())
+	var near_ak := GroundWeaponPickup.new()
+	near_ak.setup(WeaponStats.Kind.AK47, 30, 60, 200)
+	test_root.add_child(near_ak)
+	near_ak.global_position = player.global_position
+	near_ak.absorb_ammo_from_nearby_players(test_root.get_tree())
+	var untouched := far_uzi.reserve == 30 and far_uzi.mag == 20 and near_ak.reserve == 60 and near_ak.mag == 30
+	player.free()
+	far_uzi.free()
+	near_ak.free()
+	if not untouched:
+		_fail(test_root, "Uzi longe (>%.1f m) e AK perto de quem tem Uzi deveriam manter a municao." % GroundWeaponPickup.AMMO_ABSORB_RADIUS)
+		return
+	print("PASS: Arma diferente ou longe nao perde municao.")
+
+
+func _ammo_player(test_root: Node, position: Vector3, uzi_reserve: int) -> CharacterBody3D:
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.set("reads_local_input", false)
+	player.set("is_local_controller", false)
+	player.position = position
+	test_root.add_child(player)
+	player.call("take_crate_weapon", WeaponStats.Kind.UZI)
+	(player.get("weapon_slots") as WeaponSlots).state_of(WeaponStats.Kind.UZI)["reserve"] = uzi_reserve
+	return player
 
 
 ## Devolve "" quando a troca funcionou; senao a descricao do que falhou.
