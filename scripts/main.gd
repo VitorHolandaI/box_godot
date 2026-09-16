@@ -36,11 +36,6 @@ const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
 ## frame (fila) para nao dar hitch de instantiates sincronos.
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 2
 var _active_set_elapsed := 0.0
-## Frame longo acima disto e um travamento sentido; loga 1 linha JSON por
-## rolamento de 2 s para diagnosticar hitches do modo rede (server e client).
-const STUTTER_FRAME_MS := 80.0
-const STUTTER_LOG_COOLDOWN := 2.0
-var _stutter_cooldown := 0.0
 const NETWORK_ZOMBIE_PROXY_FACTORY_SCRIPT := preload("res://scripts/network_zombie_proxy_factory.gd")
 const AMMO_LOOT_DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd")
 const SHARED_VISION_SCRIPT := preload("res://scripts/shared_vision.gd")
@@ -96,6 +91,10 @@ var ground_state_elapsed := 0.0
 var bot_ai := PlayerBotAI.new()
 var lag_probe := NetworkLagProbe.from_arguments(OS.get_cmdline_user_args())
 var flow_audit := NetworkFlowAudit.from_arguments(OS.get_cmdline_user_args())
+## Custo por frame (micro travadas com a horda): perf_report a cada 5 s e
+## perf_hitch em frame >= 33 ms. Substitui o antigo log de stutter >= 80 ms,
+## que nao pegava a tremida constante. `--perf-probe=off` desliga.
+var perf_probe := FramePerfProbe.from_arguments(OS.get_cmdline_user_args())
 var zombie_spawn_schedule = ZOMBIE_SPAWN_SCHEDULE_SCRIPT.new(GLOBAL_ACTIVE_ZOMBIE_TARGET, SPAWN_INTERVAL)
 var zombie_spawn_locator = ZOMBIE_SPAWN_LOCATOR_SCRIPT.new()
 var survival_wave_controller
@@ -114,6 +113,7 @@ var zombie_weapon_drops: Array[Node] = []
 
 
 func _ready() -> void:
+	FramePerfProbe.active = perf_probe
 	loot_rng.randomize()
 	in_game_menu.unstuck_requested.connect(_on_unstuck_requested)
 	survival_wave_controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(Callable(self, "_spawn_zombie"))
@@ -246,38 +246,56 @@ func _update_zombie_active_set(delta: float) -> void:
 		zb.set_physics_process(i < active_cap)
 
 
-## Travamento sentido (frame >= 80 ms): 1 linha JSON no maximo a cada 2 s
-## com o contexto do frame, para achar o culpado do modo rede sem chute.
+func _exit_tree() -> void:
+	if FramePerfProbe.active == perf_probe:
+		FramePerfProbe.active = null
+
+
+## Fecha o frame na sonda e imprime as linhas JSON (relatorio/hitch).
 ## Uso: chamado no inicio de _process; nada a fazer manualmente.
-func _log_stutter(delta: float) -> void:
-	_stutter_cooldown = maxf(_stutter_cooldown - delta, 0.0)
-	var frame_ms := delta * 1000.0
-	if frame_ms < STUTTER_FRAME_MS or _stutter_cooldown > 0.0:
+func _finish_perf_frame(delta: float) -> void:
+	if not perf_probe.enabled:
 		return
-	_stutter_cooldown = STUTTER_LOG_COOLDOWN
+	for line in perf_probe.finish_frame(delta * 1000.0, Time.get_ticks_msec(), _perf_context()):
+		print(JSON.stringify(line))
+
+
+## Contexto do frame para a sonda: papel, populacao e monitores do motor
+## (process/physics do ultimo frame, draw calls, nos, corpos ativos).
+func _perf_context() -> Dictionary:
 	var role := "offline"
 	if NetworkSession.is_server():
 		role = "server"
 	elif NetworkSession.is_client():
 		role = "client"
-	print(JSON.stringify({
-		"stutter_frame_ms": snappedf(frame_ms, 0.1),
+	return {
 		"role": role,
 		"zombies": zombies.get_child_count(),
 		"pending_spawns": pending_zombie_spawns.size(),
-		"players": get_tree().get_nodes_in_group("player").size(),
-	}))
+		"players": players_node.get_child_count(),
+		"engine_process_ms": snappedf(Performance.get_monitor(Performance.TIME_PROCESS) * 1000.0, 0.01),
+		"engine_physics_ms": snappedf(Performance.get_monitor(Performance.TIME_PHYSICS_PROCESS) * 1000.0, 0.01),
+		"draw_calls": int(Performance.get_monitor(Performance.RENDER_TOTAL_DRAW_CALLS_IN_FRAME)),
+		"nodes": int(Performance.get_monitor(Performance.OBJECT_NODE_COUNT)),
+		"physics_active_bodies": int(Performance.get_monitor(Performance.PHYSICS_3D_ACTIVE_OBJECTS)),
+	}
 
 
 func _process(delta: float) -> void:
-	_log_stutter(delta)
+	_finish_perf_frame(delta)
 	if flow_audit.is_enabled():
 		flow_audit.tick(delta, self)
 	if lag_probe.is_enabled():
 		lag_probe.record_frame_time(delta * 1000.0)
+	var perf_start := FramePerfProbe.begin()
 	_update_player_vision(delta)
+	FramePerfProbe.end("vision", perf_start)
+	perf_start = FramePerfProbe.begin()
 	_cleanup_far_ragdolls(delta)
+	FramePerfProbe.end("ragdoll_cleanup", perf_start)
+	perf_start = FramePerfProbe.begin()
 	_update_zombie_active_set(delta)
+	FramePerfProbe.end("active_set", perf_start)
 	if NetworkSession.is_client() or smoke_test_mode:
 		return
 	if not _procedural_city_ready():
@@ -295,7 +313,9 @@ func _process(delta: float) -> void:
 			if survival_wave_controller.tick_game_over(delta, not get_tree().get_nodes_in_group("player").is_empty()):
 				_restart_survival()
 			return
+		perf_start = FramePerfProbe.begin()
 		survival_wave_controller.tick(delta)
+		FramePerfProbe.end("wave_spawn", perf_start)
 		# Sem jogador nao ha onde espalhar (pick_clear_position gira em volta deles).
 		if not get_tree().get_nodes_in_group("player").is_empty():
 			_restock_class_ammo(delta)
@@ -308,6 +328,7 @@ func _process(delta: float) -> void:
 
 
 func _physics_process(delta: float) -> void:
+	perf_probe.record_physics_step()
 	if NetworkSession.is_client():
 		if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 			bot_ai.update(delta, get_tree())
@@ -320,7 +341,9 @@ func _physics_process(delta: float) -> void:
 		if input_elapsed >= INPUT_INTERVAL:
 			input_elapsed = 0.0
 			_submit_inputs.rpc_id(NetworkSession.SERVER_ID, _collect_local_inputs())
+		var drain_start := FramePerfProbe.begin()
 		_drain_zombie_spawn_queue()
+		FramePerfProbe.end("spawn_drain", drain_start)
 	elif NetworkSession.is_server():
 		ground_state_elapsed += delta
 		if ground_state_elapsed >= GROUND_STATE_INTERVAL:
@@ -333,9 +356,13 @@ func _physics_process(delta: float) -> void:
 			# So para quem ja carregou; antes um jogador carregando a cidade
 			# congelava os snapshots de todos os outros ate terminar.
 			if not NetworkSession.loaded_peers.is_empty():
+				var snapshot_start := FramePerfProbe.begin()
 				_send_door_states()
 				_send_player_snapshots(_collect_player_states())
+				FramePerfProbe.end("snapshot_players", snapshot_start)
+				snapshot_start = FramePerfProbe.begin()
 				_send_zombie_snapshots(_collect_zombie_states())
+				FramePerfProbe.end("snapshot_zombies", snapshot_start)
 
 
 func _record_received_network_traffic() -> void:
@@ -369,6 +396,7 @@ func register_corpse(corpse: Node) -> void:
 func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0, appearance_hash: int = 0, source_name: String = "") -> void:
 	if not source_name.is_empty() and is_instance_valid(ragdolls_by_zombie.get(source_name)):
 		return
+	var perf_start := FramePerfProbe.begin()
 	var ragdoll := ZOMBIE_RAGDOLL_SCENE.instantiate()
 	# Antes de entrar na arvore: _ready monta as partes ja no tamanho do zumbi.
 	ragdoll.set("body_scale", ZombieMutator.body_scale_for(z_type))
@@ -380,6 +408,7 @@ func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3,
 	if not source_name.is_empty():
 		ragdoll.set_meta("source_zombie", source_name)
 		ragdolls_by_zombie[source_name] = ragdoll
+	FramePerfProbe.end("ragdoll_spawn", perf_start)
 
 
 ## Corpos visiveis (ragdolls) so somem longe de todos os jogadores; antes o mais
@@ -949,6 +978,7 @@ func _apply_zombie_snapshot(
 		received_zombie_snapshot_chunks.clear()
 		received_zombie_names.clear()
 	received_zombie_snapshot_chunks[packet_index] = true
+	var apply_start := FramePerfProbe.begin()
 	var zombie_states: Array[Dictionary] = ZOMBIE_SNAPSHOT_CODEC_SCRIPT.decode(payload)
 	if lag_probe.is_enabled():
 		lag_probe.record_zombie_packet(snapshot_sequence, packet_index, packet_count, zombie_states.size(), Time.get_ticks_usec())
@@ -957,6 +987,7 @@ func _apply_zombie_snapshot(
 	_apply_zombie_states(zombie_states)
 	if received_zombie_snapshot_chunks.size() == packet_count:
 		_remove_missing_network_zombies()
+	FramePerfProbe.end("snapshot_apply", apply_start)
 
 
 func _apply_zombie_states(states: Array) -> void:

@@ -186,9 +186,19 @@ func _ready() -> void:
 	_collect_fade_meshes()
 
 
+## Mede o tick inteiro na sonda de frame: "zombie_proxy" no client (interpola
+## snapshot) e "zombie_ai" no server/offline (IA + move_and_slide).
 func _physics_process(delta: float) -> void:
+	var perf_start := FramePerfProbe.begin()
+	_run_physics_tick(delta)
+	FramePerfProbe.end("zombie_ai" if simulation_enabled else "zombie_proxy", perf_start)
+
+
+func _run_physics_tick(delta: float) -> void:
 	if not simulation_enabled:
+		var fade_start := FramePerfProbe.begin()
 		_update_visual_fade(delta)
+		FramePerfProbe.end("sub:zombie_visual_fade", fade_start)
 		if lod_level != LodLevel.NEAR:
 			lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
 			if lod_tick_skip_counter != 0:
@@ -207,9 +217,11 @@ func _physics_process(delta: float) -> void:
 			if target_pos.y > global_position.y + 0.6:
 				global_position = target_pos
 			else:
+				var move_start := FramePerfProbe.begin()
 				var col := move_and_collide(motion)
 				if col != null:
 					move_and_collide(col.get_remainder().slide(col.get_normal()))
+				FramePerfProbe.end("sub:zombie_proxy_move_and_collide", move_start)
 		rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
 		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
 		hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
@@ -219,7 +231,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_dead:
 		return
+	var fade_start := FramePerfProbe.begin()
 	_update_visual_fade(delta)
+	FramePerfProbe.end("sub:zombie_visual_fade", fade_start)
 	var has_active_target := is_instance_valid(alert_target) or is_investigating_sound
 	if lod_level != LodLevel.NEAR and not has_active_target:
 		lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
@@ -338,7 +352,9 @@ func _physics_process(delta: float) -> void:
 	velocity.x += flock_push.x
 	velocity.z += flock_push.z
 
+	var move_start := FramePerfProbe.begin()
 	move_and_slide()
+	FramePerfProbe.end("sub:zombie_move_and_slide", move_start)
 	_animate_pose(delta, is_walking and (is_on_floor() or leaping))
 	_update_groan_audio(delta)
 
@@ -756,7 +772,20 @@ func hear_gunshot(origin: Vector3, max_radius: float = 65.0) -> void:
 	is_investigating_sound = true
 
 
+## Mortes em cadeia do bloater (burst -> _die -> burst) medem so a de fora,
+## para a sonda nao somar a mesma cadeia varias vezes.
+static var _death_chain_depth := 0
+
+
 func _die(killer: Node = null) -> void:
+	var perf_start := FramePerfProbe.begin() if _death_chain_depth == 0 else 0
+	_death_chain_depth += 1
+	_run_death(killer)
+	_death_chain_depth -= 1
+	FramePerfProbe.end("sub:zombie_death_chain", perf_start)
+
+
+func _run_death(killer: Node) -> void:
 	is_dead = true
 	death_velocity = velocity
 	velocity = Vector3.ZERO
