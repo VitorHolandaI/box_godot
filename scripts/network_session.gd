@@ -13,7 +13,6 @@ signal peer_scene_loaded(peer_id: int)
 const DEFAULT_PORT := 27015
 const MIN_PORT := 1024
 const MAX_PORT := 65535
-const MAX_PLAYERS := 4
 const SERVER_ID := 1
 const PING_INTERVAL := 1.0
 const DEFAULT_WORLD_SEED := 240912
@@ -27,6 +26,9 @@ var mode := Mode.OFFLINE
 var peer_slots: Dictionary = {}
 var requested_slots := 1
 var server_port := DEFAULT_PORT
+## Total de jogadores aceitos pelo servidor (`--max-players=N`, padrao 32);
+## a tela dividida continua limitada a PlayerCapacity.MAX_LOCAL_SLOTS.
+var max_players := PlayerCapacity.DEFAULT_MAX_PLAYERS
 var bot_mode := false
 var autoplay_bot := false
 var bot_name := ""
@@ -48,6 +50,7 @@ var local_host := LocalHostLauncher.new()
 
 func _ready() -> void:
 	server_port = _get_command_line_port()
+	max_players = PlayerCapacity.max_players_from_arguments(OS.get_cmdline_user_args())
 	local_host.idle_exit_seconds = LocalHostLauncher.idle_exit_seconds_from_arguments(OS.get_cmdline_user_args())
 	_reset_world_config_from_arguments()
 	server_name = _get_command_line_server_name()
@@ -141,7 +144,7 @@ func _exit_tree() -> void:
 func start_server(port: int = DEFAULT_PORT) -> Error:
 	leave_session()
 	var peer := ENetMultiplayerPeer.new()
-	var error := peer.create_server(port, MAX_PLAYERS)
+	var error := peer.create_server(port, max_players)
 	if error != OK:
 		return error
 	mode = Mode.SERVER
@@ -156,7 +159,7 @@ func start_server(port: int = DEFAULT_PORT) -> Error:
 
 
 func join_server(address: String, local_slots: int, port: int = DEFAULT_PORT) -> Error:
-	if address.is_empty() or local_slots < 1 or local_slots > MAX_PLAYERS:
+	if address.is_empty() or local_slots < 1 or local_slots > PlayerCapacity.MAX_LOCAL_SLOTS:
 		return ERR_INVALID_PARAMETER
 	leave_session()
 	var peer := ENetMultiplayerPeer.new()
@@ -241,13 +244,11 @@ func _request_slots(slot_count: int) -> void:
 	if not is_server():
 		return
 	var sender_id := multiplayer.get_remote_sender_id()
-	var requested_count := clampi(slot_count, 0, MAX_PLAYERS)
-	if requested_count != slot_count or requested_count == 0:
-		_join_result.rpc_id(sender_id, false, "Quantidade de jogadores invalida.", procedural_city_enabled, world_seed, survival_mode)
+	var rejection := PlayerCapacity.join_rejection(_total_player_count(), slot_count, max_players)
+	if not rejection.is_empty():
+		_join_result.rpc_id(sender_id, false, rejection, procedural_city_enabled, world_seed, survival_mode)
 		return
-	if _total_player_count() + requested_count > MAX_PLAYERS:
-		_join_result.rpc_id(sender_id, false, "O servidor ja atingiu o limite de 4 jogadores.", procedural_city_enabled, world_seed, survival_mode)
-		return
+	var requested_count := slot_count
 
 	peer_slots[sender_id] = requested_count
 	roster_changed.emit()
@@ -363,7 +364,7 @@ func _respond_to_discovery(_request: Dictionary) -> void:
 		"port": server_port,
 		"mission": _server_mission_name(),
 		"active_players": _total_player_count(),
-		"max_players": MAX_PLAYERS,
+		"max_players": max_players,
 	}
 	var send_error := _discovery_socket.set_dest_address(_discovery_socket.get_packet_ip(), _discovery_socket.get_packet_port())
 	if send_error != OK:
@@ -386,8 +387,8 @@ func _register_discovered_server(payload: Dictionary, source_address: String) ->
 		"port": port,
 		"name": String(payload.get("name", source_address)),
 		"mission": String(payload.get("mission", "Desconhecida")),
-		"active_players": clampi(int(payload.get("active_players", 0)), 0, MAX_PLAYERS),
-		"max_players": MAX_PLAYERS,
+		"active_players": clampi(int(payload.get("active_players", 0)), 0, PlayerCapacity.HARD_MAX_PLAYERS),
+		"max_players": clampi(int(payload.get("max_players", PlayerCapacity.DEFAULT_MAX_PLAYERS)), 1, PlayerCapacity.HARD_MAX_PLAYERS),
 		"ping_ms": ping_ms,
 		"online": true,
 		"saved": _is_saved_server(source_address, port),
@@ -414,7 +415,7 @@ func _discovered_servers_add_offline(saved_server: Dictionary) -> void:
 		"name": display_name,
 		"mission": "Sem resposta",
 		"active_players": 0,
-		"max_players": MAX_PLAYERS,
+		"max_players": PlayerCapacity.DEFAULT_MAX_PLAYERS,
 		"ping_ms": -1,
 		"online": false,
 		"saved": true,
