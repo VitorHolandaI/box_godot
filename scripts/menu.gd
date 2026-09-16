@@ -57,17 +57,26 @@ var selected_mode := "local"
 var server_refresh_elapsed := 0.0
 var editing_server_address := ""
 var editing_server_port := -1
+## Hospedar: o servidor filho leva alguns segundos para abrir a porta, entao a
+## entrada em 127.0.0.1 tenta de novo enquanto ele estiver vivo.
+const HOST_JOIN_MAX_ATTEMPTS := 20
+const HOST_JOIN_RETRY_SECONDS := 1.0
+var host_join_attempts := 0
+var host_address_hint := ""
 
 
 func _ready() -> void:
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot or NetworkSession.is_server():
 		return
+	# Voltou ao menu (saiu da partida ou caiu): o servidor hospedado encerra.
+	NetworkSession.local_host.stop()
 	NetworkSession.join_accepted.connect(_on_join_accepted)
 	NetworkSession.join_failed.connect(_on_join_failed)
 	NetworkSession.server_list_changed.connect(_render_server_list)
 	network_mode.add_item("Jogar local")
 	network_mode.add_item("Multiplayer")
+	network_mode.add_item("Hospedar partida")
 	network_mode.item_selected.connect(_on_network_mode_selected)
 	refresh_servers_button.pressed.connect(_refresh_servers)
 	add_server_button.pressed.connect(_save_server)
@@ -278,6 +287,9 @@ func _start_game() -> void:
 		NetworkSession.leave_session()
 		get_tree().change_scene_to_file("res://scenes/main.tscn")
 		return
+	if selected_mode == "host":
+		_start_hosted_game()
+		return
 
 	start_button.disabled = true
 	message.text = "Conectando ao servidor..."
@@ -301,13 +313,45 @@ func _start_game() -> void:
 		message.text = "Endereco invalido ou falha ao iniciar conexao: %s" % error_string(error)
 
 
+## Sobe o servidor filho e entra nele; amigos usam o IP mostrado no menu.
+func _start_hosted_game() -> void:
+	start_button.disabled = true
+	var error := NetworkSession.local_host.launch(NetworkSession.DEFAULT_PORT)
+	if error != OK:
+		start_button.disabled = false
+		message.text = "Nao foi possivel iniciar o servidor local: %s" % error_string(error)
+		return
+	host_join_attempts = 0
+	_join_hosted_server()
+
+
+func _join_hosted_server() -> void:
+	host_join_attempts += 1
+	message.text = "Subindo servidor local (tentativa %d de %d)..." % [host_join_attempts, HOST_JOIN_MAX_ATTEMPTS]
+	var error := NetworkSession.join_server(LocalHostLauncher.LOOPBACK_ADDRESS, player_configs.size(), NetworkSession.DEFAULT_PORT)
+	if error != OK:
+		_on_join_failed("Falha ao conectar no servidor local: %s" % error_string(error))
+
+
 func _update_controller_status() -> void:
 	var connected := Input.get_connected_joypads().size()
 	controller_status.text = "Controles conectados: %d\nCada jogador podera escolher seu dispositivo e comandos." % connected
+	if selected_mode == "host":
+		controller_status.text += "\n%s" % _host_address_hint()
+
+
+## Calculada uma vez: _update_controller_status roda a cada frame no menu.
+func _host_address_hint() -> String:
+	if not host_address_hint.is_empty():
+		return host_address_hint
+	var lan := LocalHostLauncher.filter_lan_ipv4(IP.get_local_addresses())
+	var lan_text := ", ".join(lan) if not lan.is_empty() else "nenhum IP de rede encontrado"
+	host_address_hint = "Amigos entram em Multiplayer pelo seu IP: %s (mesma rede) ou IP publico com UDP %d e %d liberadas no roteador." % [lan_text, NetworkSession.DEFAULT_PORT, NetworkSession.DEFAULT_PORT + 1]
+	return host_address_hint
 
 
 func _on_network_mode_selected(index: int) -> void:
-	selected_mode = "local" if index == 0 else "server"
+	selected_mode = ["local", "server", "host"][clampi(index, 0, 2)]
 	_update_network_mode_ui()
 	if selected_mode == "server":
 		_refresh_servers()
@@ -473,6 +517,11 @@ func _on_join_accepted() -> void:
 
 
 func _on_join_failed(error_message: String) -> void:
+	if selected_mode == "host" and host_join_attempts < HOST_JOIN_MAX_ATTEMPTS and NetworkSession.local_host.is_running():
+		get_tree().create_timer(HOST_JOIN_RETRY_SECONDS).timeout.connect(_join_hosted_server)
+		return
+	if selected_mode == "host":
+		NetworkSession.local_host.stop()
 	start_button.disabled = false
 	message.text = error_message
 
