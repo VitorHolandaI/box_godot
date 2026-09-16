@@ -102,6 +102,15 @@ func _ready() -> void:
 				push_error("Falha ao conectar bot player: %s" % error_string(error))
 				get_tree().quit(2)
 			return
+		if argument.begins_with("--join="):
+			var target_ip := argument.trim_prefix("--join=")
+			var config: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
+			GameConfig.configure_local_players(config)
+			var error := join_server(target_ip, 1, server_port)
+			if error != OK:
+				push_error("Falha ao conectar: %s" % error_string(error))
+				get_tree().quit(2)
+			return
 
 
 func _process(delta: float) -> void:
