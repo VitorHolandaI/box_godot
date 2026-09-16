@@ -38,6 +38,7 @@ const GROUND_WEAPON_PICKUP_TESTS_SCRIPT := preload("res://scripts/test_ground_we
 const FRAME_PERF_PROBE_TESTS_SCRIPT := preload("res://scripts/test_frame_perf_probe.gd")
 const SERVER_TICK_POLICY_TESTS_SCRIPT := preload("res://scripts/test_server_tick_policy.gd")
 const LOCAL_HOST_LAUNCHER_TESTS_SCRIPT := preload("res://scripts/test_local_host_launcher.gd")
+const ZOMBIE_TICK_BUDGET_TESTS_SCRIPT := preload("res://scripts/test_zombie_tick_budget.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -64,6 +65,7 @@ const FOCUSED_TEST_GROUPS := {
 	"frame_perf_probe": FRAME_PERF_PROBE_TESTS_SCRIPT,
 	"server_tick_policy": SERVER_TICK_POLICY_TESTS_SCRIPT,
 	"local_host_launcher": LOCAL_HOST_LAUNCHER_TESTS_SCRIPT,
+	"zombie_tick_budget": ZOMBIE_TICK_BUDGET_TESTS_SCRIPT,
 }
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
@@ -107,6 +109,7 @@ func _ready() -> void:
 	FRAME_PERF_PROBE_TESTS_SCRIPT.new().run(self)
 	SERVER_TICK_POLICY_TESTS_SCRIPT.new().run(self)
 	LOCAL_HOST_LAUNCHER_TESTS_SCRIPT.new().run(self)
+	await ZOMBIE_TICK_BUDGET_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)

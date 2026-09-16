@@ -103,6 +103,9 @@ var is_cluster_leader := true
 var horde_id := -1
 var flock_separation_vector := Vector3.ZERO
 var lod_tick_skip_counter := 0
+## Distancia ao jogador vivo mais proximo ao quadrado, gravada pelo flock a
+## cada passada (0 = desconhecida, simula todo tick).
+var player_distance_sq := 0.0
 var alert_target: CharacterBody3D = null
 var alert_forget_timer := 0.0
 var target_switch_cooldown := 0.0
@@ -149,6 +152,8 @@ var visual_opacity := 1.0
 var indoor_router = INDOOR_ROUTER_SCRIPT.new()
 var progress_watch = PROGRESS_WATCH_SCRIPT.new()
 var wall_detour = WALL_DETOUR_SCRIPT.new()
+## Longe dos jogadores a perseguicao roda a cada 2/4 ticks (fase pelo nome).
+var tick_budget := ZombieTickBudget.new()
 var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
 var charge_state = VARIANT_ABILITIES_SCRIPT.ChargeState.new()
 var spit_state = VARIANT_ABILITIES_SCRIPT.SpitState.new()
@@ -170,6 +175,7 @@ func _ready() -> void:
 	_configure_variant()
 	health = max_health
 	_ground_collision_mask = collision_mask
+	tick_budget = ZombieTickBudget.new(absi(name.hash()))
 	safe_margin = 0.08
 	# 3 em vez de 6: na horda amontoada cada deslize extra e outra consulta de
 	# colisao; move_and_slide era ~60% da IA medida no servidor (sonda de frame).
@@ -236,6 +242,10 @@ func _run_physics_tick(delta: float) -> void:
 	var fade_start := FramePerfProbe.begin()
 	_update_visual_fade(delta)
 	FramePerfProbe.end("sub:zombie_visual_fade", fade_start)
+	# Jogador desconectado deixava o no liberado em alert_target dos seguidores:
+	# um SCRIPT ERROR por zumbi por tick (4158 no teste de carga com 600).
+	if not is_instance_valid(alert_target):
+		alert_target = null
 	var has_active_target := is_instance_valid(alert_target) or is_investigating_sound
 	if lod_level != LodLevel.NEAR and not has_active_target:
 		lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
@@ -243,6 +253,13 @@ func _run_physics_tick(delta: float) -> void:
 			global_position.x += velocity.x * delta
 			global_position.z += velocity.z * delta
 			return
+	var dash: RefCounted = _dash_for_type()
+	var leaping: bool = dash != null and dash.is_leaping()
+	if has_active_target:
+		var simulated_delta: float = tick_budget.consume(delta, int(lod_level), player_distance_sq, leaping)
+		if simulated_delta <= 0.0:
+			return
+		delta = simulated_delta
 
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	target_switch_cooldown = maxf(target_switch_cooldown - delta, 0.0)
@@ -251,8 +268,6 @@ func _run_physics_tick(delta: float) -> void:
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 
-	var dash: RefCounted = _dash_for_type()
-	var leaping: bool = dash != null and dash.is_leaping()
 	# Zumbi em voo nao colide com a horda: voando por cima dos outros ele
 	# pousava/atolava em cabecas de zumbi e ficava perched no ar. O colisor
 	# de zumbis volta no tick seguinte ao aterrissar.
@@ -266,6 +281,7 @@ func _run_physics_tick(delta: float) -> void:
 	_update_boss(delta)
 	var target := alert_target
 	var is_walking := false
+	var in_melee_range := false
 	if _bloater_detonates_on(target):
 		return
 	var melee_target := _find_nearest_melee_player() if attack_cooldown <= 0.0 else null
@@ -273,6 +289,7 @@ func _run_physics_tick(delta: float) -> void:
 		velocity.x = move_toward(velocity.x, hit_direction.x * 3.5, 18.0 * delta)
 		velocity.z = move_toward(velocity.z, hit_direction.z * 3.5, 18.0 * delta)
 	elif melee_target != null:
+		in_melee_range = true
 		_perform_melee_attack(melee_target)
 	elif is_instance_valid(target):
 		var target_offset := target.global_position - global_position
@@ -308,6 +325,7 @@ func _run_physics_tick(delta: float) -> void:
 			rotation.y = lerp_angle(rotation.y, atan2(-direction.x, -direction.z), minf(delta * 8.0, 1.0))
 			is_walking = true
 		else:
+			in_melee_range = true
 			velocity.x = move_toward(velocity.x, 0.0, speed)
 			velocity.z = move_toward(velocity.z, 0.0, speed)
 			progress_watch.reset()
@@ -347,18 +365,35 @@ func _run_physics_tick(delta: float) -> void:
 			rotation.y = lerp_angle(rotation.y, atan2(-wander_direction.x, -wander_direction.z), minf(delta * 4.0, 1.0))
 			is_walking = true
 
-	var flock_push := Vector3.ZERO
-	if not leaping:
+	var planted := ZombieTickBudget.holds_ground(in_melee_range, is_on_floor(), leaping, hit_reaction_time > 0.0)
+	if not leaping and not planted:
 		# Boides empurram so quem anda no chao; no voo o arco e sagrado.
-		flock_push = _flock_push(Vector3(velocity.x, 0.0, velocity.z))
-	velocity.x += flock_push.x
-	velocity.z += flock_push.z
+		var flock_push := _flock_push(Vector3(velocity.x, 0.0, velocity.z))
+		velocity.x += flock_push.x
+		velocity.z += flock_push.z
+	_slide_or_hold(delta, planted)
+	_animate_pose(delta, is_walking and (is_on_floor() or leaping))
+	_update_groan_audio(delta)
 
+
+## Parado batendo: zera o horizontal e nao desliza. Senao move_and_slide com
+## a velocidade escalada pelos ticks pulados do orcamento (move_and_slide usa o
+## delta de fisica do tick, nao o tempo acumulado).
+## Uso: _slide_or_hold(simulated_delta, planted)
+func _slide_or_hold(simulated_delta: float, planted: bool) -> void:
+	if planted:
+		velocity.x = 0.0
+		velocity.z = 0.0
+		return
+	var slide_scale := simulated_delta / maxf(get_physics_process_delta_time(), 0.0001)
+	var scaled := slide_scale > 1.001
+	if scaled:
+		velocity *= slide_scale
 	var move_start := FramePerfProbe.begin()
 	move_and_slide()
 	FramePerfProbe.end("sub:zombie_move_and_slide", move_start)
-	_animate_pose(delta, is_walking and (is_on_floor() or leaping))
-	_update_groan_audio(delta)
+	if scaled:
+		velocity /= slide_scale
 
 
 ## Screamer: grita de tempos em tempos e a horda ouve o grito a 30m.
