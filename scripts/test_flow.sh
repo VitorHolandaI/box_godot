@@ -16,7 +16,7 @@ cleanup() {
 }
 trap cleanup EXIT
 
-godot --headless --path "$project_dir" -- --server "--server-port=$port" "--flow-audit=$duration" >"$server_log" 2>&1 &
+godot --headless --path "$project_dir" -- --server "--server-port=$port" "--flow-audit=$duration" --smoke-test-zombie >"$server_log" 2>&1 &
 server_pid=$!
 
 sleep 1
