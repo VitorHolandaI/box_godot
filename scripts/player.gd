@@ -111,6 +111,13 @@ var carbine_pressed := false
 var drop_pressed := false
 ## Tab (ou botao do controle) cicla faca -> pistola -> arma de crate.
 var cycle_weapon_pressed := false
+var grenade_pressed := false
+var throw_knife_pressed := false
+var air_strike_pressed := false
+var swat_pressed := false
+## Granadas, facas de arremesso e chamadas (PlayerThrowables usa).
+var equipment := PlayerEquipment.new()
+var equipment_cooldown := 0.0
 var weapon_slots := WeaponSlots.new()
 ## Ultima revisao do inventario aplicada pelo snapshot; -1 = nunca aplicado.
 var slots_revision := -1
@@ -191,6 +198,8 @@ func _physics_process(delta: float) -> void:
 			aim_input = Vector2.ZERO
 	_handle_interaction_input()
 	_handle_weapon_input()
+	equipment_cooldown = maxf(equipment_cooldown - delta, 0.0)
+	_handle_equipment_input()
 	_update_revive_by_others(delta)
 
 	if not is_on_floor():
@@ -236,6 +245,10 @@ func get_local_input_state() -> Dictionary:
 		"carbine": Input.is_action_pressed(input_action_prefix + "carbine"),
 		"drop": Input.is_action_pressed(input_action_prefix + "drop_weapon"),
 		"cycle": Input.is_action_pressed(input_action_prefix + "cycle_weapon"),
+		"grenade": Input.is_action_pressed(input_action_prefix + "grenade"),
+		"throw_knife": Input.is_action_pressed(input_action_prefix + "throw_knife"),
+		"air_strike": Input.is_action_pressed(input_action_prefix + "air_strike"),
+		"swat": Input.is_action_pressed(input_action_prefix + "swat"),
 		"aim": aim_input,
 	}
 
@@ -263,6 +276,10 @@ func apply_network_input(state: Dictionary) -> void:
 	carbine_pressed = _network_button_just_pressed("carbine", bool(state.get("carbine", false))) or carbine_pressed
 	drop_pressed = _network_button_just_pressed("drop", bool(state.get("drop", false))) or drop_pressed
 	cycle_weapon_pressed = _network_button_just_pressed("cycle", bool(state.get("cycle", false))) or cycle_weapon_pressed
+	grenade_pressed = _network_button_just_pressed("grenade", bool(state.get("grenade", false))) or grenade_pressed
+	throw_knife_pressed = _network_button_just_pressed("throw_knife", bool(state.get("throw_knife", false))) or throw_knife_pressed
+	air_strike_pressed = _network_button_just_pressed("air_strike", bool(state.get("air_strike", false))) or air_strike_pressed
+	swat_pressed = _network_button_just_pressed("swat", bool(state.get("swat", false))) or swat_pressed
 	remote_input_age = 0.0
 
 
@@ -289,6 +306,7 @@ func get_network_state() -> Dictionary:
 		"weapon_slots": weapon_slots.serialize(),
 		"downed": is_downed,
 		"revive_progress": revive_progress,
+		"equipment": equipment.to_counts(),
 	}
 
 
@@ -336,6 +354,9 @@ func apply_network_state(state: Dictionary) -> void:
 		else:
 			_clear_downed()
 	revive_progress = clampf(float(state.get("revive_progress", revive_progress)), 0.0, 1.0)
+	var equipment_counts: Variant = state.get("equipment")
+	if equipment_counts is PackedByteArray:
+		equipment.apply_counts(equipment_counts)
 	var next_eliminated := bool(state.get("eliminated", is_eliminated))
 	if next_eliminated != is_eliminated:
 		is_eliminated = next_eliminated
@@ -997,7 +1018,13 @@ func get_weapon_slots_text() -> String:
 	var crate_label := "-"
 	for kind in weapon_slots.kinds:
 		crate_label = String(WeaponStats.stats_for(kind)["label"])
-	return "Armas: Faca | Pistola | %s" % crate_label
+	return "Armas: Faca | Pistola | %s\n%s" % [crate_label, equipment.summary_text()]
+
+
+## Granada, faca de arremesso e chamadas (autoridade).
+## Uso: chamado no _physics_process depois das armas.
+func _handle_equipment_input() -> void:
+	PlayerThrowables.handle_input(self)
 
 
 func get_stamina_text() -> String:
@@ -1075,6 +1102,10 @@ func _poll_input() -> void:
 	carbine_pressed = Input.is_action_just_pressed(input_action_prefix + "carbine")
 	drop_pressed = Input.is_action_just_pressed(input_action_prefix + "drop_weapon")
 	cycle_weapon_pressed = Input.is_action_just_pressed(input_action_prefix + "cycle_weapon")
+	grenade_pressed = Input.is_action_just_pressed(input_action_prefix + "grenade")
+	throw_knife_pressed = Input.is_action_just_pressed(input_action_prefix + "throw_knife")
+	air_strike_pressed = Input.is_action_just_pressed(input_action_prefix + "air_strike")
+	swat_pressed = Input.is_action_just_pressed(input_action_prefix + "swat")
 
 
 ## Le o pulso sonar apenas para o avatar controlado localmente. No cliente de
@@ -1108,6 +1139,10 @@ func _clear_transient_input() -> void:
 	carbine_pressed = false
 	drop_pressed = false
 	cycle_weapon_pressed = false
+	grenade_pressed = false
+	throw_knife_pressed = false
+	air_strike_pressed = false
+	swat_pressed = false
 
 
 ## Define o indice de cor do uniforme do jogador.
