@@ -35,7 +35,6 @@ const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
 ## Onda nova chega com centenas de zumbis: o cliente spawna no maximo N por
 ## frame (fila) para nao dar hitch de instantiates sincronos.
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 2
-const MAX_ACTIVE_ZOMBIES := 60
 var _active_set_elapsed := 0.0
 ## Frame longo acima disto e um travamento sentido; loga 1 linha JSON por
 ## rolamento de 2 s para diagnosticar hitches do modo rede (server e client).
@@ -220,7 +219,12 @@ func _update_zombie_active_set(delta: float) -> void:
 	if players.is_empty():
 		return
 	var zombies := get_tree().get_nodes_in_group("zombies")
-	if zombies.size() <= MAX_ACTIVE_ZOMBIES:
+	var wave_target := 10
+	if survival_wave_controller != null:
+		wave_target = int(survival_wave_controller.schedule.target_for(survival_wave_controller.wave_index))
+	var active_cap := mini(wave_target * 40 / 100, 150)
+	active_cap = maxi(active_cap, 40)
+	if zombies.size() <= active_cap:
 		for z in zombies:
 			var zb := z as Node
 			if zb != null:
@@ -239,7 +243,7 @@ func _update_zombie_active_set(delta: float) -> void:
 	with_dist.sort_custom(func(a, b): return float(a["d"]) < float(b["d"]))
 	for i in with_dist.size():
 		var zb := with_dist[i]["z"] as Node
-		zb.set_physics_process(i < MAX_ACTIVE_ZOMBIES)
+		zb.set_physics_process(i < active_cap)
 
 
 ## Travamento sentido (frame >= 80 ms): 1 linha JSON no maximo a cada 2 s
