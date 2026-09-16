@@ -19,6 +19,7 @@ func run(test_root: Node) -> void:
 	_test_network_break_animates_only_after_first_snapshot(test_root)
 	_test_debris_rejects_invalid_size(test_root)
 	_test_replicator_sends_only_changed_doors(test_root)
+	_test_replicator_watches_late_doors(test_root)
 	_test_replicator_full_state_once_per_peer(test_root)
 	_test_client_applies_door_change_with_animation(test_root)
 
@@ -158,6 +159,31 @@ func _test_replicator_sends_only_changed_doors(test_root: Node) -> void:
 		_fail(test_root, "Replicador deveria enviar so mudancas; parado=%s aberta=%s repetido=%s quebrada=%s." % [idle, opened, drained, broken])
 		return
 	print("PASS: Portas vao para a rede apenas quando abrem, fecham ou quebram.")
+
+
+func _test_replicator_watches_late_doors(test_root: Node) -> void:
+	print("Testando re-watch de portas montadas depois do watch...")
+	var replicator = DOOR_REPLICATOR_SCRIPT.new()
+	# A cidade monta em etapas: watch() pode rodar antes de qualquer porta.
+	replicator.watch(test_root.get_tree())
+	var door := _add_door(test_root, Vector3(-726.0, 0.0, -700.0))
+	door.name = "DoorLateRewatch"
+	door.interact()
+	if not replicator.take_changes().is_empty():
+		_fail(test_root, "Porta montada depois do watch nao deveria emitir sem novo watch; o bug 'portas desativadas' seria silenciado.")
+		door.queue_free()
+		return
+	# Re-watch apos a montagem (o que main.gd faz em city_ready).
+	replicator.watch(test_root.get_tree())
+	# A primeira interacao (sem listener) deixou is_open=true; agora captura o fechamento.
+	door.interact()
+	var changes: Dictionary = replicator.take_changes()
+	var path := str(test_root.get_tree().current_scene.get_path_to(door))
+	door.queue_free()
+	if changes.get(path, []) != [false, false]:
+		_fail(test_root, "Re-watch deveria assinar a porta tardia e capturar a mudanca; veio %s." % [changes])
+		return
+	print("PASS: Re-watch apos a montagem assina portas tardias e replica as mudancas.")
 
 
 func _test_replicator_full_state_once_per_peer(test_root: Node) -> void:
