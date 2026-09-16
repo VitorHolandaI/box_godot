@@ -37,6 +37,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
 - `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador.
+- `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada por raio entre aliados.
 - `test_weapon_arsenal.gd`: regressoes do arsenal: cada arma de crate ligada em municao, drop, crate e modelo, railgun atravessando a fila e tracers futuristas.
