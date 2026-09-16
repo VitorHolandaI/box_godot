@@ -41,6 +41,7 @@ const LOCAL_HOST_LAUNCHER_TESTS_SCRIPT := preload("res://scripts/test_local_host
 const ZOMBIE_TICK_BUDGET_TESTS_SCRIPT := preload("res://scripts/test_zombie_tick_budget.gd")
 const ZOMBIE_CROWD_SLOTS_TESTS_SCRIPT := preload("res://scripts/test_zombie_crowd_slots.gd")
 const PLAYER_CAPACITY_TESTS_SCRIPT := preload("res://scripts/test_player_capacity.gd")
+const PLAYER_SNAPSHOT_CODEC_TESTS_SCRIPT := preload("res://scripts/test_player_snapshot_codec.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -71,6 +72,7 @@ const FOCUSED_TEST_GROUPS := {
 	"corpse_cleanup": CORPSE_CLEANUP_TESTS_SCRIPT,
 	"zombie_crowd_slots": ZOMBIE_CROWD_SLOTS_TESTS_SCRIPT,
 	"player_capacity": PLAYER_CAPACITY_TESTS_SCRIPT,
+	"player_snapshot_codec": PLAYER_SNAPSHOT_CODEC_TESTS_SCRIPT,
 }
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
@@ -117,6 +119,7 @@ func _ready() -> void:
 	await ZOMBIE_TICK_BUDGET_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_CROWD_SLOTS_TESTS_SCRIPT.new().run(self)
 	PLAYER_CAPACITY_TESTS_SCRIPT.new().run(self)
+	PLAYER_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)
