@@ -1,7 +1,7 @@
 class_name SurvivalWaveSchedule
 extends RefCounted
 
-const TARGETS: Array[int] = [10, 20, 30, 40, 60, 80, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 420, 440, 460, 480, 500, 520, 540, 560, 580, 600]
+const TARGETS: Array[int] = [200, 20, 30, 40, 60, 80, 120, 140, 160, 180, 200, 220, 240, 260, 280, 300, 320, 340, 360, 380, 400, 420, 440, 460, 480, 500, 520, 540, 560, 580, 600]
 ## Indices de onda que recebem airdrop de armas (Hora = indice + 1).
 const AIRDROP_WAVES: Array[int] = [2, 6, 10, 14, 18, 22, 26, 30]
 
