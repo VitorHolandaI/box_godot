@@ -42,7 +42,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
 - `server_tick_policy.gd`: servidor dedicado roda fisica a 30 Hz com no maximo 2 passos por frame (corta a bola de neve de ticks medida na VPS) e pula o fade visual dos zumbis.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
-- `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador.
+- `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador; municao automatica ao passar pela mesma arma.
 - `test_player_capacity.gd`: regressoes do `--max-players`, da recusa de entrada e do spawn sem empilhar alem de 4 jogadores.
 - `test_player_snapshot_codec.gd`: regressoes do snapshot binario de jogadores (ida e volta, tamanho, 24 jogadores em poucos pacotes, truncado, envio dos slots).
 - `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
@@ -60,7 +60,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `weapon_stats.gd`: tabela unica das 16 armas de crate (escopetas, AK-47, M4, AUG, Beretta, sniper, bazuca, laser, plasma, railgun...) com cor, modelo, tracer, perfuracao e explosao.
 - `weapon_slots.gd`: inventario do slot de arma de crate (pente, reserva, durabilidade) com revisao para o snapshot.
 - `weapon_break_debris.gd`: pedacos voxel da arma quebrada, visuais locais.
-- `ground_weapon_pickup.gd`: arma no chao com o modelo real ampliado, queda com quiques assentando no piso, nome grande para quem chega perto, pisca antes de sumir; coleta com E.
+- `ground_weapon_pickup.gd`: arma no chao com o modelo real ampliado, queda com quiques assentando no piso, nome grande para quem chega perto, pisca antes de sumir; coleta com E; passar a 1,2 m com a mesma arma pega so a municao que cabe (o resto fica no chao).
 - `ground_weapon_sync.gd`: reconciliacao por nome das armas no chao entre servidor e cliente.
 - `air_supply_pickup.gd`: crate de airdrop com varias armas, coleta por interacao e expiracao em 10 minutos (desce de paraquedas).
 - `ground_supply_pickup.gd`: item de vida/municao espalhado pelas ruas, com cor e etiqueta por classe; coleta ao tocar (municao de arma que o jogador nao tem vira bala de pistola), expira em 3 minutos.
