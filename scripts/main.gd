@@ -83,6 +83,9 @@ var pending_zombie_names: Dictionary = {}
 var last_sent_wave_progress: Array[int] = []
 var zombie_cache: Dictionary = {}
 var smoke_test_mode := false
+## watch() do replicador de portas precisa re-agir quando a cidade em etapas
+## termina de montar; false evita re-watch repetido a cada frame.
+var _city_doors_watched := false
 var player_vision_elapsed := 0.0
 var corpse_cleanup_elapsed := 0.0
 ## Cadencia do sync dedicado de suprimentos/armas no chao (2 Hz).
@@ -224,6 +227,12 @@ func _process(delta: float) -> void:
 	if not _procedural_city_ready():
 		# Cidade ainda montando: nada de wave/zumbi sobre predio inexistente.
 		return
+	if not _city_doors_watched:
+		# watch() no _ready corria com a cidade pela metade: as portas montam
+		# DEPOIS e ficavam sem listener, e nenhuma mudanca replicava. Re-assina
+		# os sinais com o mundo completo (watch e idempotente).
+		_city_doors_watched = true
+		door_state_replicator.watch(get_tree())
 	if NetworkSession.survival_mode:
 		_check_survival_game_over()
 		if survival_wave_controller.game_over:
