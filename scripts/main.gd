@@ -412,6 +412,23 @@ func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3,
 		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count, spread_deg, weapon_kind)
 
 
+## Zumbi pegou fogo (lanca-chamas): chamas locais e aviso aos clientes.
+## Uso: chamado por zombie.ignite_spread na autoridade.
+func show_zombie_burning(zombie: Node3D, seconds: float) -> void:
+	WeaponConeVisual.attach_burning(zombie, seconds)
+	if not NetworkSession.is_server():
+		return
+	for peer_id in NetworkSession.loaded_peers:
+		_show_zombie_burning.rpc_id(int(peer_id), String(zombie.name), seconds)
+
+
+@rpc("authority", "call_remote", "unreliable")
+func _show_zombie_burning(zombie_name: String, seconds: float) -> void:
+	if not NetworkSession.is_client():
+		return
+	WeaponConeVisual.attach_burning(zombies.get_node_or_null(zombie_name) as Node3D, seconds)
+
+
 ## any_peer: o visual de bala e cosmico (tracer, dano 0) e o handler roda
 ## apenas no cliente; modo "authority" spamava erro quando o rpc chegava
 ## de um peer que nao e o servidor. Uso: enviado por replicate_bullet_visual.
@@ -422,6 +439,9 @@ func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pe
 	AudioFeedback.play_gunshot(spawn_position, weapon_kind)
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 		bot_ai.notify_bullet()
+	if WeaponStats.stats_for(weapon_kind).has("cone_range"):
+		WeaponConeVisual.spawn(self, spawn_position, bullet_direction, weapon_kind)
+		return
 	# Pellets recebem a MESMA matematica de leque do servidor: tracers
 	# divergentes em arco, nao tracos paralelos sobrepostos (parecia 1 bala).
 	var pellet_total := maxi(pellet_count, 1)
