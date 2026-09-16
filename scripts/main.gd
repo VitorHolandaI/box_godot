@@ -165,7 +165,29 @@ func _prespawn_load_test_zombies(count: int) -> void:
 func _notify_scene_loaded() -> void:
 	await get_tree().process_frame
 	await get_tree().create_timer(0.1).timeout
+	while not _procedural_city_ready():
+		# A cidade monta em etapas: o peer so entra quando o mundo completo
+		# existe (predios, portas e navmesh registrados).
+		await get_tree().create_timer(0.1).timeout
 	NetworkSession.notify_scene_loaded()
+
+
+## Nó da cidade procedural, ou null quando o modo legacy nao tem.
+## Uso: var city := _city_node()
+func _city_node() -> Node3D:
+	return get_node_or_null("GeneratedCity") as Node3D
+
+
+## Gameplay (waves, spawns de zumbi, sync) espera a montagem em etapas
+## terminar; modo legacy sem cidade procedural libera direto.
+## Uso: if not _procedural_city_ready(): return
+func _procedural_city_ready() -> bool:
+	var city := _city_node()
+	if city == null:
+		return true
+	if city.has_method("is_city_ready"):
+		return bool(city.call("is_city_ready"))
+	return true
 
 
 ## Travamento sentido (frame >= 80 ms): 1 linha JSON no maximo a cada 2 s
@@ -198,6 +220,9 @@ func _process(delta: float) -> void:
 	_update_player_vision(delta)
 	_cleanup_far_ragdolls(delta)
 	if NetworkSession.is_client() or smoke_test_mode:
+		return
+	if not _procedural_city_ready():
+		# Cidade ainda montando: nada de wave/zumbi sobre predio inexistente.
 		return
 	if NetworkSession.survival_mode:
 		_check_survival_game_over()
