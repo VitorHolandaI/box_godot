@@ -21,6 +21,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `door_debris_effect.gd`: animacao visual de tabuas e lascas voando quando uma porta e arrombada.
 - `door_network_state.gd`: coleta e aplica estados autoritativos das portas comuns por caminho deterministico (completo ou so as mudancas).
 - `door_state_replicator.gd`: no servidor, junta as mudancas de portas e marca quem ja recebeu o estado completo; vai por RPC confiavel, fora do snapshot.
+- `frame_perf_probe.gd`: sonda de custo por frame (ligada por padrao, `--perf-probe=off` desliga): `perf_report` a cada 5 s com FPS, p95, frames fora do orcamento de 60 Hz, ticks de fisica extras e custo por secao; `perf_hitch` em frame >= 33 ms com a quebra daquele frame.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local, navegacao e botao "Destravar personagem" durante a partida.
 - `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
@@ -83,6 +84,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_unstuck.gd`: regressoes de zumbis presos: medidor de progresso, desvio de muro, casa segura contornada, realocacao, spawn em chao aberto e minimapa do fim de onda.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
+- `test_frame_perf_probe.gd`: regressoes da sonda de custo por frame (argumento, linha de hitch e relatorio periodico).
 - `test_network_join_sync.gd`: regressoes de dessincronia online: variante do zumbi no cliente, pacote de jogador abaixo do MTU, regras e reinicio do GAME OVER, restantes da onda, cliques com pacotes agrupados e pontos de spawn livres.
 - `test_script_error_counter.gd`: logger que faz a suite falhar em qualquer erro de script.
 - `test_zombie_snapshot_codec.gd`: regressoes do snapshot binario de zumbis.
