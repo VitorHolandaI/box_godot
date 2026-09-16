@@ -8,12 +8,25 @@ const ROOF_CLEARANCE := 3.0
 
 
 static func assemble(city, parent: Node3D) -> void:
+	assemble_roads(city, parent)
+	for block in city.blocks:
+		for lot in block.lots:
+			assemble_lot(parent, lot)
+
+
+## Monta so as ruas; usado pela montagem em etapas da cidade.
+## Uso: ProceduralCityAssembler.assemble_roads(city, parent)
+static func assemble_roads(city, parent: Node3D) -> void:
 	var road_material := _material(Color(0.07, 0.08, 0.09))
 	for road in city.roads:
 		_add_road(parent, road, road_material)
-	for block in city.blocks:
-		for lot in block.lots:
-			_add_lot(parent, lot)
+
+
+## Monta um lote (predio) isolado; usado pela montagem em etapas para
+## espalhar os 36 predios por varios frames em vez de um hitch unico.
+## Uso: ProceduralCityAssembler.assemble_lot(parent, lot)
+static func assemble_lot(parent: Node3D, lot) -> void:
+	_add_lot(parent, lot)
 
 
 static func _add_road(parent: Node3D, road, material: Material) -> void:
