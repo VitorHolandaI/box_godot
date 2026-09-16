@@ -20,6 +20,8 @@ const PROFILES: Dictionary = {
 	"laser": [0.3, 0.0, 2400.0, 9.0, 0.0, 1.0],
 	"plasma": [0.14, 0.0, 700.0, 25.0, 0.1, 0.9],
 	"railgun": [0.7, 45.0, 1600.0, 6.0, 0.2, 1.7],
+	"crossbow": [0.22, 0.0, 190.0, 14.0, 0.12, 0.7],
+	"grenade": [0.5, 48.0, 320.0, 8.0, 0.55, 1.45],
 }
 
 
@@ -63,6 +65,10 @@ static func _sample(profile: String, params: Array, time: float, duration: float
 		"plasma":
 			# Plasma: pulso grave modulado, "bolha" eletrica curta.
 			return sin(time * crack_hz * TAU) * sin(time * 38.0 * TAU) * envelope * 0.9 + noise * 0.1 * envelope
+		"crossbow":
+			# Besta: corda vibrando (tom grave curto) e estalo seco da trava.
+			var twang := sin(time * crack_hz * TAU) * sin(time * 9.0 * TAU + 1.0) * envelope
+			return twang * 0.9 + noise * noise_mix * exp(-time * 80.0)
 		"railgun":
 			# Railgun: zumbido de carga subindo nos primeiros 40% e estouro grave.
 			var charge := clampf(time / (duration * 0.4), 0.0, 1.0)
