@@ -446,20 +446,21 @@ func _test_variant_mix(test_root: Node) -> void:
 	if endgame.get(ZombieMutator.Type.SCREAMER, 0) == 0:
 		_fail(test_root, "Hora 11+ deveria liberar o screamer.")
 		return
-	# Faixas acumuladas do mix final (ordem do tipo): walker 0-8, brute 47-56,
-	# screamer 57-63, bloater 64-69, leaper 70-76, armored 77-84, cuspidor 85-89,
-	# investida 90-94, saltador 95-99.
+	# Faixas acumuladas do mix final (ordem do tipo): walker 0-4, brute 39-44,
+	# screamer 45-51, bloater 52-57, leaper 58-64, armored 65-72, cuspidor 73-77,
+	# investida 78-82, saltador 83-87, puxador 88-91, curandeiro 92-95,
+	# espreitador 96-99 (os tres ultimos entraram no pedido de variedade).
 	if schedule.pick_variant(12, 0) != int(ZombieMutator.Type.WALKER):
-		_fail(test_root, "Rolagem 0 deveria cair no walker (maior faixa).")
+		_fail(test_root, "Rolagem 0 deveria cair no walker.")
 		return
-	if schedule.pick_variant(12, 47) != int(ZombieMutator.Type.BRUTE) or schedule.pick_variant(12, 56) != int(ZombieMutator.Type.BRUTE):
-		_fail(test_root, "Faixa do brute deveria cobrir rolagens 47-56.")
+	if schedule.pick_variant(12, 39) != int(ZombieMutator.Type.BRUTE) or schedule.pick_variant(12, 44) != int(ZombieMutator.Type.BRUTE):
+		_fail(test_root, "Faixa do brute deveria cobrir rolagens 39-44.")
 		return
-	if schedule.pick_variant(12, 46) == int(ZombieMutator.Type.BRUTE):
-		_fail(test_root, "Rolagem 46 deveria ficar fora da faixa do brute.")
+	if schedule.pick_variant(12, 38) == int(ZombieMutator.Type.BRUTE):
+		_fail(test_root, "Rolagem 38 deveria ficar fora da faixa do brute.")
 		return
-	if schedule.pick_variant(12, 57) != int(ZombieMutator.Type.SCREAMER) or schedule.pick_variant(12, 99) != int(ZombieMutator.Type.JUMPER):
-		_fail(test_root, "Rolagem 57 deveria cair no screamer e 99 no saltador.")
+	if schedule.pick_variant(12, 45) != int(ZombieMutator.Type.SCREAMER) or schedule.pick_variant(12, 87) != int(ZombieMutator.Type.JUMPER) or schedule.pick_variant(12, 99) != int(ZombieMutator.Type.STALKER):
+		_fail(test_root, "Rolagem 45 deveria cair no screamer, 87 no saltador e 99 no espreitador.")
 		return
 	print("PASS: Mix percentual de variantes validado.")
 

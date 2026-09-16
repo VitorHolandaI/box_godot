@@ -32,10 +32,16 @@ enum Type {
 	CHARGER = 16,
 	## Saltador: pernas longas, pula alto em arco e cai em cima do jogador.
 	JUMPER = 17,
+	## Puxador: de longe prende o jogador com a lingua e puxa ate a horda.
+	SMOKER = 18,
+	## Curandeiro: cura os zumbis perto e levanta cadaveres recentes.
+	HEALER = 19,
+	## Espreitador: quase invisivel ate chegar perto; da o bote e prende.
+	STALKER = 20,
 }
 
 ## Quantidade de tipos (snapshot leva ate 127, ZombieSnapshotCodec).
-const TYPE_COUNT := 18
+const TYPE_COUNT := 21
 ## Geometria base do zumbi (zombie.tscn): pes do modelo e capsula de colisao.
 const MODEL_FEET_Y := -0.82
 const BASE_CAPSULE_RADIUS := 0.56
@@ -52,6 +58,7 @@ const BODY_SCALES: Dictionary = {
 	Type.BLOATER: Vector3(1.1, 1.0, 1.1),
 	Type.LEAPER: Vector3(0.85, 1.0, 0.85),
 	Type.CHARGER: Vector3(1.2, 1.1, 1.2),
+	Type.SMOKER: Vector3(0.9, 1.15, 0.9),
 }
 
 const SKIN_PALETTE: Array[Color] = [
@@ -232,6 +239,18 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			zombie.set("speed", 2.5)
 			zombie.set("max_health", 90)
 			_setup_jumper(zombie)
+		Type.SMOKER:
+			zombie.set("speed", 1.9)
+			zombie.set("max_health", 120)
+			_setup_smoker(zombie)
+		Type.HEALER:
+			zombie.set("speed", 1.6)
+			zombie.set("max_health", 150)
+			_setup_healer(zombie)
+		Type.STALKER:
+			zombie.set("speed", 3.0)
+			zombie.set("max_health", 80)
+			_setup_stalker(zombie, model)
 		Type.TITAN:
 			zombie.set("speed", 1.7)
 			zombie.set("max_health", 10000)
@@ -331,6 +350,46 @@ static func _setup_charger(zombie: CharacterBody3D) -> void:
 	var torso := zombie.get_node_or_null("Model/Torso") as Node3D
 	if torso != null:
 		_add_box(torso, Vector3(0.36, 0.3, 0.46), Vector3(0.36, 0.3, 0.0), Color(0.45, 0.3, 0.28))
+
+
+## Puxador: pescoco longo, pele arroxeada e boca brilhando (de onde sai a lingua).
+static func _setup_smoker(zombie: CharacterBody3D) -> void:
+	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	if head != null:
+		head.position.y += 0.22
+		_add_box(head, Vector3(0.22, 0.08, 0.06), Vector3(0.0, -0.16, -0.29), Color(0.85, 0.2, 0.35))
+	var torso := zombie.get_node_or_null("Model/Torso") as MeshInstance3D
+	if torso != null:
+		torso.material_override = _quick_mat(Color(0.42, 0.36, 0.48), 0.85)
+		_add_box(torso, Vector3(0.16, 0.3, 0.16), Vector3(0.0, 0.52, 0.0), Color(0.42, 0.36, 0.48))
+
+
+## Curandeiro: manto verde e cruz brilhante flutuando sobre a cabeca.
+static func _setup_healer(zombie: CharacterBody3D) -> void:
+	var torso := zombie.get_node_or_null("Model/Torso") as MeshInstance3D
+	if torso != null:
+		torso.material_override = _quick_mat(Color(0.18, 0.42, 0.26), 0.9)
+	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	if head == null:
+		return
+	for piece in [_add_box(head, Vector3(0.08, 0.3, 0.08), Vector3(0.0, 0.55, 0.0), Color(0.4, 1.0, 0.5)), _add_box(head, Vector3(0.24, 0.08, 0.08), Vector3(0.0, 0.58, 0.0), Color(0.4, 1.0, 0.5))]:
+		var glow := (piece.mesh as BoxMesh).material as StandardMaterial3D
+		glow.emission_enabled = true
+		glow.emission = Color(0.3, 1.0, 0.4)
+		glow.emission_energy_multiplier = 2.0
+
+
+## Espreitador: pele escura, agachado e bracos compridos.
+static func _setup_stalker(zombie: CharacterBody3D, model: Node3D) -> void:
+	model.rotation.x = deg_to_rad(20.0)
+	for part in ["Model/Head", "Model/Torso", "Model/LeftArm/Mesh", "Model/RightArm/Mesh", "Model/LeftLeg/Mesh", "Model/RightLeg/Mesh"]:
+		var mesh := zombie.get_node_or_null(part) as MeshInstance3D
+		if mesh != null:
+			mesh.material_override = _quick_mat(Color(0.08, 0.09, 0.12), 0.95)
+	for arm in ["Model/LeftArm", "Model/RightArm"]:
+		var arm_node := zombie.get_node_or_null(arm) as Node3D
+		if arm_node != null:
+			arm_node.scale = Vector3(0.8, 1.45, 0.8)
 
 
 ## Saltador: pernas esticadas e agachado, com joelheiras claras.

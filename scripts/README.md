@@ -60,6 +60,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
 - `test_zombie_crowd_slots.gd`: regressoes da fila de ataque (anel cheio, vaga expirando, atacante sem esperar a propria vaga, zumbi real parado na fila).
+- `test_zombie_l4d_specials.gd`: regressoes do puxador, curandeiro e espreitador (registro e ondas, lingua, movimento forcado, cura e cadaver, bote e revelacao).
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
 - `test_zombie_specials.gd`: regressoes do cuspidor, da investida, dos tipos acima de 15 no snapshot e das especiais desde a hora 1.
 - `test_zombie_tick_budget.gd`: regressoes do orcamento de tick, teto global, zumbi parado batendo, proxy leve no client, alvo desconectado liberado e flock espalhando hordas entre ticks.
@@ -117,10 +118,14 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie_burn.gd`: fogo no zumbi: dano por segundo em ticks e espalha para vizinhos a 1,5 m ate 2 saltos.
 - `zombie_crowd_slots.gd`: fila de ataque estilo Left 4 Dead: no maximo 8 zumbis batem no mesmo jogador; os outros a 3 m esperam parados sem move_and_slide ate abrir vaga.
 - `zombie_dissolve_visual.gd`: materiais de dissolucao compartilhados por cor e po ao desintegrar zumbis fora da visao.
+- `zombie_healer.gd`: curandeiro: cura zumbis a 6 m a cada 3 s e levanta o cadaver mais proximo a 8 m a cada 8 s.
 - `zombie_indoor_router.gd`: caminho do zumbi pelo navmesh do edificio, replanejado em intervalos com jitter.
 - `player_unstuck_locator.gd`: acha espaco livre acima ou ao redor do jogador para o botao "Destravar personagem".
 - `zombie_progress_watch.gd`: mede se o zumbi perseguindo avanca (tempo parado e tempo sem se aproximar do alvo).
+- `zombie_stalker.gd`: espreitador: quase invisivel alem de 6 m e bote de 35 de dano que prende o jogador por 1,5 s.
 - `zombie_tick_budget.gd`: orcamento de simulacao por zumbi perseguindo (todo tick ate 10 m, 15 Hz ate 22 m, 10 Hz ate 50 m, 5 Hz alem), teto global de 48 ticks completos por tick de fisica com espera limitada, e zumbi batendo parado sem move_and_slide; substitui o active set que congelava a horda.
+- `zombie_tongue.gd`: lingua do puxador: prende de 6 a 14 m com linha de visao, puxa o jogador e solta com dano, sem visao, na chegada ou apos 4 s.
+- `zombie_tongue_visual.gd`: desenho cosmetico da lingua entre a boca do puxador e o jogador preso.
 - `zombie_variant_abilities.gd`: habilidades de variantes: colete do armored, dano em area, arrancadas (bote do leaper, investida, pulo alto do saltador, se jogar do bloater) e cuspe do cuspidor.
 - `zombie_wall_detour.gd`: na rua, segue a parede pela tangente ate a linha ate o alvo ficar livre.
 - `zombie_flock_coordinator.gd`: hordas persistentes com um cerebro, drones, fusao aleatoria de lideres, Boids e LOD.
