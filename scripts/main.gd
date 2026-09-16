@@ -1305,6 +1305,84 @@ func _on_boss_ability_used(zombie: Node, ability: String) -> void:
 			_boss_ability_effect.rpc_id(int(peer_id), ability, origin)
 
 
+## Efeito de habilidade de zumbi comum (cura do curandeiro): local e clientes.
+## Uso: chamado por ZombieHealer.update via has_method("show_zombie_ability").
+func show_zombie_ability(ability: String, origin: Vector3) -> void:
+	_play_boss_ability_effect(ability, origin)
+	if NetworkSession.is_server():
+		for peer_id in NetworkSession.loaded_peers:
+			_boss_ability_effect.rpc_id(int(peer_id), ability, origin)
+
+
+## Curandeiro levanta um cadaver: zumbi novo no lugar, fora da cota da onda.
+## Devolve false quando o cadaver nao serve mais ou o spawn falhou.
+## Uso: chamado por ZombieHealer.update.
+func revive_zombie_corpse(corpse: Node) -> bool:
+	if NetworkSession.is_client() or not is_instance_valid(corpse) or not corpses.has(corpse):
+		return false
+	var position := (corpse as Node3D).global_position
+	if not _spawn_zombie(position, ZombieMutator.Type.WALKER):
+		return false
+	if NetworkSession.survival_mode and survival_wave_controller != null:
+		survival_wave_controller.register_extra_spawn()
+	corpses.erase(corpse)
+	var corpse_name := String(corpse.name)
+	corpse.queue_free()
+	_remove_zombie_ragdoll(corpse_name)
+	show_zombie_ability("heal", position)
+	if NetworkSession.is_server():
+		for peer_id in NetworkSession.loaded_peers:
+			_remove_zombie_ragdoll_remote.rpc_id(int(peer_id), corpse_name)
+	return true
+
+
+@rpc("authority", "call_remote", "reliable")
+func _remove_zombie_ragdoll_remote(zombie_name: String) -> void:
+	if NetworkSession.is_client():
+		_remove_zombie_ragdoll(zombie_name)
+
+
+func _remove_zombie_ragdoll(zombie_name: String) -> void:
+	var ragdoll: Variant = ragdolls_by_zombie.get(zombie_name)
+	if is_instance_valid(ragdoll):
+		(ragdoll as Node).queue_free()
+	ragdolls_by_zombie.erase(zombie_name)
+
+
+## Lingua do puxador presa (ou solta) num jogador: desenho local e clientes.
+## Uso: chamado pelo zumbi puxador.
+func show_zombie_tongue(zombie: Node3D, target: Node3D, active: bool) -> void:
+	_set_tongue_visual(zombie, target, active)
+	if not NetworkSession.is_server():
+		return
+	var target_key := ""
+	for key in network_players:
+		if network_players[key] == target:
+			target_key = String(key)
+	for peer_id in NetworkSession.loaded_peers:
+		_show_zombie_tongue.rpc_id(int(peer_id), String(zombie.name), target_key, active)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _show_zombie_tongue(zombie_name: String, target_key: String, active: bool) -> void:
+	if not NetworkSession.is_client():
+		return
+	_set_tongue_visual(zombies.get_node_or_null(zombie_name) as Node3D, network_players.get(target_key) as Node3D, active)
+
+
+func _set_tongue_visual(zombie: Node3D, target: Node3D, active: bool) -> void:
+	if zombie == null or ServerTickPolicy.is_dedicated_server():
+		return
+	var existing := get_node_or_null("Tongue_%s" % String(zombie.name))
+	if existing != null:
+		existing.queue_free()
+	if not active or target == null:
+		return
+	var tongue_visual := ZombieTongueVisual.new()
+	add_child(tongue_visual)
+	tongue_visual.setup(zombie, target)
+
+
 ## Cuspe: poca que queima onde ha simulacao; clientes recebem so o visual.
 func _on_spit_used(_zombie: Node, target_position: Vector3) -> void:
 	var ground := Vector3(target_position.x, target_position.y - 0.9, target_position.z)
@@ -1351,7 +1429,7 @@ func _boss_ability_effect(ability: String, origin: Vector3) -> void:
 
 
 func _play_boss_ability_effect(ability: String, origin: Vector3) -> void:
-	var colors := {"slam": ZOMBIE_SCRIPT.TITAN_SLAM_COLOR, "summon": Color(0.6, 0.2, 0.9), "rage": Color(1.0, 0.1, 0.05)}
+	var colors := {"slam": ZOMBIE_SCRIPT.TITAN_SLAM_COLOR, "summon": Color(0.6, 0.2, 0.9), "rage": Color(1.0, 0.1, 0.05), "heal": Color(0.3, 1.0, 0.4)}
 	var radius: float = ZOMBIE_BOSS_BRAIN_SCRIPT.SLAM_RANGE if ability == "slam" else 3.0
 	ZOMBIE_SCRIPT.play_area_effect(get_tree(), origin, colors.get(ability, Color.WHITE), radius)
 
