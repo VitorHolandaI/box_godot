@@ -399,6 +399,9 @@ static func _add_box(parent: Node3D, box_size: Vector3, pos: Vector3, color: Col
 	var inst := MeshInstance3D.new()
 	inst.mesh = mesh
 	inst.position = pos
+	# Detalhes de variante sem sombra: com 200 zumbis na tela cada peca extra
+	# virava mais um draw call em cada cascata da sombra do sol.
+	inst.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	parent.add_child(inst)
 	return inst
 
