@@ -503,6 +503,24 @@ func take_crate_weapon(weapon_kind: int) -> String:
 	return _accept_weapon_offer(weapon_kind, {"mag": int(stats["mag_size"]), "reserve": int(stats["grant_reserve"]), "durability": int(stats["max_durability"])})
 
 
+## Arma de crate guardada (na mao ou no slot) deste tipo.
+## Uso: if player.has_crate_weapon(WeaponStats.Kind.UZI): ...
+func has_crate_weapon(weapon_kind: int) -> bool:
+	return weapon_slots.has_kind(weapon_kind)
+
+
+## Quanto cabe na reserva da arma de crate deste tipo (0 sem a arma).
+## Uso: var espaco := player.crate_reserve_space(WeaponStats.Kind.UZI)
+func crate_reserve_space(weapon_kind: int) -> int:
+	return weapon_slots.free_reserve_space(weapon_kind)
+
+
+## Municao vinda de uma arma igual no chao; devolve quanto entrou.
+## Uso: var entrou := player.absorb_ground_ammo(WeaponStats.Kind.UZI, 40)
+func absorb_ground_ammo(weapon_kind: int, amount: int) -> int:
+	return weapon_slots.add_reserve(weapon_kind, amount)
+
+
 ## Coleta por interacao de arma dropada no chao.
 ## Uso: pickup.interact_with(self)
 func take_ground_weapon(weapon_kind: int, weapon_mag: int, weapon_reserve: int, weapon_durability: int) -> String:
