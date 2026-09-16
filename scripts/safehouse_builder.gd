@@ -164,6 +164,10 @@ static func _build_automatic_door(house: StaticBody3D) -> void:
 	panel.name = "Panel"
 	panel.collision_layer = 1
 	panel.collision_mask = 0
+	# A rotacao da folha e escrita por script em _physics_process; com
+	# sync_to_physics o corpo reverte o transform a cada tick e a porta
+	# fica travada no lugar.
+	panel.sync_to_physics = false
 	var panel_mesh := BoxMesh.new()
 	panel_mesh.size = Vector3(3.8, 2.8, 0.18)
 	var panel_material := StandardMaterial3D.new()
@@ -173,13 +177,16 @@ static func _build_automatic_door(house: StaticBody3D) -> void:
 	panel_mesh.material = panel_material
 	var mesh_instance := MeshInstance3D.new()
 	mesh_instance.mesh = panel_mesh
-	mesh_instance.position.x = panel_mesh.size.x * 0.5
+	# Painel centrado na abertura: sem este offset o box afundava 1,4 m no
+	# chao (topo a 1,52 m) e o raycast do E, na altura da cabeca (2.3 m),
+	# passava por cima — porta parecia travada.
+	mesh_instance.position = Vector3(panel_mesh.size.x * 0.5, panel_mesh.size.y * 0.5, 0.0)
 	panel.add_child(mesh_instance)
 	var panel_collision := CollisionShape3D.new()
 	var panel_shape := BoxShape3D.new()
 	panel_shape.size = panel_mesh.size
 	panel_collision.shape = panel_shape
-	panel_collision.position.x = panel_mesh.size.x * 0.5
+	panel_collision.position = Vector3(panel_mesh.size.x * 0.5, panel_mesh.size.y * 0.5, 0.0)
 	panel.add_child(panel_collision)
 	panel.position.x = -panel_mesh.size.x * 0.5
 	door.add_child(panel)
