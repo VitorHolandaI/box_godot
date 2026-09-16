@@ -46,6 +46,7 @@ const CONE_WEAPONS_TESTS_SCRIPT := preload("res://scripts/test_cone_weapons.gd")
 const EQUIPMENT_TESTS_SCRIPT := preload("res://scripts/test_equipment.gd")
 const SUPPORT_CALLS_TESTS_SCRIPT := preload("res://scripts/test_support_calls.gd")
 const ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT := preload("res://scripts/test_zombie_l4d_specials.gd")
+const IN_GAME_SETTINGS_TESTS_SCRIPT := preload("res://scripts/test_in_game_settings.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -81,6 +82,7 @@ const FOCUSED_TEST_GROUPS := {
 	"equipment": EQUIPMENT_TESTS_SCRIPT,
 	"support_calls": SUPPORT_CALLS_TESTS_SCRIPT,
 	"zombie_l4d_specials": ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT,
+	"in_game_settings": IN_GAME_SETTINGS_TESTS_SCRIPT,
 }
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
@@ -132,6 +134,7 @@ func _ready() -> void:
 	await EQUIPMENT_TESTS_SCRIPT.new().run(self)
 	await SUPPORT_CALLS_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT.new().run(self)
+	await IN_GAME_SETTINGS_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)

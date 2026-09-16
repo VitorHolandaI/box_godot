@@ -1,31 +1,5 @@
 extends Control
 
-const ACTIONS := [
-	["up", "Mover para cima"],
-	["down", "Mover para baixo"],
-	["left", "Mover para esquerda"],
-	["right", "Mover para direita"],
-	["jump", "Pular"],
-	["sprint", "Correr"],
-	["attack", "Atirar / atacar"],
-	["knife", "Equipar faca"],
-	["pistol", "Equipar pistola"],
-	["reload", "Recarregar"],
-	["interact", "Interagir / pegar arma"],
-	["sonar", "Sonar"],
-	["shotgun", "Equipar escopeta"],
-	["uzi", "Equipar Uzi"],
-	["magnum", "Equipar magnum"],
-	["double_barrel", "Equipar escopeta dupla"],
-	["carbine", "Equipar carabina"],
-	["cycle_weapon", "Trocar de arma (ciclo)"],
-	["drop_weapon", "Dropar arma da mao"],
-	["grenade", "Arremessar granada"],
-	["throw_knife", "Arremessar faca"],
-	["air_strike", "Chamar ataque aereo"],
-	["swat", "Chamar SWAT"],
-]
-
 @onready var selection: VBoxContainer = $MenuPanel/Selection
 @onready var setup: VBoxContainer = $MenuPanel/Setup
 @onready var settings: VBoxContainer = $MenuPanel/Settings
@@ -110,32 +84,16 @@ func _process(_delta: float) -> void:
 func _input(event: InputEvent) -> void:
 	if capture_player < 0:
 		return
-
 	var config: Dictionary = player_configs[capture_player]
-	var captured_event: InputEvent
-	if config["device_type"] == "keyboard":
-		if event is InputEventKey and event.pressed and not event.echo:
-			if event.keycode == KEY_ESCAPE:
-				_cancel_capture()
-				accept_event()
-				return
-			var key_event := InputEventKey.new()
-			key_event.physical_keycode = event.physical_keycode if event.physical_keycode != 0 else event.keycode
-			captured_event = key_event
-		elif event is InputEventMouseButton and event.pressed:
-			var mouse_event := InputEventMouseButton.new()
-			mouse_event.button_index = event.button_index
-			captured_event = mouse_event
-	elif event is InputEventJoypadButton and event.pressed and event.device == config["device_id"]:
-		var joy_event := InputEventJoypadButton.new()
-		joy_event.device = event.device
-		joy_event.button_index = event.button_index
-		captured_event = joy_event
-
+	if KeybindingEditor.is_cancel(event, config):
+		_cancel_capture()
+		accept_event()
+		return
+	var captured_event := KeybindingEditor.capture_event(event, config)
 	if captured_event != null:
 		var bindings: Dictionary = config["bindings"]
 		bindings[capture_action] = captured_event
-		capture_button.text = captured_event.as_text()
+		capture_button.text = KeybindingEditor.event_text(captured_event)
 		capture_player = -1
 		capture_action = ""
 		capture_button = null
@@ -233,8 +191,7 @@ func _create_player_card(slot: int) -> void:
 	bindings_grid.add_theme_constant_override("v_separation", 4)
 	card.add_child(bindings_grid)
 
-	var bindings: Dictionary = config["bindings"]
-	for action_data in ACTIONS:
+	for action_data in KeybindingEditor.ACTION_LABELS:
 		var action: String = action_data[0]
 		var action_label := Label.new()
 		action_label.text = action_data[1]
@@ -243,13 +200,9 @@ func _create_player_card(slot: int) -> void:
 
 		var binding_button := Button.new()
 		binding_button.custom_minimum_size = Vector2(220, 30)
-		var binding := bindings.get(action) as InputEvent
-		binding_button.text = binding.as_text() if binding != null else "Nao definido"
-		var uses_analog: bool = config["device_type"] == "gamepad" and action in ["up", "down", "left", "right"]
-		binding_button.disabled = uses_analog
-		if uses_analog:
-			binding_button.text = "Analogico esquerdo"
-		else:
+		binding_button.text = KeybindingEditor.binding_text(config, action)
+		binding_button.disabled = KeybindingEditor.uses_analog(config, action)
+		if not binding_button.disabled:
 			binding_button.pressed.connect(_begin_capture.bind(slot, action, binding_button))
 		bindings_grid.add_child(binding_button)
 
