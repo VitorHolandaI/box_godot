@@ -35,6 +35,8 @@ const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
 ## Onda nova chega com centenas de zumbis: o cliente spawna no maximo N por
 ## frame (fila) para nao dar hitch de instantiates sincronos.
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 2
+const MAX_ACTIVE_ZOMBIES := 60
+var _active_set_elapsed := 0.0
 ## Frame longo acima disto e um travamento sentido; loga 1 linha JSON por
 ## rolamento de 2 s para diagnosticar hitches do modo rede (server e client).
 const STUTTER_FRAME_MS := 80.0
@@ -207,6 +209,39 @@ func _procedural_city_ready() -> bool:
 	return true
 
 
+func _update_zombie_active_set(delta: float) -> void:
+	if not NetworkSession.is_server():
+		return
+	_active_set_elapsed += delta
+	if _active_set_elapsed < 0.35:
+		return
+	_active_set_elapsed = 0.0
+	var players := get_tree().get_nodes_in_group("player")
+	if players.is_empty():
+		return
+	var zombies := get_tree().get_nodes_in_group("zombies")
+	if zombies.size() <= MAX_ACTIVE_ZOMBIES:
+		for z in zombies:
+			var zb := z as Node
+			if zb != null:
+				zb.set_physics_process(true)
+		return
+	# Ordena por distancia ao player mais proximo e so os N mais perto tem fisica
+	var with_dist: Array = []
+	for z in zombies:
+		var pos := (z as Node3D).global_position
+		var best := INF
+		for p in players:
+			var d := pos.distance_squared_to((p as Node3D).global_position)
+			if d < best:
+				best = d
+		with_dist.append({"z": z, "d": best})
+	with_dist.sort_custom(func(a, b): return float(a["d"]) < float(b["d"]))
+	for i in with_dist.size():
+		var zb := with_dist[i]["z"] as Node
+		zb.set_physics_process(i < MAX_ACTIVE_ZOMBIES)
+
+
 ## Travamento sentido (frame >= 80 ms): 1 linha JSON no maximo a cada 2 s
 ## com o contexto do frame, para achar o culpado do modo rede sem chute.
 ## Uso: chamado no inicio de _process; nada a fazer manualmente.
@@ -238,6 +273,7 @@ func _process(delta: float) -> void:
 		lag_probe.record_frame_time(delta * 1000.0)
 	_update_player_vision(delta)
 	_cleanup_far_ragdolls(delta)
+	_update_zombie_active_set(delta)
 	if NetworkSession.is_client() or smoke_test_mode:
 		return
 	if not _procedural_city_ready():
@@ -317,7 +353,7 @@ func _server_round_trip_ms() -> float:
 
 
 func register_corpse(corpse: Node) -> void:
-	if NetworkSession.is_client():
+	if NetworkSession.is_client() or not is_instance_valid(corpse):
 		return
 	corpses.append(corpse)
 	if corpses.size() > MAX_CORPSES:
