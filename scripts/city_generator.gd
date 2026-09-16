@@ -48,23 +48,25 @@ const BUILDING_COLORS := [
 
 @export var city_seed := 240912
 
+## A montagem procedural roda em etapas (blueprint em thread, predios por
+## frame); gameplay (waves, spawns de zumbi, sync de peer) so comeca quando
+## esta flag levanta. Veja is_city_ready().
+var city_ready := false
+
 var road_material: StandardMaterial3D
 var line_material: StandardMaterial3D
 var boundary_material: StandardMaterial3D
 
 
+## Falso enquanto a cidade ainda esta montando; true quando o mundo inteiro
+## existe. Uso: while not city.is_city_ready(): await get_tree().create_timer(0.1).timeout
+func is_city_ready() -> bool:
+	return city_ready
+
+
 func _ready() -> void:
 	if NetworkSession.procedural_city_enabled:
-		_create_materials()
-		_hide_legacy_center_roads()
-		var city_blueprint = PROCEDURAL_CITY_GENERATOR.generate_world(NetworkSession.world_seed, NetworkSession.survival_mode)
-		PROCEDURAL_CITY_ASSEMBLER.assemble(city_blueprint, self)
-		_create_procedural_safehouse()
-		var safehouse_area: Array[Rect2] = [SAFEHOUSE_LOT_AREA]
-		STREET_LIGHT_ASSEMBLER.assemble(city_blueprint, self, safehouse_area)
-		_create_abandoned_cars(_street_props_rng())
-		_create_boundaries()
-		_create_forest()
+		_build_procedural_city.call_deferred()
 		return
 	_create_materials()
 	_create_roads()
@@ -72,6 +74,47 @@ func _ready() -> void:
 	_create_street_props()
 	_create_boundaries()
 	_create_forest()
+	city_ready = true
+
+
+## Montagem em etapas: o blueprint (dado puro, sem cena) roda na thread pool,
+## a safehouse existe sincrona (players spawnam nela) e os 36 predios entram
+## 4 por frame, trocando um hitch de ~134 ms por uma carga suave.
+## Uso: chamado com call_deferred a partir de _ready; nao chamar de novo.
+func _build_procedural_city() -> void:
+	_create_materials()
+	_hide_legacy_center_roads()
+	_create_procedural_safehouse()
+	var city = await _generate_blueprint_async(NetworkSession.world_seed, NetworkSession.survival_mode)
+	PROCEDURAL_CITY_ASSEMBLER.assemble_roads(city, self)
+	var safehouse_area: Array[Rect2] = [SAFEHOUSE_LOT_AREA]
+	STREET_LIGHT_ASSEMBLER.assemble(city, self, safehouse_area)
+	var pending_lots: Array = []
+	for block in city.blocks:
+		for lot in block.lots:
+			pending_lots.append(lot)
+	while not pending_lots.is_empty():
+		var budget := 4
+		while budget > 0 and not pending_lots.is_empty():
+			PROCEDURAL_CITY_ASSEMBLER.assemble_lot(self, pending_lots.pop_front())
+			budget -= 1
+		await get_tree().process_frame
+	_create_abandoned_cars(_street_props_rng())
+	_create_boundaries()
+	_create_forest()
+	city_ready = true
+
+
+## Roda generate_world na WorkerThreadPool: a geracao e dado puro (blueprints
+## RefCounted, RNG) sem tocar a arvore de cena.
+## Uso: var city = await _generate_blueprint_async(seed, survival)
+func _generate_blueprint_async(world_seed: int, survival_mode: bool) -> Variant:
+	var slot := {"city": null}
+	var task_id := WorkerThreadPool.add_task(func() -> void: slot["city"] = PROCEDURAL_CITY_GENERATOR.generate_world(world_seed, survival_mode))
+	while slot["city"] == null:
+		await get_tree().process_frame
+	WorkerThreadPool.wait_for_task_completion(task_id)
+	return slot["city"]
 
 
 func _create_materials() -> void:
