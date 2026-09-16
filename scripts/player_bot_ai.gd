@@ -128,7 +128,7 @@ func _generate_test_bot_input(player: Node3D, zombies_node: Node) -> Dictionary:
 func _generate_autoplay_input(player: Node3D, slot: int, zombies_node: Node, _tree: SceneTree) -> Dictionary:
 	var player_pos := player.global_position
 	var target := _find_nearest_live_zombie(player_pos, zombies_node)
-	var move_plan := _calculate_movement(player, slot, target)
+	var move_plan := _calculate_movement(player, slot, target, zombies_node)
 	var combat_plan := _calculate_combat(player, slot, target)
 	var aim := Vector2.ZERO
 	if target != null:
@@ -152,7 +152,7 @@ func _generate_autoplay_input(player: Node3D, slot: int, zombies_node: Node, _tr
 	}
 
 
-func _calculate_movement(player: Node3D, slot: int, target: Node3D) -> Dictionary:
+func _calculate_movement(player: Node3D, slot: int, target: Node3D, zombies_node: Node) -> Dictionary:
 	var delta := 0.05
 	_update_unstuck_logic(player, slot, delta)
 	var unstuck_dur: float = unstuck_durations.get(slot, 0.0)
@@ -186,6 +186,11 @@ func _calculate_movement(player: Node3D, slot: int, target: Node3D) -> Dictionar
 		var dist := offset.length()
 		var dir := Vector2(offset.x, offset.z).normalized()
 		var perp := Vector2(-dir.y, dir.x) * strafe_dir
+		# Cerco: com 2+ zumbis perto, fugir do centroide deles em sprint vale
+		# mais que manter strafe — o bot morria cercado sem matar ninguem.
+		var swarm := _swarm_flee_direction(player.global_position, zombies_node)
+		if swarm != Vector2.ZERO:
+			return {"move": swarm, "jump": false, "sprint": stamina > 20.0}
 		if ammo == 0 and reserve > 0:
 			return {"move": -dir, "jump": false, "sprint": stamina > 20.0}
 		var uses_melee := ammo + reserve == 0 or dist <= 2.2
@@ -216,6 +221,32 @@ func _calculate_movement(player: Node3D, slot: int, target: Node3D) -> Dictionar
 		way_offset.y = 0.0
 	var way_dir := Vector2(way_offset.x, way_offset.z).normalized()
 	return {"move": way_dir, "jump": false, "sprint": stamina > 30.0}
+
+
+## Direcao de fuga do cerco: 2+ zumbis vivos a menos de 5 m devolvem o vetor
+## ANTI-centroide normalizado; sem cerco devolve Vector2.ZERO.
+## Uso: var flee := _swarm_flee_direction(player.global_position, zombies_node)
+func _swarm_flee_direction(origin: Vector3, zombies_node: Node) -> Vector2:
+	var close_count := 0
+	var centroid := Vector3.ZERO
+	for zombie_node in zombies_node.get_children():
+		var zombie := zombie_node as Node3D
+		if zombie == null or bool(zombie.get("is_dead")):
+			continue
+		var offset := zombie.global_position - origin
+		offset.y = 0.0
+		if offset.length() > 5.0:
+			continue
+		close_count += 1
+		centroid += offset
+	if close_count < 2:
+		return Vector2.ZERO
+	# centroid acumula OFFSETS relativos a origin: fugir = -media deles.
+	var flee := -Vector3(centroid.x / float(close_count), 0.0, centroid.z / float(close_count))
+	if flee.is_zero_approx():
+		return Vector2.ZERO
+	var flee_dir := Vector2(flee.x, flee.z).normalized()
+	return flee_dir
 
 
 func _update_unstuck_logic(player: Node3D, slot: int, delta: float) -> void:
