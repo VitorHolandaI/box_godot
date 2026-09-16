@@ -139,8 +139,10 @@ func _physics_process(delta: float) -> void:
 		return
 	var update_delta := _flock_update_elapsed
 	_flock_update_elapsed = 0.0
+	var perf_start := FramePerfProbe.begin()
 	_update_cached_players(update_delta)
 	_update_flock_clusters()
+	FramePerfProbe.end("flock", perf_start)
 	_log_chase_heartbeat(update_delta)
 
 
