@@ -35,6 +35,11 @@ const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
 ## Onda nova chega com centenas de zumbis: o cliente spawna no maximo N por
 ## frame (fila) para nao dar hitch de instantiates sincronos.
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 6
+## Frame longo acima disto e um travamento sentido; loga 1 linha JSON por
+## rolamento de 2 s para diagnosticar hitches do modo rede (server e client).
+const STUTTER_FRAME_MS := 80.0
+const STUTTER_LOG_COOLDOWN := 2.0
+var _stutter_cooldown := 0.0
 const NETWORK_ZOMBIE_PROXY_FACTORY_SCRIPT := preload("res://scripts/network_zombie_proxy_factory.gd")
 const AMMO_LOOT_DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd")
 const SHARED_VISION_SCRIPT := preload("res://scripts/shared_vision.gd")
@@ -163,7 +168,31 @@ func _notify_scene_loaded() -> void:
 	NetworkSession.notify_scene_loaded()
 
 
+## Travamento sentido (frame >= 80 ms): 1 linha JSON no maximo a cada 2 s
+## com o contexto do frame, para achar o culpado do modo rede sem chute.
+## Uso: chamado no inicio de _process; nada a fazer manualmente.
+func _log_stutter(delta: float) -> void:
+	_stutter_cooldown = maxf(_stutter_cooldown - delta, 0.0)
+	var frame_ms := delta * 1000.0
+	if frame_ms < STUTTER_FRAME_MS or _stutter_cooldown > 0.0:
+		return
+	_stutter_cooldown = STUTTER_LOG_COOLDOWN
+	var role := "offline"
+	if NetworkSession.is_server():
+		role = "server"
+	elif NetworkSession.is_client():
+		role = "client"
+	print(JSON.stringify({
+		"stutter_frame_ms": snappedf(frame_ms, 0.1),
+		"role": role,
+		"zombies": zombies.get_child_count(),
+		"pending_spawns": pending_zombie_spawns.size(),
+		"players": get_tree().get_nodes_in_group("player").size(),
+	}))
+
+
 func _process(delta: float) -> void:
+	_log_stutter(delta)
 	if lag_probe.is_enabled():
 		lag_probe.record_frame_time(delta * 1000.0)
 	_update_player_vision(delta)
