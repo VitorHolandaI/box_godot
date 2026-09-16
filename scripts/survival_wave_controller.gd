@@ -13,7 +13,7 @@ const GAME_OVER_RESTART_SECONDS := 8.0
 
 var schedule = SURVIVAL_WAVE_SCHEDULE_SCRIPT.new()
 var spawn_callback: Callable
-var wave_index := 7 # Horda 8 para teste
+var wave_index := 0
 var spawned_in_wave := 0
 var alive_in_wave := 0
 var total_kills := 0
