@@ -377,9 +377,10 @@ func _connect_crate_weapon_signals(player: Node) -> void:
 
 
 ## Drop da arma da mao: no servidor/offline spawna a pickup no chao; clientes
-## recebem o no pelo sync por nome no snapshot.
+## recebem o no pelo sync por nome no snapshot. O player vem por ultimo
+## porque Callable.bind() anexa o argumento atado no FIM da lista.
 ## Uso: conectado ao sinal crate_weapon_dropped do jogador.
-func _on_crate_weapon_dropped(player: Node, kind: int, mag: int, reserve: int, durability: int) -> void:
+func _on_crate_weapon_dropped(kind: int, mag: int, reserve: int, durability: int, player: Node) -> void:
 	if NetworkSession.is_client():
 		return
 	var forward: Vector3 = -player.global_transform.basis.z
@@ -416,7 +417,8 @@ func _track_zombie_weapon_drop(pickup: GroundWeaponPickup) -> void:
 
 ## Quebra de arma de crate: peca local no simulador + evento para os clientes
 ## gerarem os pedacos visualmente. Uso: conectado ao sinal crate_weapon_broken.
-func _on_crate_weapon_broken(player: Node, kind: int) -> void:
+## Mesmo contrato do drop: bind() anexa o player no fim da lista.
+func _on_crate_weapon_broken(kind: int, player: Node) -> void:
 	if not NetworkSession.is_server():
 		return
 	var player_key := ""
