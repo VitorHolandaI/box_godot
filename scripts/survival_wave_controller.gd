@@ -5,10 +5,9 @@ signal state_changed
 signal wave_started(wave_index: int)
 
 const SURVIVAL_WAVE_SCHEDULE_SCRIPT := preload("res://scripts/survival_wave_schedule.gd")
-## Entrada gradual da horda: 0,15s na horda 1 (rajada de 200 para stress test),
-## 0,75s nas demais (~1,3/s) para nao picar o frame.
+## Entrada gradual da horda: um zumbi a cada 0,75 s (~1,3/s) para o load de
+## instantiate+variante nao picar o frame no inicio de cada onda.
 const SPAWN_INTERVAL := 0.75
-const SPAWN_INTERVAL_HORDA1 := 0.15
 ## GAME OVER com jogador presente reinicia sozinho depois deste tempo.
 const GAME_OVER_RESTART_SECONDS := 8.0
 
@@ -34,8 +33,7 @@ func tick(delta: float) -> void:
 		return
 	_spawn_elapsed += maxf(delta, 0.0)
 	var target := schedule.target_for(wave_index)
-	var interval := SPAWN_INTERVAL_HORDA1 if wave_index == 0 else SPAWN_INTERVAL
-	if spawned_in_wave < target and _spawn_elapsed >= interval:
+	if spawned_in_wave < target and _spawn_elapsed >= SPAWN_INTERVAL:
 		_spawn_elapsed = 0.0
 		if bool(spawn_callback.call()):
 			spawned_in_wave += 1
