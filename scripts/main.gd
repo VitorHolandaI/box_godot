@@ -35,7 +35,6 @@ const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
 ## Onda nova chega com centenas de zumbis: o cliente spawna no maximo N por
 ## frame (fila) para nao dar hitch de instantiates sincronos.
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 2
-var _active_set_elapsed := 0.0
 const NETWORK_ZOMBIE_PROXY_FACTORY_SCRIPT := preload("res://scripts/network_zombie_proxy_factory.gd")
 const AMMO_LOOT_DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd")
 const SHARED_VISION_SCRIPT := preload("res://scripts/shared_vision.gd")
@@ -208,44 +207,6 @@ func _procedural_city_ready() -> bool:
 	return true
 
 
-func _update_zombie_active_set(delta: float) -> void:
-	if not NetworkSession.is_server():
-		return
-	_active_set_elapsed += delta
-	if _active_set_elapsed < 0.35:
-		return
-	_active_set_elapsed = 0.0
-	var players := get_tree().get_nodes_in_group("player")
-	if players.is_empty():
-		return
-	var zombies := get_tree().get_nodes_in_group("zombies")
-	var wave_target := 10
-	if survival_wave_controller != null:
-		wave_target = int(survival_wave_controller.schedule.target_for(survival_wave_controller.wave_index))
-	var active_cap := mini(wave_target * 40 / 100, 150)
-	active_cap = maxi(active_cap, 40)
-	if zombies.size() <= active_cap:
-		for z in zombies:
-			var zb := z as Node
-			if zb != null:
-				zb.set_physics_process(true)
-		return
-	# Ordena por distancia ao player mais proximo e so os N mais perto tem fisica
-	var with_dist: Array = []
-	for z in zombies:
-		var pos := (z as Node3D).global_position
-		var best := INF
-		for p in players:
-			var d := pos.distance_squared_to((p as Node3D).global_position)
-			if d < best:
-				best = d
-		with_dist.append({"z": z, "d": best})
-	with_dist.sort_custom(func(a, b): return float(a["d"]) < float(b["d"]))
-	for i in with_dist.size():
-		var zb := with_dist[i]["z"] as Node
-		zb.set_physics_process(i < active_cap)
-
-
 func _exit_tree() -> void:
 	if FramePerfProbe.active == perf_probe:
 		FramePerfProbe.active = null
@@ -293,9 +254,6 @@ func _process(delta: float) -> void:
 	perf_start = FramePerfProbe.begin()
 	_cleanup_far_ragdolls(delta)
 	FramePerfProbe.end("ragdoll_cleanup", perf_start)
-	perf_start = FramePerfProbe.begin()
-	_update_zombie_active_set(delta)
-	FramePerfProbe.end("active_set", perf_start)
 	if NetworkSession.is_client() or smoke_test_mode:
 		return
 	if not _procedural_city_ready():
