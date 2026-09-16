@@ -36,6 +36,7 @@ const WEAPON_ARSENAL_TESTS_SCRIPT := preload("res://scripts/test_weapon_arsenal.
 const ZOMBIE_SPECIALS_TESTS_SCRIPT := preload("res://scripts/test_zombie_specials.gd")
 const GROUND_WEAPON_PICKUP_TESTS_SCRIPT := preload("res://scripts/test_ground_weapon_pickup.gd")
 const FRAME_PERF_PROBE_TESTS_SCRIPT := preload("res://scripts/test_frame_perf_probe.gd")
+const SERVER_TICK_POLICY_TESTS_SCRIPT := preload("res://scripts/test_server_tick_policy.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -60,6 +61,7 @@ const FOCUSED_TEST_GROUPS := {
 	"city_props": CITY_PROPS_TESTS_SCRIPT,
 	"network_lag_probe": NETWORK_LAG_PROBE_TESTS_SCRIPT,
 	"frame_perf_probe": FRAME_PERF_PROBE_TESTS_SCRIPT,
+	"server_tick_policy": SERVER_TICK_POLICY_TESTS_SCRIPT,
 }
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
@@ -101,6 +103,7 @@ func _ready() -> void:
 	await GROUND_WEAPON_PICKUP_TESTS_SCRIPT.new().run(self)
 	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	FRAME_PERF_PROBE_TESTS_SCRIPT.new().run(self)
+	SERVER_TICK_POLICY_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)

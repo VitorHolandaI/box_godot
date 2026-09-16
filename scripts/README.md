@@ -36,6 +36,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
+- `server_tick_policy.gd`: servidor dedicado roda fisica a 30 Hz com no maximo 2 passos por frame (corta a bola de neve de ticks medida na VPS) e pula o fade visual dos zumbis.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
 - `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador.
 - `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
@@ -84,6 +85,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_unstuck.gd`: regressoes de zumbis presos: medidor de progresso, desvio de muro, casa segura contornada, realocacao, spawn em chao aberto e minimapa do fim de onda.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
+- `test_server_tick_policy.gd`: regressoes do corte de custo do servidor dedicado (30 Hz, 2 passos por frame, deteccao por `--server`, max_slides do zumbi).
 - `test_frame_perf_probe.gd`: regressoes da sonda de custo por frame (argumento, linha de hitch e relatorio periodico).
 - `test_network_join_sync.gd`: regressoes de dessincronia online: variante do zumbi no cliente, pacote de jogador abaixo do MTU, regras e reinicio do GAME OVER, restantes da onda, cliques com pacotes agrupados e pontos de spawn livres.
 - `test_script_error_counter.gd`: logger que faz a suite falhar em qualquer erro de script.
