@@ -25,9 +25,10 @@ Logica de jogo, rede, interface e testes automatizados.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local, navegacao e botao "Destravar personagem" durante a partida.
 - `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
+- `local_host_launcher.gd`: "Hospedar partida" do menu: sobe o servidor dedicado como processo filho headless, entra por 127.0.0.1, encerra ao voltar ao menu/fechar o jogo e o filho sai sozinho sem peers (`--host-idle-exit=`).
 - `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos que so somem longe dos jogadores e bot de teste.
 - `load_test_options.gd`: opcao `--prespawn-zombies=N` do servidor dedicado para teste de carga.
-- `menu.gd`: selecao local/multiplayer, navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
+- `menu.gd`: selecao local/multiplayer/hospedar partida (mostra IPs da LAN para os amigos), navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
 - `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT, atraso entre snapshots, KB/s e pacotes/s recebidos e FPS.
 - `network_session.gd`: sessao ENet, roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
@@ -85,6 +86,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_unstuck.gd`: regressoes de zumbis presos: medidor de progresso, desvio de muro, casa segura contornada, realocacao, spawn em chao aberto e minimapa do fim de onda.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
+- `test_local_host_launcher.gd`: regressoes do servidor hospedado (argumentos exportado/editor, saida ociosa, IPs da LAN, parar sem servidor).
 - `test_server_tick_policy.gd`: regressoes do corte de custo do servidor dedicado (30 Hz, 2 passos por frame, deteccao por `--server`, max_slides do zumbi).
 - `test_frame_perf_probe.gd`: regressoes da sonda de custo por frame (argumento, linha de hitch e relatorio periodico).
 - `test_network_join_sync.gd`: regressoes de dessincronia online: variante do zumbi no cliente, pacote de jogador abaixo do MTU, regras e reinicio do GAME OVER, restantes da onda, cliques com pacotes agrupados e pontos de spawn livres.
