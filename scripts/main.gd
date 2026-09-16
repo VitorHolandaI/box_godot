@@ -116,6 +116,15 @@ func _ready() -> void:
 	loot_rng.randomize()
 	in_game_menu.unstuck_requested.connect(_on_unstuck_requested)
 	survival_wave_controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(Callable(self, "_spawn_zombie"))
+	survival_wave_controller.wave_index = 7 # Horda 8 fixa para teste (pedido: comecar da 8)
+	print("WAVE DEBUG iniciado na horda ", survival_wave_controller.wave_index + 1)
+	# Debug: pula direto para onda especifica e prespawn para teste de carga
+	for arg in OS.get_cmdline_user_args():
+		if arg.begins_with("--test-wave="):
+			var w := int(arg.trim_prefix("--test-wave=")) - 1
+			survival_wave_controller.wave_index = clampi(w, 0, survival_wave_controller.schedule.TARGETS.size() - 1)
+		if arg == "--test-wave-8":
+			survival_wave_controller.wave_index = 7
 	if not NetworkSession.is_client():
 		wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
 		airdrop_controller = AIRDROP_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
@@ -124,8 +133,8 @@ func _ready() -> void:
 		# e HUD rodam em frames distintos para nao varrer 600 zumbis 4x no
 		# mesmo frame (hitch de 1 frame a cada nova hora).
 		survival_wave_controller.wave_started.connect(_on_wave_transition)
-		wave_supply_controller.refresh_wave(0)
-		_spawn_scattered_loot()
+		wave_supply_controller.refresh_wave(survival_wave_controller.wave_index)
+		_spawn_scattered_loot(survival_wave_controller.wave_index)
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
 	coordinator.name = "ZombieFlockCoordinator"
 	add_child(coordinator)
@@ -138,6 +147,10 @@ func _ready() -> void:
 		for slot in configs.size():
 			_spawn_offline_player(slot, configs[slot])
 		split_screen.configure(local_players)
+		# Teste offline com horda: --test-wave=8 --prespawn-zombies=200
+		var offline_prespawn := LoadTestOptions.prespawn_zombie_count(OS.get_cmdline_user_args())
+		if offline_prespawn > 0:
+			_prespawn_load_test_zombies(offline_prespawn)
 		return
 
 	NetworkSession.roster_changed.connect(_reconcile_network_players)
