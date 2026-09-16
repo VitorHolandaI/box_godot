@@ -11,7 +11,7 @@ signal crate_weapon_dropped(kind: int, mag: int, reserve: int, durability: int)
 
 ## Ordem segue WeaponStats.Kind: as armas de crate ficam por ultimo.
 ## Mesma ordem de WeaponStats.Kind (os inteiros viajam na rede e nos slots).
-enum Weapon { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE, SAWED_OFF, AUTO_SHOTGUN, LASER_RIFLE, PLASMA_SMG, RAILGUN, AK47, M4, AUG, BERETTA, SNIPER, BAZOOKA }
+enum Weapon { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE, SAWED_OFF, AUTO_SHOTGUN, LASER_RIFLE, PLASMA_SMG, RAILGUN, AK47, M4, AUG, BERETTA, SNIPER, BAZOOKA, CROSSBOW, GRENADE_LAUNCHER }
 
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const KNIFE_ATTACK_DURATION := 0.4

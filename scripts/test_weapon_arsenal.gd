@@ -9,7 +9,7 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const DIRECTOR_SCRIPT := preload("res://scripts/ammo_loot_director.gd")
 const SCHEDULE_SCRIPT := preload("res://scripts/survival_wave_schedule.gd")
-const MIN_CRATE_WEAPONS := 16
+const MIN_CRATE_WEAPONS := 18
 
 
 func run(test_root: Node) -> void:
@@ -17,6 +17,7 @@ func run(test_root: Node) -> void:
 	_test_every_crate_weapon_is_wired(test_root)
 	await _test_railgun_pierces_line_of_zombies(test_root)
 	_test_futuristic_weapons_have_own_tracer(test_root)
+	_test_crossbow_and_grenade_launcher_roles(test_root)
 
 
 func _test_player_enum_matches_stats(test_root: Node) -> void:
@@ -119,6 +120,32 @@ func _test_futuristic_weapons_have_own_tracer(test_root: Node) -> void:
 		_fail(test_root, "Cada uma das %d armas deveria ter cor, tracer e recuo proprios; cores=%d tracers=%d visuais=%d sem_recuo=%s." % [total, bodies.size(), tracers.size(), looks.size(), missing_recoil])
 		return
 	print("PASS: As %d armas tem cor, tracer e recuo proprios." % total)
+
+
+## Pedido de variedade: besta silenciosa que atravessa a fila e lanca-granadas
+## em area; toda arma com perfil de som existente (senao caia no da pistola).
+func _test_crossbow_and_grenade_launcher_roles(test_root: Node) -> void:
+	print("Testando papel da besta e do lanca-granadas...")
+	var kind_names: Array = WeaponStats.Kind.keys()
+	if not kind_names.has("CROSSBOW") or not kind_names.has("GRENADE_LAUNCHER"):
+		_fail(test_root, "Arsenal deveria ter CROSSBOW e GRENADE_LAUNCHER; tipos=%s." % [kind_names])
+		return
+	var crossbow := WeaponStats.stats_for(WeaponStats.Kind.CROSSBOW)
+	var launcher := WeaponStats.stats_for(WeaponStats.Kind.GRENADE_LAUNCHER)
+	var quietest := INF
+	for kind in WeaponStats.crate_kinds():
+		if kind != WeaponStats.Kind.CROSSBOW:
+			quietest = minf(quietest, float(WeaponStats.stats_for(kind)["noise_radius"]))
+	var crossbow_ok := int(crossbow.get("pierce", 1)) >= 3 and float(crossbow["noise_radius"]) < quietest / 3.0
+	var launcher_ok := float(launcher.get("explosive_radius", 0.0)) >= 3.0 and int(launcher["mag_size"]) > 1
+	var missing_sounds: Array[String] = []
+	for kind in WeaponStats.crate_kinds():
+		if not WeaponSoundSynth.PROFILES.has(WeaponStats.sound_for(kind)):
+			missing_sounds.append(String(WeaponStats.stats_for(kind)["label"]))
+	if not crossbow_ok or not launcher_ok or not missing_sounds.is_empty():
+		_fail(test_root, "Besta: perfura >= 3 e ruido < 1/3 da mais silenciosa (%.0f); lanca-granadas: raio >= 3 e pente > 1; sons faltando=%s; besta=%s lancador=%s." % [quietest, missing_sounds, crossbow, launcher])
+		return
+	print("PASS: Besta silenciosa perfura e lanca-granadas explode em area.")
 
 
 func _fail(test_root: Node, message: String) -> void:

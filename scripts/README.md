@@ -48,7 +48,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada por raio entre aliados.
-- `test_weapon_arsenal.gd`: regressoes do arsenal: cada arma de crate ligada em municao, drop, crate e modelo, railgun atravessando a fila e tracers futuristas.
+- `test_weapon_arsenal.gd`: regressoes do arsenal: cada arma de crate ligada em municao, drop, crate e modelo, railgun atravessando a fila e tracers futuristas. Inclui o papel da besta (silenciosa, perfura) e do lanca-granadas (area).
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
 - `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
