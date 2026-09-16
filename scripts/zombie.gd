@@ -284,6 +284,7 @@ func _run_physics_tick(delta: float) -> void:
 		velocity.z = move_toward(velocity.z, hit_direction.z * 3.5, 18.0 * delta)
 	elif melee_target != null:
 		in_melee_range = true
+		ZombieCrowdSlots.shared.register_attacker(melee_target.get_instance_id(), get_instance_id(), Engine.get_physics_frames())
 		_perform_melee_attack(melee_target)
 	elif is_instance_valid(target):
 		var target_offset := target.global_position - global_position
@@ -291,7 +292,15 @@ func _run_physics_tick(delta: float) -> void:
 		horizontal_offset.y = 0.0
 		var distance := horizontal_offset.length()
 		var same_level := absf(target_offset.y) <= MELEE_VERTICAL_RANGE
-		if distance > MELEE_RANGE or not same_level:
+		var waits_in_queue: bool = same_level and distance > MELEE_RANGE and (dash == null or not dash.is_leaping()) and ZombieCrowdSlots.shared.should_wait(target.get_instance_id(), get_instance_id(), distance, Engine.get_physics_frames())
+		if waits_in_queue:
+			# Anel de ataque cheio: espera vaga parado de frente para o alvo.
+			in_melee_range = true
+			velocity.x = 0.0
+			velocity.z = 0.0
+			progress_watch.reset()
+			rotation.y = lerp_angle(rotation.y, atan2(-horizontal_offset.x, -horizontal_offset.z), minf(delta * 8.0, 1.0))
+		elif distance > MELEE_RANGE or not same_level:
 			_watch_chase_progress(target, delta)
 			var direction := _chase_direction(target, horizontal_offset, delta)
 			# Na rua nao ha navmesh: contorna muros e predios pela tangente.
@@ -320,6 +329,7 @@ func _run_physics_tick(delta: float) -> void:
 			is_walking = true
 		else:
 			in_melee_range = true
+			ZombieCrowdSlots.shared.register_attacker(target.get_instance_id(), get_instance_id(), Engine.get_physics_frames())
 			velocity.x = move_toward(velocity.x, 0.0, speed)
 			velocity.z = move_toward(velocity.z, 0.0, speed)
 			progress_watch.reset()
