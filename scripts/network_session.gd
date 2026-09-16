@@ -26,7 +26,7 @@ var mode := Mode.OFFLINE
 var peer_slots: Dictionary = {}
 var requested_slots := 1
 var server_port := DEFAULT_PORT
-## Total de jogadores aceitos pelo servidor (`--max-players=N`, padrao 32);
+## Total de jogadores aceitos pelo servidor (`--max-players=N`, padrao 8);
 ## a tela dividida continua limitada a PlayerCapacity.MAX_LOCAL_SLOTS.
 var max_players := PlayerCapacity.DEFAULT_MAX_PLAYERS
 var bot_mode := false

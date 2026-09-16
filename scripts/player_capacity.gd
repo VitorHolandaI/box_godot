@@ -4,13 +4,15 @@ extends RefCounted
 ## Limite de jogadores por servidor, separado da tela dividida. Antes os dois
 ## eram o mesmo MAX_PLAYERS = 4: nenhum servidor aceitava um 5o jogador.
 ## `--max-players=N` no servidor ajusta o total (benchmark de quantos jogadores
-## a VPS aguenta com a horda de 200).
+## a VPS aguenta com a horda de 200; padrao 8).
 ## Uso:
 ##   var cap := PlayerCapacity.max_players_from_arguments(OS.get_cmdline_user_args())
 ##   var motivo := PlayerCapacity.join_rejection(total_atual, pedidos, cap)
 
 const MAX_LOCAL_SLOTS := 4
-const DEFAULT_MAX_PLAYERS := 32
+# 8 por decisao do dono do jogo; o benchmark na VPS (a3c2ccd) aguentou 32 com a
+# horda de 200 (mediana 59-60 FPS), entao da para subir com --max-players=N.
+const DEFAULT_MAX_PLAYERS := 8
 const HARD_MAX_PLAYERS := 256
 const MAX_PLAYERS_ARGUMENT := "--max-players="
 ## Do 5o jogador em diante o spawn gira em aneis em volta dos 4 marcadores.
