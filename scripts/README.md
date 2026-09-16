@@ -35,7 +35,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `network_zombie_proxy_factory.gd`: cria o zumbi do cliente a partir do snapshot, com a variante sorteada pelo servidor aplicada antes do _ready.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
-- `player_capacity.gd`: limite de jogadores por servidor separado da tela dividida (`--max-players=N`, padrao 32; ate 4 locais por computador) e spawn em aneis para quem passa dos 4 marcadores.
+- `player_capacity.gd`: limite de jogadores por servidor separado da tela dividida (`--max-players=N`, padrao 8; ate 4 locais por computador) e spawn em aneis para quem passa dos 4 marcadores.
 - `player_slots_replication.gd`: decide quando os slots de arma entram no snapshot (3 snapshots apos cada mudanca e refresh a cada 20 com fase por jogador).
 - `player_snapshot_codec.gd`: snapshot binario de jogadores (47 bytes sem slots de arma), varios por pacote abaixo do MTU e codificado uma vez para todos os peers.
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
