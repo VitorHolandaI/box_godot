@@ -380,9 +380,10 @@ func _test_spawn_locations_stay_in_forest(test_root: Node) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 424242
 	var locator := ZOMBIE_SPAWN_LOCATOR_SCRIPT.new(rng)
-	# Floresta e o modo classico; o padrao do NetworkSession virou sobrevivencia.
+	# Sobrevivencia e o padrao: spawns agora vao SEMPRE para a floresta,
+	# fora dos muros, incluindo o modo sobrevivencia.
 	var previous_survival_mode := NetworkSession.survival_mode
-	NetworkSession.survival_mode = false
+	NetworkSession.survival_mode = true
 	for _attempt in 40:
 		var spawn_position: Vector3 = locator.pick_spawn_position(test_root.get_tree())
 		var radius := Vector2(spawn_position.x, spawn_position.z).length()
