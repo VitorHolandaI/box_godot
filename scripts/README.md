@@ -36,12 +36,15 @@ Logica de jogo, rede, interface e testes automatizados.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
 - `player_capacity.gd`: limite de jogadores por servidor separado da tela dividida (`--max-players=N`, padrao 32; ate 4 locais por computador) e spawn em aneis para quem passa dos 4 marcadores.
+- `player_slots_replication.gd`: decide quando os slots de arma entram no snapshot (3 snapshots apos cada mudanca e refresh a cada 20 com fase por jogador).
+- `player_snapshot_codec.gd`: snapshot binario de jogadores (47 bytes sem slots de arma), varios por pacote abaixo do MTU e codificado uma vez para todos os peers.
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
 - `server_tick_policy.gd`: servidor dedicado roda fisica a 30 Hz com no maximo 2 passos por frame (corta a bola de neve de ticks medida na VPS) e pula o fade visual dos zumbis.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
 - `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador.
 - `test_player_capacity.gd`: regressoes do `--max-players`, da recusa de entrada e do spawn sem empilhar alem de 4 jogadores.
+- `test_player_snapshot_codec.gd`: regressoes do snapshot binario de jogadores (ida e volta, tamanho, 24 jogadores em poucos pacotes, truncado, envio dos slots).
 - `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada por raio entre aliados.

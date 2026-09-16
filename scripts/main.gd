@@ -28,10 +28,12 @@ const SNAPSHOT_INTERVAL := 1.0 / 10.0
 const GROUND_STATE_INTERVAL := 0.5
 # Payload binario por RPC abaixo do MTU do ENet (~1400 bytes com cabecalhos).
 const ZOMBIE_SNAPSHOT_PACKET_BYTES := 1100
-# Um jogador serializado ocupa ~810 bytes (armas, estados de animacao): dois
-# por pacote davam 1624 bytes, acima do MTU (1392), e o snapshot fragmentado se
-# perdia inteiro, deixando municao/vida velhas no cliente.
-const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
+# Jogadores vao em binario (PlayerSnapshotCodec, 47 bytes sem slots de arma),
+# varios por pacote abaixo do MTU: antes 1 jogador (~810 bytes) por RPC por peer
+# dava N x N chamadas e 7-14 ms com 24 jogadores no benchmark da VPS. Dois
+# Dictionaries por pacote davam 1624 bytes (MTU 1392) e o snapshot fragmentado
+# se perdia inteiro, deixando municao/vida velhas no cliente.
+const PLAYER_SNAPSHOT_PACKET_BYTES := 1100
 ## Onda nova chega com centenas de zumbis: o cliente spawna no maximo N por
 ## frame (fila) para nao dar hitch de instantiates sincronos.
 const MAX_ZOMBIE_SPAWNS_PER_FRAME := 2
@@ -106,6 +108,8 @@ var crate_index := 0
 var loot_index := 0
 var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
 var ammo_loot_director = AMMO_LOOT_DIRECTOR_SCRIPT.new()
+var player_slots_replication := PlayerSlotsReplication.new()
+var player_snapshot_sequence := 0
 var loot_rng := RandomNumberGenerator.new()
 ## Armas soltas por zumbis ainda no chao, da mais antiga para a mais nova.
 var zombie_weapon_drops: Array[Node] = []
@@ -643,6 +647,7 @@ func _reconcile_network_players() -> void:
 			continue
 		var player = network_players[key]
 		network_players.erase(key)
+		player_slots_replication.forget(key)
 		if is_instance_valid(player):
 			player.queue_free()
 	_refresh_local_views()
@@ -845,17 +850,22 @@ func _apply_ground_snapshot(supply_states: Array, ground_weapons: Array) -> void
 
 
 func _send_player_snapshots(states: Array) -> void:
-	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
 	var door := _find_safehouse_door()
 	var door_open := door != null and bool(door.call("is_open_requested"))
-	for packet_index in packet_count:
-		var packet_states: Array = []
-		var first_state := packet_index * MAX_PLAYERS_PER_SNAPSHOT_PACKET
-		var state_limit := mini(first_state + MAX_PLAYERS_PER_SNAPSHOT_PACKET, states.size())
-		for state_index in range(first_state, state_limit):
-			packet_states.append(states[state_index])
+	var include_slots: Dictionary = {}
+	for state_value in states:
+		var state := state_value as Dictionary
+		var slots: Variant = state.get("weapon_slots")
+		var revision := int((slots as Dictionary).get("revision", 0)) if slots is Dictionary else 0
+		var key := String(state.get("key", ""))
+		if player_slots_replication.should_include(key, revision, player_snapshot_sequence):
+			include_slots[key] = true
+	player_snapshot_sequence += 1
+	# Cada pacote e codificado uma vez; os mesmos bytes vao para todos os peers.
+	for packet_states in PlayerSnapshotCodec.split_into_packets(states, include_slots, PLAYER_SNAPSHOT_PACKET_BYTES):
+		var payload := PlayerSnapshotCodec.encode(packet_states, include_slots)
 		for peer_id in NetworkSession.loaded_peers:
-			_apply_player_snapshot.rpc_id(int(peer_id), packet_states, door_open)
+			_apply_player_snapshot.rpc_id(int(peer_id), payload, door_open)
 
 
 ## Portas dos predios: estado completo (confiavel) para quem acabou de carregar
@@ -904,16 +914,13 @@ func _find_safehouse_door() -> Node:
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func _apply_player_snapshot(player_states: Array, door_open: bool) -> void:
+func _apply_player_snapshot(payload: PackedByteArray, door_open: bool) -> void:
 	if not NetworkSession.is_client():
 		return
 	var door := _find_safehouse_door()
 	if door != null:
 		door.call("apply_network_open_state", door_open)
-	for state_value in player_states:
-		if not state_value is Dictionary:
-			continue
-		var state: Dictionary = state_value
+	for state in PlayerSnapshotCodec.decode(payload):
 		var player = network_players.get(String(state.get("key", "")))
 		if player != null:
 			player.apply_network_state(state)
