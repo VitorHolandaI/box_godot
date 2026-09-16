@@ -24,7 +24,9 @@ Logica de jogo, rede, interface e testes automatizados.
 - `door_state_replicator.gd`: no servidor, junta as mudancas de portas e marca quem ja recebeu o estado completo; vai por RPC confiavel, fora do snapshot.
 - `frame_perf_probe.gd`: sonda de custo por frame (ligada por padrao, `--perf-probe=off` desliga): `perf_report` a cada 5 s com FPS, p95, frames fora do orcamento de 60 Hz, ticks de fisica extras e custo por secao; `perf_hitch` em frame >= 33 ms com a quebra daquele frame.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
-- `in_game_menu.gd`: pausa local, navegacao e botao "Destravar personagem" durante a partida.
+- `in_game_menu.gd`: pausa local, navegacao, configuracoes e teclas (Esc) e botao "Destravar personagem" durante a partida.
+- `in_game_settings_panel.gd`: configuracoes abertas pelo Esc na partida: graficos e teclas de cada jogador local, valendo na hora.
+- `keybinding_editor.gd`: troca de teclas compartilhada pelo menu principal e pelo menu do Esc (rotulos das acoes, captura por dispositivo e nome curto da tecla).
 - `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
 - `local_host_launcher.gd`: "Hospedar partida" do menu: sobe o servidor dedicado como processo filho headless, entra por 127.0.0.1, encerra ao voltar ao menu/fechar o jogo e o filho sai sozinho sem peers (`--host-idle-exit=`).
 - `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos que so somem longe dos jogadores e bot de teste.
@@ -49,6 +51,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_cone_weapons.gd`: regressoes da motosserra e do lanca-chamas (cone com linha de visao, sem empurrao, fogo que queima, espalha e apaga).
 - `test_equipment.gd`: regressoes dos itens (contagem, teclas sem conflito, granada no pavio, arremesso de granada e faca, item de granadas no chao).
 - `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador; municao automatica ao passar pela mesma arma.
+- `test_in_game_settings.gd`: regressoes das configuracoes na partida (captura por dispositivo, tecla nova no InputMap, menu do Esc abrindo graficos e teclas).
 - `test_player_capacity.gd`: regressoes do `--max-players`, da recusa de entrada e do spawn sem empilhar alem de 4 jogadores.
 - `test_player_snapshot_codec.gd`: regressoes do snapshot binario de jogadores (ida e volta, tamanho, 24 jogadores em poucos pacotes, truncado, envio dos slots).
 - `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
