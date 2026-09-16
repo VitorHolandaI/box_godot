@@ -16,6 +16,7 @@ const SURVIVAL_TESTS_SCRIPT := preload("res://scripts/test_survival_mode.gd")
 const COLLISION_BOUNDARY_TESTS_SCRIPT := preload("res://scripts/test_collision_boundaries.gd")
 const BUILDING_NAVIGATION_TESTS_SCRIPT := preload("res://scripts/test_building_navigation.gd")
 const DOOR_BREAKING_TESTS_SCRIPT := preload("res://scripts/test_door_breaking.gd")
+const SAFEHOUSE_DOOR_TESTS_SCRIPT := preload("res://scripts/test_safehouse_door.gd")
 const NETWORK_LAG_PROBE_TESTS_SCRIPT := preload("res://scripts/test_network_lag_probe.gd")
 const CITY_PROPS_TESTS_SCRIPT := preload("res://scripts/test_city_props.gd")
 const CORPSE_CLEANUP_TESTS_SCRIPT := preload("res://scripts/test_corpse_cleanup.gd")
@@ -54,6 +55,7 @@ const FOCUSED_TEST_GROUPS := {
 	"zombie_snapshot_codec": ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT,
 	"building_navigation": BUILDING_NAVIGATION_TESTS_SCRIPT,
 	"door_breaking": DOOR_BREAKING_TESTS_SCRIPT,
+	"safehouse_door": SAFEHOUSE_DOOR_TESTS_SCRIPT,
 	"city_props": CITY_PROPS_TESTS_SCRIPT,
 	"network_lag_probe": NETWORK_LAG_PROBE_TESTS_SCRIPT,
 }
@@ -80,6 +82,7 @@ func _ready() -> void:
 	SURVIVAL_TESTS_SCRIPT.new().run(self)
 	await BUILDING_NAVIGATION_TESTS_SCRIPT.new().run(self)
 	await DOOR_BREAKING_TESTS_SCRIPT.new().run(self)
+	await SAFEHOUSE_DOOR_TESTS_SCRIPT.new().run(self)
 	await APARTMENT_LAYOUT_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_UNSTUCK_TESTS_SCRIPT.new().run(self)
 	await PLAYER_UNSTUCK_TESTS_SCRIPT.new().run(self)
