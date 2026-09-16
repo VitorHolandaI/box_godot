@@ -111,7 +111,8 @@ func _test_cone_weapons_in_arsenal(test_root: Node) -> void:
 	print("Testando motosserra e lanca-chamas no arsenal...")
 	var saw := WeaponStats.stats_for(WeaponStats.Kind.CHAINSAW)
 	var flame := WeaponStats.stats_for(WeaponStats.Kind.FLAMETHROWER)
-	var saw_ok := float(saw.get("cone_range", 0.0)) > 0.0 and bool(saw.get("is_auto", false)) and not saw.has("burn_seconds")
+	# Pedido de jogo: 2,2 m era curto demais; a motosserra alcanca pelo menos 3,5 m.
+	var saw_ok := float(saw.get("cone_range", 0.0)) >= 3.5 and bool(saw.get("is_auto", false)) and not saw.has("burn_seconds")
 	var flame_ok := float(flame.get("cone_range", 0.0)) > float(saw.get("cone_range", 0.0)) and float(flame.get("burn_seconds", 0.0)) > 0.0 and bool(flame.get("is_auto", false))
 	if not saw_ok or not flame_ok:
 		_fail(test_root, "Motosserra: cone curto automatico sem fogo; lanca-chamas: cone maior, automatico e incendeia; serra=%s chamas=%s." % [saw, flame])

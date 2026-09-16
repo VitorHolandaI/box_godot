@@ -111,7 +111,9 @@ func _ready() -> void:
 	await APARTMENT_LAYOUT_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_UNSTUCK_TESTS_SCRIPT.new().run(self)
 	await PLAYER_UNSTUCK_TESTS_SCRIPT.new().run(self)
-	NETWORK_JOIN_SYNC_TESTS_SCRIPT.new().run(self)
+	# Grupos com await precisam ser aguardados: senao os testes finais rodavam
+	# depois da contagem de falhas e um erro passava despercebido.
+	await NETWORK_JOIN_SYNC_TESTS_SCRIPT.new().run(self)
 	AMMO_LOOT_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_NEW_VARIANTS_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_BOSS_TESTS_SCRIPT.new().run(self)
@@ -120,7 +122,7 @@ func _ready() -> void:
 	await SAFEHOUSE_ROOF_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_BODY_SCALE_TESTS_SCRIPT.new().run(self)
 	await WEAPON_ARSENAL_TESTS_SCRIPT.new().run(self)
-	ZOMBIE_SPECIALS_TESTS_SCRIPT.new().run(self)
+	await ZOMBIE_SPECIALS_TESTS_SCRIPT.new().run(self)
 	await GROUND_WEAPON_PICKUP_TESTS_SCRIPT.new().run(self)
 	NETWORK_LAG_PROBE_TESTS_SCRIPT.new().run(self)
 	FRAME_PERF_PROBE_TESTS_SCRIPT.new().run(self)
