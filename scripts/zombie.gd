@@ -220,16 +220,10 @@ func _run_physics_tick(delta: float) -> void:
 		var target_rotation := lerp_angle(_snapshot_prev_rotation, _snapshot_next_rotation, snapshot_t)
 		var motion := target_pos - global_position
 		if motion.length_squared() > 0.00001:
-			# Bote em andamento: o servidor ja validou o arco, o proxy que
-			# colidia com a horda ficava perched no ar; segue sem colisao.
-			if target_pos.y > global_position.y + 0.6:
-				global_position = target_pos
-			else:
-				var move_start := FramePerfProbe.begin()
-				var col := move_and_collide(motion)
-				if col != null:
-					move_and_collide(col.get_remainder().slide(col.get_normal()))
-				FramePerfProbe.end("sub:zombie_proxy_move_and_collide", move_start)
+			# Posicao ja validada pelo servidor: segue direto. move_and_collide
+			# no proxy custava ate 4 ms/frame e a fisica do client 8-10 ms com a
+			# horda de 200 na tela (teste na VPS, ec6aee7).
+			global_position = target_pos
 		rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
 		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
 		hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
@@ -256,7 +250,7 @@ func _run_physics_tick(delta: float) -> void:
 	var dash: RefCounted = _dash_for_type()
 	var leaping: bool = dash != null and dash.is_leaping()
 	if has_active_target:
-		var simulated_delta: float = tick_budget.consume(delta, int(lod_level), player_distance_sq, leaping)
+		var simulated_delta: float = tick_budget.consume(delta, int(lod_level), player_distance_sq, leaping, Engine.get_physics_frames())
 		if simulated_delta <= 0.0:
 			return
 		delta = simulated_delta

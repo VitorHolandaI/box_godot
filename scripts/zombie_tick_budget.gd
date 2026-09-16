@@ -8,7 +8,7 @@ extends RefCounted
 ## espalha a horda entre os ticks em vez de todos rodarem no mesmo.
 ## Uso:
 ##   var budget := ZombieTickBudget.new(network_id)
-##   var sim_delta := budget.consume(delta, lod_level, player_distance_sq, dash_is_leaping)
+##   var sim_delta := budget.consume(delta, lod_level, player_distance_sq, dash_is_leaping, Engine.get_physics_frames())
 ##   if sim_delta > 0.0: simular(sim_delta)
 
 const CLOSE_TICK_STRIDE := 1
@@ -23,10 +23,25 @@ const MID_TICK_STRIDE := 3
 const FAR_TICK_STRIDE := 6
 const LOD_MID := 1
 const LOD_FAR := 2
+## Teto de ticks completos de IA por tick de fisica, somando todos os zumbis.
+## Na VPS a horda inteira convergindo no jogador (tudo a < 22 m) levou a IA a
+## 15-21 ms/frame mesmo com os intervalos por distancia (ec6aee7).
+const MAX_FULL_TICKS_PER_FRAME := 48
+## Sem vaga, o zumbi espera no maximo esses ticks extras e roda mesmo assim.
+const MAX_OVERLOAD_EXTRA_TICKS := 3
+
+static var _slot_frame := -1
+static var _slots_used := 0
+## Vagas reservadas neste tick para quem ficou sem vaga no tick anterior: sem
+## isso os primeiros da arvore ganhavam sempre e os ultimos so no limite.
+static var _reserved_for_owed := 0
+static var _owed_this_frame := 0
 
 var _phase := 0
 var _tick_counter := 0
 var _accumulated_delta := 0.0
+var _ticks_waiting := 0
+var _owed := false
 
 
 ## `phase_seed` distribui zumbis entre os ticks (id de rede ou hash do nome).
@@ -36,15 +51,47 @@ func _init(phase_seed: int = 0) -> void:
 
 ## Tempo a simular neste tick (soma dos ticks pulados) ou 0.0 quando o tick e
 ## pulado. Em voo (bote/investida) roda sempre: o arco precisa de todo tick.
-## Uso: var sim_delta := budget.consume(delta, int(lod_level), player_distance_sq, leaping)
-func consume(delta: float, lod_level: int, player_distance_sq: float, leaping: bool) -> float:
+## `physics_frame` separa as vagas globais de cada tick de fisica.
+## Uso: var sim_delta := budget.consume(delta, int(lod_level), player_distance_sq, leaping, Engine.get_physics_frames())
+func consume(delta: float, lod_level: int, player_distance_sq: float, leaping: bool, physics_frame: int) -> float:
 	_tick_counter += 1
+	_ticks_waiting += 1
 	_accumulated_delta += maxf(delta, 0.0)
-	if not leaping and (_tick_counter + _phase) % stride_for(lod_level, player_distance_sq) != 0:
+	var stride := stride_for(lod_level, player_distance_sq)
+	if not leaping and not _owed and (_tick_counter + _phase) % stride != 0:
 		return 0.0
+	var forced := leaping or _ticks_waiting >= stride + MAX_OVERLOAD_EXTRA_TICKS
+	if not _take_slot(physics_frame, _owed, forced):
+		_owed = true
+		_owed_this_frame += 1
+		return 0.0
+	_owed = false
+	_ticks_waiting = 0
 	var simulated := _accumulated_delta
 	_accumulated_delta = 0.0
 	return simulated
+
+
+## Isola testes que simulam varios ticks de fisica com numeros repetidos.
+## Uso: ZombieTickBudget.reset_frame_slots()
+static func reset_frame_slots() -> void:
+	_slot_frame = -1
+	_slots_used = 0
+	_reserved_for_owed = 0
+	_owed_this_frame = 0
+
+
+static func _take_slot(physics_frame: int, owed: bool, forced: bool) -> bool:
+	if physics_frame != _slot_frame:
+		_slot_frame = physics_frame
+		_slots_used = 0
+		_reserved_for_owed = mini(_owed_this_frame, MAX_FULL_TICKS_PER_FRAME)
+		_owed_this_frame = 0
+	var limit := MAX_FULL_TICKS_PER_FRAME if owed else MAX_FULL_TICKS_PER_FRAME - _reserved_for_owed
+	if not forced and _slots_used >= limit:
+		return false
+	_slots_used += 1
+	return true
 
 
 ## `player_distance_sq` vem do flock (0 quando desconhecida = todo tick).

@@ -15,6 +15,9 @@ static func instantiate_proxy(zombie_scene: PackedScene, zombie_name: String, st
 	var zombie := zombie_scene.instantiate() as CharacterBody3D
 	zombie.name = zombie_name
 	zombie.set("simulation_enabled", false)
+	# Proxy so segue a posicao validada pelo servidor: sem mascara nao consulta
+	# colisao (a camada fica, para tiros e tracers ainda acertarem o corpo).
+	zombie.collision_mask = 0
 	var zombie_type := int(state.get("zombie_type", -1))
 	if zombie_type >= 0:
 		zombie.set("forced_variant", zombie_type)
