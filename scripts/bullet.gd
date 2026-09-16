@@ -32,6 +32,7 @@ func setup(new_direction: Vector3, new_damage: int, new_causes_damage: bool = tr
 
 
 func _physics_process(delta: float) -> void:
+	_drop_disconnected_shooter()
 	var next_position := global_position + direction * speed * delta
 	if causes_damage:
 		_advance_damaging(next_position, delta)
@@ -96,12 +97,20 @@ static func first_hit_collider(space: PhysicsDirectSpaceState3D, from: Vector3, 
 
 
 func _apply_damage(collider: Object) -> void:
+	_drop_disconnected_shooter()
 	var target: Node = collider as Node
 	while target != null:
 		if target.has_method("take_damage"):
 			target.take_damage(damage, direction, "bullet", shooter)
 			return
 		target = target.get_parent()
+
+
+## Atirador que desconectou com a bala em voo vira instancia liberada: passar
+## ela tipada (take_damage, get_rid) dava SCRIPT ERROR. A bala segue sem dono.
+func _drop_disconnected_shooter() -> void:
+	if not is_instance_valid(shooter):
+		shooter = null
 
 
 ## Hitscan instantaneo de pellet: um ray por pellet, sem Node3D nem fila de
