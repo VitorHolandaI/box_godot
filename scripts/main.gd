@@ -116,8 +116,9 @@ func _ready() -> void:
 	loot_rng.randomize()
 	in_game_menu.unstuck_requested.connect(_on_unstuck_requested)
 	survival_wave_controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(Callable(self, "_spawn_zombie"))
-	survival_wave_controller.wave_index = 7 # Horda 8 fixa para teste (pedido: comecar da 8)
-	print("WAVE DEBUG iniciado na horda ", survival_wave_controller.wave_index + 1)
+	if NetworkSession.is_server() or "--test-wave=8" in OS.get_cmdline_user_args() or "--test-wave-8" in OS.get_cmdline_user_args():
+		survival_wave_controller.wave_index = 7 # Horda 8 fixa para teste (pedido: comecar da 8)
+		print("WAVE DEBUG iniciado na horda ", survival_wave_controller.wave_index + 1)
 	# Debug: pula direto para onda especifica e prespawn para teste de carga
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--test-wave="):
