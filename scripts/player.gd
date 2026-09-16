@@ -11,7 +11,7 @@ signal crate_weapon_dropped(kind: int, mag: int, reserve: int, durability: int)
 
 ## Ordem segue WeaponStats.Kind: as armas de crate ficam por ultimo.
 ## Mesma ordem de WeaponStats.Kind (os inteiros viajam na rede e nos slots).
-enum Weapon { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE, SAWED_OFF, AUTO_SHOTGUN, LASER_RIFLE, PLASMA_SMG, RAILGUN, AK47, M4, AUG, BERETTA, SNIPER, BAZOOKA, CROSSBOW, GRENADE_LAUNCHER }
+enum Weapon { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE, SAWED_OFF, AUTO_SHOTGUN, LASER_RIFLE, PLASMA_SMG, RAILGUN, AK47, M4, AUG, BERETTA, SNIPER, BAZOOKA, CROSSBOW, GRENADE_LAUNCHER, CHAINSAW, FLAMETHROWER }
 
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const KNIFE_ATTACK_DURATION := 0.4
@@ -430,6 +430,9 @@ func _fire_pellets(weapon_kind: int) -> void:
 	if base_direction.is_zero_approx():
 		base_direction = -global_transform.basis.z
 	var origin := global_position + Vector3.UP * 0.55
+	if stats.has("cone_range"):
+		_fire_cone_weapon(weapon_kind, stats, origin, base_direction)
+		return
 	for pellet_index in pellet_count:
 		var angle_offset := 0.0
 		if pellet_count > 1:
@@ -448,6 +451,17 @@ func _fire_pellets(weapon_kind: int) -> void:
 		AudioFeedback.play_gunshot(origin, weapon_kind)
 	if NetworkSession.is_server():
 		get_tree().current_scene.replicate_bullet_visual(origin, base_direction, pellet_count, spread_deg, weapon_kind)
+
+
+## Motosserra/lanca-chamas: dano em cone no tick, visual de labareda/faisca.
+func _fire_cone_weapon(weapon_kind: int, stats: Dictionary, origin: Vector3, direction: Vector3) -> void:
+	WeaponConeAttack.strike(get_tree(), origin, direction, stats, self)
+	ZombieFlockCoordinator.relay_sound(get_tree(), origin, float(stats["noise_radius"]))
+	if NetworkSession.is_offline():
+		WeaponConeVisual.spawn(get_tree().current_scene, origin, direction, weapon_kind)
+		AudioFeedback.play_gunshot(origin, weapon_kind)
+	if NetworkSession.is_server():
+		get_tree().current_scene.replicate_bullet_visual(origin, direction, 1, 0.0, weapon_kind)
 
 
 ## Tracer de pellet: menor e deslocado em leque, para NAO parecer o tracer

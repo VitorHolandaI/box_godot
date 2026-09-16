@@ -154,6 +154,8 @@ var progress_watch = PROGRESS_WATCH_SCRIPT.new()
 var wall_detour = WALL_DETOUR_SCRIPT.new()
 ## Longe dos jogadores a perseguicao roda a cada 2/4 ticks (fase pelo nome).
 var tick_budget := ZombieTickBudget.new()
+## Fogo do lanca-chamas (dano com o tempo e espalha para vizinhos).
+var burn := ZombieBurn.new()
 var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
 var charge_state = VARIANT_ABILITIES_SCRIPT.ChargeState.new()
 var spit_state = VARIANT_ABILITIES_SCRIPT.SpitState.new()
@@ -255,6 +257,9 @@ func _run_physics_tick(delta: float) -> void:
 			return
 		delta = simulated_delta
 
+	burn.update(self, delta)
+	if is_dead:
+		return
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	target_switch_cooldown = maxf(target_switch_cooldown - delta, 0.0)
 	attack_animation_time = maxf(attack_animation_time - delta, 0.0)
@@ -759,7 +764,9 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 	hit_direction = attack_direction.normalized()
 	hit_kind = damage_kind
 	# O Tita nao recua com tiro: 10000 de vida empurrado a cada bala nunca chegaria.
-	if int(zombie_type) != ZombieType.TITAN:
+	# Fogo e motosserra acertam 2-10x por segundo: empurrar a cada tick jogava o
+	# zumbi longe e o travava em reacao sem fim.
+	if int(zombie_type) != ZombieType.TITAN and damage_kind != "fire" and damage_kind != "saw":
 		hit_reaction_time = HIT_REACTION_DURATION
 		velocity += hit_direction * (4.2 if damage_kind == "bullet" else 3.2) + Vector3.UP * 1.0
 	if health == 0:
@@ -771,6 +778,24 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 			alert_target = attacker
 			alert_forget_timer = ALERT_FORGET_TIME
 			_alert_nearby_zombies(attacker)
+
+
+## Incendeia (lanca-chamas); a autoridade avisa os clientes para mostrar o fogo.
+## Uso: zombie.ignite(4.0, 12.0, player)
+func ignite(seconds: float, dps: float, source: Node) -> void:
+	ignite_spread(seconds, dps, source, 0)
+
+
+## Fogo vindo de um vizinho em chamas (geracao conta os saltos).
+## Uso: zombie.ignite_spread(3.0, 12.0, player, 1)
+func ignite_spread(seconds: float, dps: float, source: Node, from_generation: int) -> void:
+	if is_dead or not simulation_enabled:
+		return
+	if not burn.ignite(seconds, dps, source, from_generation):
+		return
+	var scene := get_tree().current_scene if is_inside_tree() else null
+	if scene != null and scene.has_method("show_zombie_burning"):
+		scene.call("show_zombie_burning", self, seconds)
 
 
 func _find_closest_living_player() -> CharacterBody3D:
