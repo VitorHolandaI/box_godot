@@ -8,7 +8,7 @@ extends Area3D
 ##   item.setup(GroundSupplyPickup.Kind.HEALTH, 35)
 ##   tree.current_scene.add_child(item)
 
-enum Kind { HEALTH, AMMO, AMMO_SHOTGUN, AMMO_UZI, AMMO_MAGNUM, AMMO_DOUBLE_BARREL, AMMO_CARBINE, AMMO_SAWED_OFF, AMMO_AUTO_SHOTGUN, AMMO_LASER, AMMO_PLASMA, AMMO_RAIL, AMMO_AK47, AMMO_M4, AMMO_AUG, AMMO_BERETTA, AMMO_SNIPER, AMMO_ROCKET, AMMO_BOLT, AMMO_GRENADE }
+enum Kind { HEALTH, AMMO, AMMO_SHOTGUN, AMMO_UZI, AMMO_MAGNUM, AMMO_DOUBLE_BARREL, AMMO_CARBINE, AMMO_SAWED_OFF, AMMO_AUTO_SHOTGUN, AMMO_LASER, AMMO_PLASMA, AMMO_RAIL, AMMO_AK47, AMMO_M4, AMMO_AUG, AMMO_BERETTA, AMMO_SNIPER, AMMO_ROCKET, AMMO_BOLT, AMMO_GRENADE, AMMO_GAS, AMMO_NAPALM }
 
 ## Item de municacao de classe alimenta a reserva da arma daquela classe.
 const KIND_TO_WEAPON: Dictionary = {
@@ -30,6 +30,8 @@ const KIND_TO_WEAPON: Dictionary = {
 	Kind.AMMO_ROCKET: WeaponStats.Kind.BAZOOKA,
 	Kind.AMMO_BOLT: WeaponStats.Kind.CROSSBOW,
 	Kind.AMMO_GRENADE: WeaponStats.Kind.GRENADE_LAUNCHER,
+	Kind.AMMO_GAS: WeaponStats.Kind.CHAINSAW,
+	Kind.AMMO_NAPALM: WeaponStats.Kind.FLAMETHROWER,
 }
 
 ## Cor e etiqueta por classe: antes toda caixa de municao era igual e ninguem
@@ -54,6 +56,8 @@ const CLASS_COLORS: Dictionary = {
 	Kind.AMMO_ROCKET: Color(1.0, 0.25, 0.1),
 	Kind.AMMO_BOLT: Color(0.7, 0.55, 0.35),
 	Kind.AMMO_GRENADE: Color(0.45, 0.85, 0.15),
+	Kind.AMMO_GAS: Color(0.95, 0.6, 0.2),
+	Kind.AMMO_NAPALM: Color(0.85, 0.15, 0.05),
 }
 const CLASS_LABELS: Dictionary = {
 	Kind.AMMO: "PISTOLA",
@@ -75,6 +79,8 @@ const CLASS_LABELS: Dictionary = {
 	Kind.AMMO_ROCKET: "FOGUETE",
 	Kind.AMMO_BOLT: "SETAS",
 	Kind.AMMO_GRENADE: "GRANADAS",
+	Kind.AMMO_GAS: "GASOLINA",
+	Kind.AMMO_NAPALM: "NAPALM",
 }
 const DEFAULT_LIFETIME := 180.0
 ## Municao de classe tocada por quem nao tem aquela arma vira balas de pistola:
