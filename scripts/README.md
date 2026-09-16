@@ -3,6 +3,7 @@
 Logica de jogo, rede, interface e testes automatizados.
 
 - `acid_puddle.gd`: poca de acido do cuspidor que queima jogadores no raio e some em 5 s (visual no cliente).
+- `air_strike.gd`: ataque aereo chamado pelo jogador: fumaca no alvo a 14 m e, apos 2,5 s, 6 bombas em linha que ferem zumbis e portas.
 - `ammo_loot_director.gd`: loot farto: reposicao de municao a cada 30 s ate 5 itens por classe, queda de municao (8%, meia carga) e de arma usada (30%, ate 30 no chao por 90 s) ao matar zumbi.
 - `ammo_pickup.gd`: caixa de municao militar coletavel, recarga de reserva e sincronizacao de rede.
 - `benchmark_indoor_escape.gd`: benchmark de zumbis presos em casas (`--benchmark-indoor-escape`, `--closed-doors`, `--sample-frames=N`) com tempo de script por frame e contagem de fugas.
@@ -36,13 +37,14 @@ Logica de jogo, rede, interface e testes automatizados.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
 - `player_capacity.gd`: limite de jogadores por servidor separado da tela dividida (`--max-players=N`, padrao 8; ate 4 locais por computador) e spawn em aneis para quem passa dos 4 marcadores.
-- `player_equipment.gd`: contagem de granadas, facas de arremesso, ataques aereos e SWAT (inicio, maximo, consumo e 4 bytes no snapshot).
+- `player_equipment.gd`: contagem de granadas, facas de arremesso, ataques aereos e SWAT (inicio, maximo, consumo e 4 bytes no snapshot). Ganha ataque aereo a cada 3 ondas e SWAT a cada 5.
 - `player_slots_replication.gd`: decide quando os slots de arma entram no snapshot (3 snapshots apos cada mudanca e refresh a cada 20 com fase por jogador).
 - `player_snapshot_codec.gd`: snapshot binario de jogadores (47 bytes sem slots de arma), varios por pacote abaixo do MTU e codificado uma vez para todos os peers.
 - `player_throwables.gd`: uso dos itens na autoridade: granada em arco, faca de arremesso silenciosa que atravessa 2 e pedido de ataque aereo/SWAT a cena.
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
 - `server_tick_policy.gd`: servidor dedicado roda fisica a 30 Hz com no maximo 2 passos por frame (corta a bola de neve de ticks medida na VPS) e pula o fade visual dos zumbis.
+- `swat_squad.gd`: esquadrao SWAT de 3 soldados que segue quem chamou por 20 s atirando no zumbi mais perto (posicoes replicadas a 10 Hz).
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
 - `test_cone_weapons.gd`: regressoes da motosserra e do lanca-chamas (cone com linha de visao, sem empurrao, fogo que queima, espalha e apaga).
 - `test_equipment.gd`: regressoes dos itens (contagem, teclas sem conflito, granada no pavio, arremesso de granada e faca, item de granadas no chao).
@@ -52,6 +54,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada por raio entre aliados.
+- `test_support_calls.gd`: regressoes das chamadas de apoio (cargas por onda, bombardeio em linha apos o atraso, SWAT seguindo, atirando e indo embora).
 - `test_weapon_arsenal.gd`: regressoes do arsenal: cada arma de crate ligada em municao, drop, crate e modelo, railgun atravessando a fila e tracers futuristas. Inclui o papel da besta (silenciosa, perfura) e do lanca-granadas (area).
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
 - `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
