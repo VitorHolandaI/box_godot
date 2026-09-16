@@ -49,6 +49,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
 - `test_zombie_specials.gd`: regressoes do cuspidor, da investida, dos tipos acima de 15 no snapshot e das especiais desde a hora 1.
+- `test_zombie_tick_budget.gd`: regressoes do orcamento de tick, zumbi parado batendo, alvo desconectado liberado e flock espalhando hordas entre ticks.
 - `weapon_sound_synth.gd`: sons de tiro sintetizados por perfil (pistola, SMG, fuzil, escopeta, sniper, bazuca, laser, plasma, railgun).
 - `weapon_stats.gd`: tabela unica das 16 armas de crate (escopetas, AK-47, M4, AUG, Beretta, sniper, bazuca, laser, plasma, railgun...) com cor, modelo, tracer, perfuracao e explosao.
 - `weapon_slots.gd`: inventario do slot de arma de crate (pente, reserva, durabilidade) com revisao para o snapshot.
@@ -101,6 +102,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie_indoor_router.gd`: caminho do zumbi pelo navmesh do edificio, replanejado em intervalos com jitter.
 - `player_unstuck_locator.gd`: acha espaco livre acima ou ao redor do jogador para o botao "Destravar personagem".
 - `zombie_progress_watch.gd`: mede se o zumbi perseguindo avanca (tempo parado e tempo sem se aproximar do alvo).
+- `zombie_tick_budget.gd`: orcamento de simulacao por zumbi perseguindo (todo tick ate 10 m, 15 Hz ate 22 m, 10 Hz ate 50 m, 5 Hz alem) e zumbi batendo parado sem move_and_slide; substitui o active set que congelava a horda.
 - `zombie_variant_abilities.gd`: habilidades de variantes: colete do armored, dano em area, arrancadas (bote do leaper, investida, pulo alto do saltador, se jogar do bloater) e cuspe do cuspidor.
 - `zombie_wall_detour.gd`: na rua, segue a parede pela tangente ate a linha ate o alvo ficar livre.
 - `zombie_flock_coordinator.gd`: hordas persistentes com um cerebro, drones, fusao aleatoria de lideres, Boids e LOD.

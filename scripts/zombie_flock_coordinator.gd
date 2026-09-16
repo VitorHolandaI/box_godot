@@ -15,6 +15,13 @@ const PLAYER_SCAN_INTERVAL := 0.25
 const FLOCK_UPDATE_INTERVAL := 0.2
 const CHASE_HEARTBEAT_INTERVAL := 10.0
 const FLOCK_ENABLED := true
+## Hordas prontas sao aplicadas aos poucos: no maximo ~N zumbis por tick (uma
+## horda inteira nunca e partida). Antes a passada inteira caia num frame so e
+## deu pico de 24 ms na VPS com 200 zumbis.
+const FLOCK_ZOMBIES_PER_TICK := 80
+## Duas celulas de 16 m ligam se algum par esta perto; amontoadas, comparar
+## todos contra todos era 200x200. Amostra no maximo N membros de cada lado.
+const LINK_SAMPLE_PER_CELL := 12
 
 static var instance: ZombieFlockCoordinator = null
 ## Diagnostico de zumbis travados (`-- --debug-stuck-zombies`), lido tambem por zombie.gd.
@@ -30,6 +37,7 @@ var _random_source := RandomNumberGenerator.new()
 var _chase_heartbeat_elapsed := 0.0
 ## Lideres de cluster da ultima passada do enxame (0.2s); canal do som.
 var _leader_cache: Array[CharacterBody3D] = []
+var _pending_hordes: Array = []
 ## G7-fase1: luzes de interior so nos predios com alguem perto (~2 Hz).
 const LIGHT_TOGGLE_INTERVAL := 0.5
 const LIGHT_MARGIN := 10.0
@@ -135,15 +143,29 @@ func _physics_process(delta: float) -> void:
 	if not FLOCK_ENABLED:
 		return
 	_flock_update_elapsed += delta
-	if _flock_update_elapsed < FLOCK_UPDATE_INTERVAL:
-		return
-	var update_delta := _flock_update_elapsed
-	_flock_update_elapsed = 0.0
 	var perf_start := FramePerfProbe.begin()
-	_update_cached_players(update_delta)
-	_update_flock_clusters()
+	if _pending_hordes.is_empty() and _flock_update_elapsed >= FLOCK_UPDATE_INTERVAL:
+		var update_delta := _flock_update_elapsed
+		_flock_update_elapsed = 0.0
+		_update_cached_players(update_delta)
+		_update_flock_clusters()
+		_log_chase_heartbeat(update_delta)
+	_drain_pending_hordes()
 	FramePerfProbe.end("flock", perf_start)
-	_log_chase_heartbeat(update_delta)
+
+
+## Aplica lideranca e boids das hordas enfileiradas ate o limite do tick.
+## Uso: chamado em _physics_process; testes chamam _physics_process(0.2).
+func _drain_pending_hordes() -> void:
+	var processed := 0
+	while not _pending_hordes.is_empty():
+		var next_size := (_pending_hordes.back() as Array).size()
+		# A primeira horda do tick sempre roda, mesmo maior que o teto.
+		if processed > 0 and processed + next_size > FLOCK_ZOMBIES_PER_TICK:
+			return
+		var horde: Array[CharacterBody3D] = _pending_hordes.pop_back()
+		processed += horde.size()
+		_process_cluster(horde)
 
 
 ## Diagnostico com --debug-stuck-zombies: prova que houve perseguicao quando o
@@ -243,16 +265,20 @@ func _process_connected_hordes() -> void:
 						continue
 					if _cells_are_linked(current_cell, neighbor):
 						pending_cells.append(neighbor)
-		_process_cluster(horde)
+		_pending_hordes.append(horde)
 
 
 func _cells_are_linked(first_cell: Vector2i, second_cell: Vector2i) -> bool:
 	var first_members: Array[CharacterBody3D] = _spatial_cells[first_cell]
 	var second_members: Array[CharacterBody3D] = _spatial_cells[second_cell]
-	for first in first_members:
+	var first_stride := maxi(floori(float(first_members.size()) / LINK_SAMPLE_PER_CELL), 1)
+	var second_stride := maxi(floori(float(second_members.size()) / LINK_SAMPLE_PER_CELL), 1)
+	for first_index in range(0, first_members.size(), first_stride):
+		var first = first_members[first_index]
 		if not is_instance_valid(first) or bool(first.get("is_dead")):
 			continue
-		for second in second_members:
+		for second_index in range(0, second_members.size(), second_stride):
+			var second = second_members[second_index]
 			if not is_instance_valid(second) or bool(second.get("is_dead")):
 				continue
 			if first.global_position.distance_squared_to(second.global_position) <= HORDE_LINK_RADIUS_SQ:
@@ -275,6 +301,7 @@ func _apply_distance_lod(zombie: CharacterBody3D) -> void:
 		if d_sq < min_dist_sq:
 			min_dist_sq = d_sq
 
+	zombie.set("player_distance_sq", min_dist_sq)
 	if min_dist_sq <= LOD_NEAR_DIST_SQ:
 		zombie.set("lod_level", 0) # NEAR
 	elif min_dist_sq <= LOD_MID_DIST_SQ:
