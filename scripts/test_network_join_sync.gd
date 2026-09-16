@@ -157,7 +157,8 @@ func _test_survival_ring_has_open_spawn_points(test_root: Node) -> void:
 	var locator = SPAWN_LOCATOR_SCRIPT.new()
 	var open_points := 0
 	var sampled := 0
-	for radius in [SPAWN_LOCATOR_SCRIPT.SURVIVAL_INNER_RADIUS, (SPAWN_LOCATOR_SCRIPT.SURVIVAL_INNER_RADIUS + SPAWN_LOCATOR_SCRIPT.SURVIVAL_OUTER_RADIUS) * 0.5, SPAWN_LOCATOR_SCRIPT.SURVIVAL_OUTER_RADIUS]:
+	# Spawn agora e o anel florestal (fora dos muros), o mesmo do modo classico.
+	for radius in [SPAWN_LOCATOR_SCRIPT.FOREST_INNER_RADIUS, (SPAWN_LOCATOR_SCRIPT.FOREST_INNER_RADIUS + SPAWN_LOCATOR_SCRIPT.FOREST_OUTER_RADIUS) * 0.5, SPAWN_LOCATOR_SCRIPT.FOREST_OUTER_RADIUS]:
 		for step in 72:
 			var angle := TAU * float(step) / 72.0
 			sampled += 1
