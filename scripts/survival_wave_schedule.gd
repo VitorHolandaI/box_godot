@@ -37,8 +37,13 @@ func is_airdrop_wave(wave_index: int) -> bool:
 const VARIANT_MIXES: Array[Dictionary] = [
 	# Hora 1-2: horda basica com especiais leves desde o comeco (pedido de jogo,
 	# estilo Left 4 Dead): leaper, cuspidor, bloater, investida e saltador.
+	# Puxador, curandeiro e espreitador desde a hora 1: so a partir da hora 3 o
+	# jogador nao via a variedade nova nas primeiras hordas.
 	{
-		ZombieMutator.Type.WALKER: 50,
+		ZombieMutator.Type.WALKER: 38,
+		ZombieMutator.Type.SMOKER: 4,
+		ZombieMutator.Type.HEALER: 4,
+		ZombieMutator.Type.STALKER: 4,
 		ZombieMutator.Type.JUMPER: 5,
 		ZombieMutator.Type.LIMPER: 10,
 		ZombieMutator.Type.ONE_ARM: 8,

@@ -47,12 +47,13 @@ func _test_types_registered_in_mixes(test_root: Node) -> void:
 			problems.append("fase %d soma %d" % [stage, total])
 	for type_name in NEW_TYPES:
 		var type_value: int = ZombieMutator.Type[type_name]
-		if not schedule.variant_mix_for_wave(2).has(type_value) or not schedule.variant_mix_for_wave(12).has(type_value):
-			problems.append("%s fora das ondas a partir da hora 3" % type_name)
+		# Na hora 1-2 nao apareciam e o jogador nao via a variedade nova.
+		if not schedule.variant_mix_for_wave(0).has(type_value) or not schedule.variant_mix_for_wave(2).has(type_value) or not schedule.variant_mix_for_wave(12).has(type_value):
+			problems.append("%s fora das ondas desde a hora 1" % type_name)
 	if not problems.is_empty():
 		_fail(test_root, "Especiais novos: %s." % [problems])
 		return
-	print("PASS: Especiais novos registrados e na horda a partir da hora 3.")
+	print("PASS: Especiais novos registrados e na horda desde a hora 1.")
 
 
 func _test_tongue_grab_pull_and_release(test_root: Node) -> void:
