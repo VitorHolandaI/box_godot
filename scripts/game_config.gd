@@ -1,6 +1,6 @@
 extends Node
 
-const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload", "interact", "sonar", "shotgun", "uzi", "magnum", "drop_weapon", "double_barrel", "carbine", "cycle_weapon"]
+const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload", "interact", "sonar", "shotgun", "uzi", "magnum", "drop_weapon", "double_barrel", "carbine", "cycle_weapon", "grenade", "throw_knife", "air_strike", "swat"]
 const SETTINGS_PATH := "user://settings.cfg"
 const MAX_SAVED_SERVERS := 12
 const MIN_SERVER_PORT := 1024
@@ -184,10 +184,10 @@ func configure_local_players(configs: Array[Dictionary]) -> void:
 
 func create_keyboard_config(slot: int) -> Dictionary:
 	var profiles := [
-		[KEY_W, KEY_S, KEY_A, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_F, KEY_1, KEY_2, KEY_R, KEY_E, KEY_Q, KEY_3, KEY_4, KEY_5, KEY_G, KEY_6, KEY_7, KEY_TAB],
-		[KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SHIFT, KEY_CTRL, KEY_ENTER, KEY_DELETE, KEY_END, KEY_PAGEDOWN, KEY_HOME, KEY_PAGEUP, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_INSERT],
-		[KEY_I, KEY_K, KEY_J, KEY_L, KEY_U, KEY_Y, KEY_O, KEY_7, KEY_8, KEY_P, KEY_0, KEY_9, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_BRACKETRIGHT],
-		[KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_G, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_Q, KEY_H, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_T],
+		[KEY_W, KEY_S, KEY_A, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_F, KEY_1, KEY_2, KEY_R, KEY_E, KEY_Q, KEY_3, KEY_4, KEY_5, KEY_G, KEY_6, KEY_7, KEY_TAB, KEY_C, KEY_V, KEY_Z, KEY_X],
+		[KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SHIFT, KEY_CTRL, KEY_ENTER, KEY_DELETE, KEY_END, KEY_PAGEDOWN, KEY_HOME, KEY_PAGEUP, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_INSERT, KEY_KP_1, KEY_KP_2, KEY_KP_3, KEY_KP_0],
+		[KEY_I, KEY_K, KEY_J, KEY_L, KEY_U, KEY_Y, KEY_O, KEY_7, KEY_8, KEY_P, KEY_0, KEY_9, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_BRACKETRIGHT, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD],
+		[KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_G, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_Q, KEY_H, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_T, KEY_SEMICOLON, KEY_APOSTROPHE, KEY_SLASH, KEY_BACKSLASH],
 	]
 	var bindings: Dictionary = {}
 	var profile: Array = profiles[slot % profiles.size()]
@@ -217,6 +217,10 @@ func create_gamepad_config(device_id: int) -> Dictionary:
 	bindings["reload"] = _create_joy_button(device_id, JOY_BUTTON_Y)
 	bindings["interact"] = _create_joy_button(device_id, JOY_BUTTON_DPAD_UP)
 	bindings["sonar"] = _create_joy_button(device_id, JOY_BUTTON_DPAD_RIGHT)
+	bindings["grenade"] = _create_joy_button(device_id, JOY_BUTTON_DPAD_DOWN)
+	bindings["throw_knife"] = _create_joy_button(device_id, JOY_BUTTON_DPAD_LEFT)
+	bindings["air_strike"] = _create_joy_button(device_id, JOY_BUTTON_START)
+	bindings["swat"] = _create_joy_button(device_id, JOY_BUTTON_BACK)
 	return {
 		"device_type": "gamepad",
 		"device_id": device_id,
@@ -244,15 +248,21 @@ func _apply_input_map() -> void:
 				InputMap.action_add_event(mapped_action, event)
 
 
-const FALLBACK_KEYS: Dictionary = {"sonar": KEY_Q, "shotgun": KEY_3, "uzi": KEY_4, "magnum": KEY_5, "drop_weapon": KEY_G, "double_barrel": KEY_6, "carbine": KEY_7, "cycle_weapon": KEY_TAB}
+const FALLBACK_KEYS: Dictionary = {"sonar": KEY_Q, "shotgun": KEY_3, "uzi": KEY_4, "magnum": KEY_5, "drop_weapon": KEY_G, "double_barrel": KEY_6, "carbine": KEY_7, "cycle_weapon": KEY_TAB, "grenade": KEY_C, "throw_knife": KEY_V, "air_strike": KEY_Z, "swat": KEY_X}
 const FALLBACK_JOY_BUTTONS: Dictionary = {
 	"sonar": JOY_BUTTON_DPAD_RIGHT,
-	"shotgun": JOY_BUTTON_DPAD_LEFT,
-	"uzi": JOY_BUTTON_DPAD_DOWN,
+	# Selecao direta de arma foi para as paletas: D-pad e Start/Back ficaram com
+	# granada, faca, ataque aereo e SWAT (no controle ha o ciclo de armas).
+	"shotgun": JOY_BUTTON_PADDLE2,
+	"uzi": JOY_BUTTON_PADDLE1,
 	"magnum": JOY_BUTTON_RIGHT_STICK,
 	"drop_weapon": JOY_BUTTON_LEFT_STICK,
-	"double_barrel": JOY_BUTTON_START,
-	"carbine": JOY_BUTTON_BACK,
+	"double_barrel": JOY_BUTTON_PADDLE3,
+	"carbine": JOY_BUTTON_PADDLE4,
+	"grenade": JOY_BUTTON_DPAD_DOWN,
+	"throw_knife": JOY_BUTTON_DPAD_LEFT,
+	"air_strike": JOY_BUTTON_START,
+	"swat": JOY_BUTTON_BACK,
 	"cycle_weapon": JOY_BUTTON_MISC1,
 }
 

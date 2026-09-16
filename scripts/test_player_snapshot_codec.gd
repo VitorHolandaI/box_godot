@@ -33,6 +33,7 @@ func _real_state(test_root: Node, key: String) -> Dictionary:
 	player.set("zombie_kills", 321)
 	player.set("teleport_sequence", 9)
 	player.set("revive_progress", 0.5)
+	player.get("equipment").apply_counts(PackedByteArray([4, 7, 1, 1]))
 	var state: Dictionary = player.get_network_state()
 	state["key"] = key
 	player.free()
@@ -63,6 +64,8 @@ func _test_roundtrip_keeps_player_state(test_root: Node) -> void:
 	for float_key in ["stamina", "pistol_stance", "pistol_recoil", "knife_attack", "muzzle_flash", "hit_reaction", "hit_dir_x", "revive_progress"]:
 		if absf(float(got[float_key]) - float(state[float_key])) > 0.01:
 			mismatches.append(float_key)
+	if got.get("equipment") != state["equipment"]:
+		mismatches.append("equipment")
 	if got.get("weapon_slots") != state["weapon_slots"]:
 		mismatches.append("weapon_slots")
 	if not mismatches.is_empty():

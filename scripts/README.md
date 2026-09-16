@@ -36,13 +36,16 @@ Logica de jogo, rede, interface e testes automatizados.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
 - `player_capacity.gd`: limite de jogadores por servidor separado da tela dividida (`--max-players=N`, padrao 8; ate 4 locais por computador) e spawn em aneis para quem passa dos 4 marcadores.
+- `player_equipment.gd`: contagem de granadas, facas de arremesso, ataques aereos e SWAT (inicio, maximo, consumo e 4 bytes no snapshot).
 - `player_slots_replication.gd`: decide quando os slots de arma entram no snapshot (3 snapshots apos cada mudanca e refresh a cada 20 com fase por jogador).
 - `player_snapshot_codec.gd`: snapshot binario de jogadores (47 bytes sem slots de arma), varios por pacote abaixo do MTU e codificado uma vez para todos os peers.
+- `player_throwables.gd`: uso dos itens na autoridade: granada em arco, faca de arremesso silenciosa que atravessa 2 e pedido de ataque aereo/SWAT a cena.
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
 - `server_tick_policy.gd`: servidor dedicado roda fisica a 30 Hz com no maximo 2 passos por frame (corta a bola de neve de ticks medida na VPS) e pula o fade visual dos zumbis.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
 - `test_cone_weapons.gd`: regressoes da motosserra e do lanca-chamas (cone com linha de visao, sem empurrao, fogo que queima, espalha e apaga).
+- `test_equipment.gd`: regressoes dos itens (contagem, teclas sem conflito, granada no pavio, arremesso de granada e faca, item de granadas no chao).
 - `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador; municao automatica ao passar pela mesma arma.
 - `test_player_capacity.gd`: regressoes do `--max-players`, da recusa de entrada e do spawn sem empilhar alem de 4 jogadores.
 - `test_player_snapshot_codec.gd`: regressoes do snapshot binario de jogadores (ida e volta, tamanho, 24 jogadores em poucos pacotes, truncado, envio dos slots).
@@ -57,6 +60,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
 - `test_zombie_specials.gd`: regressoes do cuspidor, da investida, dos tipos acima de 15 no snapshot e das especiais desde a hora 1.
 - `test_zombie_tick_budget.gd`: regressoes do orcamento de tick, teto global, zumbi parado batendo, proxy leve no client, alvo desconectado liberado e flock espalhando hordas entre ticks.
+- `thrown_grenade.gd`: granada de mao com gravidade e quique que explode no pavio ferindo zumbis e portas (visual no cliente).
 - `weapon_cone_attack.gd`: dano em cone curto com linha de visao das armas continuas (motosserra, lanca-chamas), incendiando quando a arma tem `burn_seconds`.
 - `weapon_cone_visual.gd`: visual cosmetico da labareda, das faiscas da motosserra e das chamas presas no zumbi queimando.
 - `weapon_sound_synth.gd`: sons de tiro sintetizados por perfil (pistola, SMG, fuzil, escopeta, sniper, bazuca, laser, plasma, railgun).
