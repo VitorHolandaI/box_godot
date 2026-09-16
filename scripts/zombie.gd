@@ -14,6 +14,9 @@ const FlockCoordinatorClass = preload("res://scripts/zombie_flock_coordinator.gd
 const INDOOR_ROUTER_SCRIPT: GDScript = preload("res://scripts/zombie_indoor_router.gd")
 const HIT_REACTION_DURATION := 0.24
 const ATTACK_ANIMATION_DURATION := 0.5
+## Bit da camada 4 (zumbis): desligado durante o voo do leaper/saltador para
+## o bote nao pousar na cabeca da horda (scenes/zombie.tscn: collision_layer=4).
+const ZOMBIE_MASK_BIT := 4
 const VISION_RANGE := 24.0
 const VISION_HALF_ANGLE := deg_to_rad(70.0)
 const SMELL_RANGE := 10.0
@@ -137,6 +140,7 @@ var spit_state = VARIANT_ABILITIES_SCRIPT.SpitState.new()
 var high_jump_state = VARIANT_ABILITIES_SCRIPT.HighJumpState.new()
 var bloater_lunge_state = VARIANT_ABILITIES_SCRIPT.BloaterLungeState.new()
 var _charge_hit_done := false
+var _ground_collision_mask := 0
 var boss_brain = null
 ## So o chefe mostra vida flutuante. Com a horda cheia, 600 Label3D vermelhos
 ## com o texto reescrito a cada snapshot regeravam malha de texto sem parar (lag).
@@ -150,6 +154,7 @@ func _ready() -> void:
 	add_to_group("zombies")
 	_configure_variant()
 	health = max_health
+	_ground_collision_mask = collision_mask
 	safe_margin = 0.08
 	max_slides = 6
 	network_target_position = global_position
@@ -170,9 +175,14 @@ func _physics_process(delta: float) -> void:
 		var target_pos := global_position.lerp(network_target_position, minf(delta * 14.0, 1.0))
 		var motion := target_pos - global_position
 		if motion.length_squared() > 0.00001:
-			var col := move_and_collide(motion)
-			if col != null:
-				move_and_collide(col.get_remainder().slide(col.get_normal()))
+			# Bote em andamento: o servidor ja validou o arco, o proxy que
+			# colidia com a horda ficava perched no ar; segue sem colisao.
+			if network_target_position.y > global_position.y + 0.6:
+				global_position = target_pos
+			else:
+				var col := move_and_collide(motion)
+				if col != null:
+					move_and_collide(col.get_remainder().slide(col.get_normal()))
 		rotation.y = lerp_angle(rotation.y, network_target_rotation, minf(delta * 14.0, 1.0))
 		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
 		hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
@@ -197,6 +207,16 @@ func _physics_process(delta: float) -> void:
 	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
 	if not is_on_floor():
 		velocity.y -= gravity * delta
+
+	var dash: RefCounted = _dash_for_type()
+	var leaping: bool = dash != null and dash.is_leaping()
+	# Zumbi em voo nao colide com a horda: voando por cima dos outros ele
+	# pousava/atolava em cabecas de zumbi e ficava perched no ar. O colisor
+	# de zumbis volta no tick seguinte ao aterrissar.
+	if leaping:
+		collision_mask = _ground_collision_mask & ~ZOMBIE_MASK_BIT
+	elif collision_mask != _ground_collision_mask:
+		collision_mask = _ground_collision_mask
 
 	_update_senses(delta)
 	_update_scream(delta)
@@ -224,10 +244,9 @@ func _physics_process(delta: float) -> void:
 			if not indoor_router.has_route:
 				var line_clear: bool = wall_detour.is_active() and _has_line_of_sight(target)
 				direction = wall_detour.steer(delta, global_position, direction, progress_watch.blocked_seconds, get_wall_normal() if is_on_wall() else Vector3.ZERO, line_clear)
-			var dash: RefCounted = _dash_for_type()
-			var dash_velocity := Vector3.ZERO
 			# Durante o voo o bote continua mesmo que o alvo mude de nivel;
 			# o voo so termina ao aterrissar (nunca zera velocidade no ar).
+			var dash_velocity := Vector3.ZERO
 			if dash != null and (same_level or dash.is_leaping()):
 				dash_velocity = dash.update(delta, velocity, direction, distance, is_on_floor(), gravity)
 			if dash != null and dash.is_leaping():
@@ -285,12 +304,15 @@ func _physics_process(delta: float) -> void:
 			rotation.y = lerp_angle(rotation.y, atan2(-wander_direction.x, -wander_direction.z), minf(delta * 4.0, 1.0))
 			is_walking = true
 
-	var flock_push := _flock_push(Vector3(velocity.x, 0.0, velocity.z))
+	var flock_push := Vector3.ZERO
+	if not leaping:
+		# Boides empurram so quem anda no chao; no voo o arco e sagrado.
+		flock_push = _flock_push(Vector3(velocity.x, 0.0, velocity.z))
 	velocity.x += flock_push.x
 	velocity.z += flock_push.z
 
 	move_and_slide()
-	_animate_pose(delta, is_walking and is_on_floor())
+	_animate_pose(delta, is_walking and (is_on_floor() or leaping))
 	_update_groan_audio(delta)
 
 
