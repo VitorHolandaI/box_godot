@@ -34,7 +34,7 @@ const ZOMBIE_SNAPSHOT_PACKET_BYTES := 1100
 const MAX_PLAYERS_PER_SNAPSHOT_PACKET := 1
 ## Onda nova chega com centenas de zumbis: o cliente spawna no maximo N por
 ## frame (fila) para nao dar hitch de instantiates sincronos.
-const MAX_ZOMBIE_SPAWNS_PER_FRAME := 6
+const MAX_ZOMBIE_SPAWNS_PER_FRAME := 2
 ## Frame longo acima disto e um travamento sentido; loga 1 linha JSON por
 ## rolamento de 2 s para diagnosticar hitches do modo rede (server e client).
 const STUTTER_FRAME_MS := 80.0
