@@ -47,7 +47,8 @@ func run(test_root: Node) -> void:
 func _test_wave_schedule(test_root: Node) -> void:
 	print("Testando progressao das ondas de sobrevivencia...")
 	var schedule = SURVIVAL_WAVE_SCHEDULE_SCRIPT.new()
-	var expected: Array[int] = [schedule.target_for(0), 20, 30, 40, 60, 80, 120, 140, 160]
+	# Horda 1 fica com 10: o teste de carga com 200 (2ef6e91) foi revertido.
+	var expected: Array[int] = [10, 20, 30, 40, 60, 80, 120, 140, 160]
 	for index in expected.size():
 		if schedule.target_for(index) != expected[index]:
 			_fail(test_root, "Onda %d esperava %d zumbis." % [index + 1, expected[index]])
