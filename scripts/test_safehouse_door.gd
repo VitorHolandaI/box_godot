@@ -6,10 +6,36 @@ extends RefCounted
 
 const SAFEHOUSE_BUILDER := preload("res://scripts/safehouse_builder.gd")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
+const MAIN_SCENE := preload("res://scenes/main.tscn")
 
 
 func run(test_root: Node) -> void:
 	await _test_interact_toggles_and_auto_reopens(test_root)
+	await _test_main_finds_door_of_staged_city(test_root)
+
+
+## Regressao: desde a cidade em etapas (f7785c7) a safehouse nasce com
+## call_deferred, depois do @onready do main. A referencia ficava null, o
+## snapshot sempre dizia "fechada" e o client nunca abria a porta na tela.
+func _test_main_finds_door_of_staged_city(test_root: Node) -> void:
+	print("Testando main achando a porta da safehouse na cidade em etapas...")
+	var previous_city := NetworkSession.procedural_city_enabled
+	NetworkSession.procedural_city_enabled = true
+	var main_world := MAIN_SCENE.instantiate() as Node3D
+	main_world.set_process(false)
+	main_world.set_physics_process(false)
+	test_root.add_child(main_world)
+	await test_root.get_tree().process_frame
+	await test_root.get_tree().physics_frame
+	var door := main_world.get_node_or_null("GeneratedCity/CentralSafehouse/SafehouseDoor")
+	var resolved: Node = main_world.call("_find_safehouse_door")
+	var same_door := door != null and resolved == door
+	main_world.free()
+	NetworkSession.procedural_city_enabled = previous_city
+	if not same_door:
+		_fail(test_root, "Main deveria achar a SafehouseDoor criada depois do _ready; porta_na_cena=%s resolvida=%s." % [door, resolved])
+		return
+	print("PASS: Main acha a porta da safehouse criada pela cidade em etapas.")
 
 
 ## Player em frente a porta aperta E: raycast deve achar o painel e o toggle
