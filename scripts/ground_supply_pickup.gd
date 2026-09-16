@@ -8,7 +8,7 @@ extends Area3D
 ##   item.setup(GroundSupplyPickup.Kind.HEALTH, 35)
 ##   tree.current_scene.add_child(item)
 
-enum Kind { HEALTH, AMMO, AMMO_SHOTGUN, AMMO_UZI, AMMO_MAGNUM, AMMO_DOUBLE_BARREL, AMMO_CARBINE, AMMO_SAWED_OFF, AMMO_AUTO_SHOTGUN, AMMO_LASER, AMMO_PLASMA, AMMO_RAIL, AMMO_AK47, AMMO_M4, AMMO_AUG, AMMO_BERETTA, AMMO_SNIPER, AMMO_ROCKET, AMMO_BOLT, AMMO_GRENADE, AMMO_GAS, AMMO_NAPALM }
+enum Kind { HEALTH, AMMO, AMMO_SHOTGUN, AMMO_UZI, AMMO_MAGNUM, AMMO_DOUBLE_BARREL, AMMO_CARBINE, AMMO_SAWED_OFF, AMMO_AUTO_SHOTGUN, AMMO_LASER, AMMO_PLASMA, AMMO_RAIL, AMMO_AK47, AMMO_M4, AMMO_AUG, AMMO_BERETTA, AMMO_SNIPER, AMMO_ROCKET, AMMO_BOLT, AMMO_GRENADE, AMMO_GAS, AMMO_NAPALM, EQUIP_GRENADES, EQUIP_KNIVES }
 
 ## Item de municacao de classe alimenta a reserva da arma daquela classe.
 const KIND_TO_WEAPON: Dictionary = {
@@ -58,6 +58,8 @@ const CLASS_COLORS: Dictionary = {
 	Kind.AMMO_GRENADE: Color(0.45, 0.85, 0.15),
 	Kind.AMMO_GAS: Color(0.95, 0.6, 0.2),
 	Kind.AMMO_NAPALM: Color(0.85, 0.15, 0.05),
+	Kind.EQUIP_GRENADES: Color(0.35, 0.6, 0.2),
+	Kind.EQUIP_KNIVES: Color(0.8, 0.85, 0.9),
 }
 const CLASS_LABELS: Dictionary = {
 	Kind.AMMO: "PISTOLA",
@@ -81,6 +83,13 @@ const CLASS_LABELS: Dictionary = {
 	Kind.AMMO_GRENADE: "GRANADAS",
 	Kind.AMMO_GAS: "GASOLINA",
 	Kind.AMMO_NAPALM: "NAPALM",
+	Kind.EQUIP_GRENADES: "GRANADAS DE MAO",
+	Kind.EQUIP_KNIVES: "FACAS",
+}
+## Itens de equipamento (nao municao): somam na contagem do PlayerEquipment.
+const KIND_TO_EQUIPMENT: Dictionary = {
+	Kind.EQUIP_GRENADES: PlayerEquipment.Item.GRENADE,
+	Kind.EQUIP_KNIVES: PlayerEquipment.Item.THROWING_KNIFE,
 }
 const DEFAULT_LIFETIME := 180.0
 ## Municao de classe tocada por quem nao tem aquela arma vira balas de pistola:
@@ -136,6 +145,8 @@ func _on_body_entered(body: Node3D) -> void:
 		received = int(body.call("add_ammo", amount))
 	elif KIND_TO_WEAPON.has(supply_kind) and body.has_method("add_crate_reserve"):
 		received = _collect_class_ammo(body)
+	elif KIND_TO_EQUIPMENT.has(supply_kind) and body.get("equipment") is PlayerEquipment:
+		received = (body.get("equipment") as PlayerEquipment).add(int(KIND_TO_EQUIPMENT[supply_kind]), amount)
 	# Reserva cheia / vida cheia deixa o item no chao para quem precisa.
 	if received > 0:
 		GroundWeaponSync.mark_dirty()

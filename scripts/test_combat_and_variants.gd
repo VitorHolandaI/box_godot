@@ -43,6 +43,7 @@ const ZOMBIE_CROWD_SLOTS_TESTS_SCRIPT := preload("res://scripts/test_zombie_crow
 const PLAYER_CAPACITY_TESTS_SCRIPT := preload("res://scripts/test_player_capacity.gd")
 const PLAYER_SNAPSHOT_CODEC_TESTS_SCRIPT := preload("res://scripts/test_player_snapshot_codec.gd")
 const CONE_WEAPONS_TESTS_SCRIPT := preload("res://scripts/test_cone_weapons.gd")
+const EQUIPMENT_TESTS_SCRIPT := preload("res://scripts/test_equipment.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -75,6 +76,7 @@ const FOCUSED_TEST_GROUPS := {
 	"player_capacity": PLAYER_CAPACITY_TESTS_SCRIPT,
 	"player_snapshot_codec": PLAYER_SNAPSHOT_CODEC_TESTS_SCRIPT,
 	"cone_weapons": CONE_WEAPONS_TESTS_SCRIPT,
+	"equipment": EQUIPMENT_TESTS_SCRIPT,
 }
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
@@ -123,6 +125,7 @@ func _ready() -> void:
 	PLAYER_CAPACITY_TESTS_SCRIPT.new().run(self)
 	PLAYER_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)
 	await CONE_WEAPONS_TESTS_SCRIPT.new().run(self)
+	await EQUIPMENT_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)

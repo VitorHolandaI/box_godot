@@ -50,6 +50,8 @@ const RESTOCKED_KINDS: Array[int] = [
 	GroundSupplyPickup.Kind.AMMO_GRENADE,
 	GroundSupplyPickup.Kind.AMMO_GAS,
 	GroundSupplyPickup.Kind.AMMO_NAPALM,
+	GroundSupplyPickup.Kind.EQUIP_GRENADES,
+	GroundSupplyPickup.Kind.EQUIP_KNIVES,
 ]
 ## Quantidade por item: um pente e pouco da arma (a reserva maxima fica a cargo
 ## de WeaponSlots.add_reserve).
@@ -76,6 +78,8 @@ const AMOUNT_BY_KIND: Dictionary = {
 	GroundSupplyPickup.Kind.AMMO_GRENADE: 4,
 	GroundSupplyPickup.Kind.AMMO_GAS: 60,
 	GroundSupplyPickup.Kind.AMMO_NAPALM: 60,
+	GroundSupplyPickup.Kind.EQUIP_GRENADES: 2,
+	GroundSupplyPickup.Kind.EQUIP_KNIVES: 3,
 }
 
 var _restock_elapsed := INF

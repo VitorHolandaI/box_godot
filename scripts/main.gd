@@ -412,6 +412,51 @@ func replicate_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3,
 		_spawn_bullet_visual.rpc_id(int(peer_id), spawn_position, bullet_direction, pellet_count, spread_deg, weapon_kind)
 
 
+## Granada arremessada na autoridade: clientes veem o mesmo arco (so visual).
+## Uso: chamado por PlayerThrowables.throw_grenade.
+func replicate_thrown_grenade(start: Vector3, start_velocity: Vector3) -> void:
+	if not NetworkSession.is_server():
+		return
+	for peer_id in NetworkSession.loaded_peers:
+		_spawn_thrown_grenade.rpc_id(int(peer_id), start, start_velocity)
+
+
+@rpc("authority", "call_remote", "unreliable")
+func _spawn_thrown_grenade(start: Vector3, start_velocity: Vector3) -> void:
+	if not NetworkSession.is_client():
+		return
+	var grenade := ThrownGrenade.new()
+	add_child(grenade)
+	grenade.setup(start, start_velocity, false, null)
+
+
+## Faca arremessada: rastro prateado rapido, sem som de tiro.
+## Uso: chamado por PlayerThrowables.throw_knife.
+func show_thrown_knife(origin: Vector3, direction: Vector3) -> void:
+	if not ServerTickPolicy.is_dedicated_server():
+		_spawn_knife_trail(origin, direction)
+	if not NetworkSession.is_server():
+		return
+	for peer_id in NetworkSession.loaded_peers:
+		_show_thrown_knife.rpc_id(int(peer_id), origin, direction)
+
+
+@rpc("authority", "call_remote", "unreliable")
+func _show_thrown_knife(origin: Vector3, direction: Vector3) -> void:
+	if NetworkSession.is_client():
+		_spawn_knife_trail(origin, direction)
+
+
+func _spawn_knife_trail(origin: Vector3, direction: Vector3) -> void:
+	var bullet = BULLET_SCENE.instantiate()
+	add_child(bullet)
+	bullet.scale = Vector3(0.35, 0.35, 1.4)
+	bullet.global_position = origin + direction * 0.12
+	bullet.setup(direction, 0, false)
+	bullet.speed = 40.0
+	bullet.lifetime = 0.5
+
+
 ## Zumbi pegou fogo (lanca-chamas): chamas locais e aviso aos clientes.
 ## Uso: chamado por zombie.ignite_spread na autoridade.
 func show_zombie_burning(zombie: Node3D, seconds: float) -> void:

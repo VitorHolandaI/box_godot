@@ -10,12 +10,13 @@ extends RefCounted
 ##   | u8 flags (0 correndo, 1 eliminado, 2 caido, 3 tem slots) | u8 arma
 ##   | u8 municao pistola | u16 reserva | u16 ms postura, recuo, faca, clarao, tranco
 ##   | i8 hit_dir_x*127 | u8 vidas | u32 abates | u16 teleporte | u8 reviver*255
+##   | u8 granadas, facas, ataque aereo, swat
 ##   [u16 tamanho | var_to_bytes(weapon_slots)] quando flags tem 3
 ## Uso:
 ##   var payload := PlayerSnapshotCodec.encode(states, {"123:0": true})
 ##   var states := PlayerSnapshotCodec.decode(payload)
 
-const RECORD_BYTES := 47
+const RECORD_BYTES := 51
 const FLAG_SPRINTING := 1
 const FLAG_ELIMINATED := 2
 const FLAG_DOWNED := 4
@@ -131,6 +132,12 @@ static func _write_record(payload: PackedByteArray, offset: int, state: Dictiona
 	payload.encode_u32(offset + 40, clampi(int(state.get("zombie_kills", 0)), 0, 4294967295))
 	payload.encode_u16(offset + 44, posmod(int(state.get("teleport_sequence", 0)), 65536))
 	payload.encode_u8(offset + 46, clampi(roundi(float(state.get("revive_progress", 0.0)) * 255.0), 0, 255))
+	var equipment_counts: Variant = state.get("equipment", PackedByteArray())
+	for index in 4:
+		var count := 0
+		if equipment_counts is PackedByteArray and index < (equipment_counts as PackedByteArray).size():
+			count = (equipment_counts as PackedByteArray)[index]
+		payload.encode_u8(offset + 47 + index, clampi(count, 0, 255))
 
 
 static func _read_record(payload: PackedByteArray, offset: int) -> Dictionary:
@@ -152,6 +159,7 @@ static func _read_record(payload: PackedByteArray, offset: int) -> Dictionary:
 		"zombie_kills": payload.decode_u32(offset + 40),
 		"teleport_sequence": payload.decode_u16(offset + 44),
 		"revive_progress": float(payload.decode_u8(offset + 46)) / 255.0,
+		"equipment": payload.slice(offset + 47, offset + 51),
 	}
 	for index in TIMER_KEYS.size():
 		state[TIMER_KEYS[index]] = float(payload.decode_u16(offset + 28 + index * 2)) / 1000.0
