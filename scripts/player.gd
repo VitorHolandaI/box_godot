@@ -118,6 +118,9 @@ var swat_pressed := false
 ## Granadas, facas de arremesso e chamadas (PlayerThrowables usa).
 var equipment := PlayerEquipment.new()
 var equipment_cooldown := 0.0
+## Puxado pela lingua ou preso pelo espreitador: velocidade imposta por um tempo.
+var forced_move_velocity := Vector3.ZERO
+var forced_move_time := 0.0
 var weapon_slots := WeaponSlots.new()
 ## Ultima revisao do inventario aplicada pelo snapshot; -1 = nunca aplicado.
 var slots_revision := -1
@@ -221,6 +224,10 @@ func _physics_process(delta: float) -> void:
 
 	velocity.x = move_toward(velocity.x, target_velocity.x, acceleration * delta)
 	velocity.z = move_toward(velocity.z, target_velocity.z, acceleration * delta)
+	if forced_move_time > 0.0:
+		forced_move_time = maxf(forced_move_time - delta, 0.0)
+		velocity.x = forced_move_velocity.x
+		velocity.z = forced_move_velocity.z
 
 	move_and_slide()
 	PlayerAnimator.animate_pose(self, delta, direction.length() > 0.0 and is_on_floor())
@@ -1019,6 +1026,13 @@ func get_weapon_slots_text() -> String:
 	for kind in weapon_slots.kinds:
 		crate_label = String(WeaponStats.stats_for(kind)["label"])
 	return "Armas: Faca | Pistola | %s\n%s" % [crate_label, equipment.summary_text()]
+
+
+## Movimento imposto por especial (lingua puxando, bote prendendo): vence o
+## input do jogador por `seconds`. Uso: player.apply_forced_move(puxao, 0.2)
+func apply_forced_move(forced_velocity: Vector3, seconds: float) -> void:
+	forced_move_velocity = Vector3(forced_velocity.x, 0.0, forced_velocity.z)
+	forced_move_time = maxf(seconds, 0.0)
 
 
 ## Granada, faca de arremesso e chamadas (autoridade).
