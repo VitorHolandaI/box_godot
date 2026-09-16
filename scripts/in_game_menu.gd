@@ -7,6 +7,7 @@ signal unstuck_requested
 @onready var status: Label = $MenuPanel/Content/Status
 
 var is_open := false
+var settings_panel: InGameSettingsPanel = null
 
 
 func _ready() -> void:
@@ -17,7 +18,11 @@ func _ready() -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed("ui_cancel"):
 		return
-	if is_open:
+	# Com as configuracoes abertas o Esc volta ao menu da partida (a captura de
+	# tecla ja consome o proprio Esc antes de chegar aqui).
+	if is_settings_open():
+		close_settings()
+	elif is_open:
 		close_menu()
 	else:
 		open_menu()
@@ -38,9 +43,39 @@ func open_menu() -> void:
 
 
 func close_menu() -> void:
+	close_settings()
 	get_tree().paused = false
 	is_open = false
 	visible = false
+
+
+## Graficos e teclas dos jogadores locais sem sair da partida.
+## Uso: menu.open_settings()
+func open_settings() -> void:
+	if settings_panel == null:
+		settings_panel = InGameSettingsPanel.new()
+		var continue_button := $MenuPanel/Content/Continue as Button
+		settings_panel.apply_styles($MenuPanel.get_theme_stylebox("panel"), {"normal": continue_button.get_theme_stylebox("normal"), "hover": continue_button.get_theme_stylebox("hover")})
+		settings_panel.closed.connect(close_settings)
+		add_child(settings_panel)
+	else:
+		settings_panel.refresh()
+	settings_panel.visible = true
+	$MenuPanel.visible = false
+
+
+func close_settings() -> void:
+	if settings_panel != null:
+		settings_panel.visible = false
+	$MenuPanel.visible = true
+
+
+func is_settings_open() -> bool:
+	return settings_panel != null and settings_panel.visible
+
+
+func _on_settings_pressed() -> void:
+	open_settings()
 
 
 func _on_continue_pressed() -> void:

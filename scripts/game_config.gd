@@ -233,6 +233,16 @@ func action_name(slot: int, action: String) -> StringName:
 	return StringName("player_%d_%s" % [slot + 1, action])
 
 
+## Troca uma tecla do jogador local e reaplica o InputMap na hora (menu do Esc).
+## Uso: GameConfig.set_player_binding(0, "grenade", evento)
+func set_player_binding(slot: int, action: String, event: InputEvent) -> void:
+	if slot < 0 or slot >= player_input_configs.size() or not ACTIONS.has(action) or event == null:
+		push_error("Troca de tecla invalida: jogador=%d acao='%s' evento=%s; esperado jogador local existente e acao de ACTIONS." % [slot, action, event])
+		return
+	(player_input_configs[slot]["bindings"] as Dictionary)[action] = event
+	_apply_input_map()
+
+
 func _apply_input_map() -> void:
 	for slot in player_input_configs.size():
 		var bindings: Dictionary = player_input_configs[slot]["bindings"]
