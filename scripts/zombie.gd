@@ -87,6 +87,9 @@ enum ZombieType {
 	SPITTER = 15,
 	CHARGER = 16,
 	JUMPER = 17,
+	SMOKER = 18,
+	HEALER = 19,
+	STALKER = 20,
 }
 
 enum LodLevel {
@@ -156,6 +159,14 @@ var wall_detour = WALL_DETOUR_SCRIPT.new()
 var tick_budget := ZombieTickBudget.new()
 ## Fogo do lanca-chamas (dano com o tempo e espalha para vizinhos).
 var burn := ZombieBurn.new()
+## Especiais estilo Left 4 Dead: lingua do puxador, aura do curandeiro e bote
+## do espreitador (cada um so age no proprio tipo).
+var tongue := ZombieTongue.new()
+var healer := ZombieHealer.new()
+var stalker := ZombieStalker.new()
+var damage_taken_total := 0
+var _tongue_damage_start := 0
+var _tongue_burn := 0.0
 var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
 var charge_state = VARIANT_ABILITIES_SCRIPT.ChargeState.new()
 var spit_state = VARIANT_ABILITIES_SCRIPT.SpitState.new()
@@ -278,6 +289,7 @@ func _run_physics_tick(delta: float) -> void:
 	_update_senses(delta)
 	_update_scream(delta)
 	_update_boss(delta)
+	_update_l4d_cooldowns(delta)
 	var target := alert_target
 	var is_walking := false
 	var in_melee_range := false
@@ -297,6 +309,9 @@ func _run_physics_tick(delta: float) -> void:
 		horizontal_offset.y = 0.0
 		var distance := horizontal_offset.length()
 		var same_level := absf(target_offset.y) <= MELEE_VERTICAL_RANGE
+		if int(zombie_type) == ZombieType.STALKER and same_level and stalker.try_pounce(target, distance, horizontal_offset.normalized()):
+			attack_animation_time = ATTACK_ANIMATION_DURATION
+			attack_sequence += 1
 		var waits_in_queue: bool = same_level and distance > MELEE_RANGE and (dash == null or not dash.is_leaping()) and ZombieCrowdSlots.shared.should_wait(target.get_instance_id(), get_instance_id(), distance, Engine.get_physics_frames())
 		if waits_in_queue:
 			# Anel de ataque cheio: espera vaga parado de frente para o alvo.
@@ -320,7 +335,7 @@ func _run_physics_tick(delta: float) -> void:
 			if dash != null and dash.is_leaping():
 				velocity = dash_velocity
 				_check_charge_hit(target, direction)
-			elif _spitter_holds_position(target, distance, delta):
+			elif _spitter_holds_position(target, distance, delta) or _smoker_holds_position(target, distance, delta):
 				velocity.x = 0.0
 				velocity.z = 0.0
 			elif is_on_wall() and _try_attack_blocking_door(direction):
@@ -652,6 +667,59 @@ func _check_charge_hit(target: CharacterBody3D, direction: Vector3) -> void:
 	attack_sequence += 1
 
 
+## Recargas dos especiais novos e a aura do curandeiro (autoridade).
+func _update_l4d_cooldowns(delta: float) -> void:
+	match int(zombie_type):
+		ZombieType.SMOKER:
+			tongue.tick_cooldown(delta)
+		ZombieType.STALKER:
+			stalker.tick(delta)
+		ZombieType.HEALER:
+			healer.update(self, delta)
+
+
+## Puxador: prende de longe e puxa o alvo; enquanto puxa fica parado.
+func _smoker_holds_position(target: CharacterBody3D, distance: float, delta: float) -> bool:
+	if int(zombie_type) != ZombieType.SMOKER:
+		return false
+	var in_grab_range := distance >= ZombieTongue.MIN_RANGE and distance <= ZombieTongue.MAX_RANGE
+	if not tongue.is_pulling() and not in_grab_range:
+		return false
+	var sees_target := _has_line_of_sight(target)
+	if not tongue.is_pulling():
+		if not tongue.can_grab(distance, sees_target):
+			return false
+		tongue.start()
+		_tongue_damage_start = damage_taken_total
+		_tongue_burn = 0.0
+		_announce_tongue(target, true)
+	var pull := tongue.update(delta, global_position, target.global_position, sees_target, damage_taken_total - _tongue_damage_start)
+	if pull == Vector3.ZERO:
+		_announce_tongue(target, false)
+		return false
+	target.call("apply_forced_move", pull, 0.2)
+	_tongue_burn += ZombieTongue.PULL_DPS * delta
+	if _tongue_burn >= 1.0:
+		target.take_damage(floori(_tongue_burn), pull.normalized(), "melee", self)
+		_tongue_burn -= floori(_tongue_burn)
+	rotation.y = lerp_angle(rotation.y, atan2(pull.x, pull.z), minf(delta * 8.0, 1.0))
+	return true
+
+
+func _release_tongue(target: Variant) -> void:
+	if not tongue.is_pulling():
+		return
+	tongue.release()
+	if is_instance_valid(target):
+		_announce_tongue(target as Node3D, false)
+
+
+func _announce_tongue(target: Node3D, active: bool) -> void:
+	var scene := get_tree().current_scene if is_inside_tree() else null
+	if scene != null and scene.has_method("show_zombie_tongue"):
+		scene.call("show_zombie_tongue", self, target, active)
+
+
 ## Cuspidor perto o bastante e vendo o alvo: fica parado e cospe de longe.
 func _spitter_holds_position(target: CharacterBody3D, distance: float, delta: float) -> bool:
 	if int(zombie_type) != ZombieType.SPITTER or distance > VARIANT_ABILITIES_SCRIPT.SPIT_MAX_RANGE:
@@ -759,6 +827,7 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 		return
 
 	amount = VARIANT_ABILITIES_SCRIPT.adjust_incoming_damage(int(zombie_type), amount, damage_kind)
+	damage_taken_total += amount
 	health = maxi(health - mini(amount, max_health), 0)
 	_refresh_health_label()
 	hit_direction = attack_direction.normalized()
@@ -852,6 +921,7 @@ func _die(killer: Node = null) -> void:
 
 
 func _run_death(killer: Node) -> void:
+	_release_tongue(alert_target)
 	is_dead = true
 	death_velocity = velocity
 	velocity = Vector3.ZERO
@@ -928,6 +998,8 @@ func _update_visual_fade(delta: float) -> void:
 		return
 	var should_show := vision_visible and not is_dead and lod_level != LodLevel.FAR
 	var target_opacity := 1.0 if should_show else 0.0
+	if should_show and int(zombie_type) == ZombieType.STALKER:
+		target_opacity = ZombieStalker.reveal_opacity(_nearest_player_distance())
 	var fade_time := REASSEMBLE_TIME if should_show else DISSOLVE_OUT_TIME
 	var was_whole := visual_opacity >= 0.999
 	visual_opacity = move_toward(visual_opacity, target_opacity, delta / fade_time)
@@ -991,6 +1063,15 @@ func _update_groan_audio(delta: float) -> void:
 		return
 	AudioFeedback.play_zombie_groan(global_position)
 	groan_audio_cooldown = randf_range(3.0, 7.0)
+
+
+func _nearest_player_distance() -> float:
+	var nearest := INF
+	for player in ZombieFlockCoordinator.get_living_players(get_tree()):
+		var player_node := player as Node3D
+		if player_node != null:
+			nearest = minf(nearest, global_position.distance_to(player_node.global_position))
+	return nearest
 
 
 func _has_nearby_player(max_distance: float) -> bool:
