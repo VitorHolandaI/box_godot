@@ -5,12 +5,16 @@ const CLOSED_PANEL_ANGLE := 0.0
 const OPEN_PANEL_ANGLE := -PI * 0.5
 const PANEL_SPEED := 4.5
 const CLOSE_HOLD_TIME := 0.75
+## O E manual vale por este tempo; depois a presenca automatica retoma o
+## controle (abre ao chegar, fecha ao sair) em vez de travar no estado.
+const MANUAL_OVERRIDE_GRACE := 2.0
 
 @onready var panel: AnimatableBody3D = $Panel
 @onready var detection_area: Area3D = $DetectionArea
 
 var open_requested := false
 var manual_override := false
+var manual_hold_elapsed := 0.0
 var close_elapsed := 0.0
 var panel_angle := CLOSED_PANEL_ANGLE
 
@@ -32,6 +36,7 @@ func _physics_process(delta: float) -> void:
 ## Usage: door.interact()
 func interact() -> void:
 	manual_override = true
+	manual_hold_elapsed = 0.0
 	open_requested = not open_requested
 	close_elapsed = 0.0
 
@@ -47,6 +52,12 @@ func take_damage(_amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damag
 ## Usage: door.update_for_actor_presence(has_living_actor, delta)
 func update_for_actor_presence(has_actor: bool, delta: float) -> void:
 	if manual_override:
+		# O E e um override temporario: expira e o modo automatico volta
+		# (antes ele nunca expirava e a porta travava no ultimo estado).
+		manual_hold_elapsed += maxf(delta, 0.0)
+		if manual_hold_elapsed >= MANUAL_OVERRIDE_GRACE:
+			manual_override = false
+			close_elapsed = 0.0
 		_animate_panel(delta)
 		return
 	if has_actor:
