@@ -112,6 +112,17 @@ static func _add_parts(node: Node3D, model: String, body: Material, wood: Materi
 			add_box(node, Vector3(0.24, 0.24, 1.2), Vector3(0.0, 0.08, 0.0), body)
 			add_box(node, Vector3(0.28, 0.28, 0.1), Vector3(0.0, 0.08, -0.6), glow)
 			add_box(node, Vector3(0.1, 0.22, 0.1), Vector3(0.0, -0.14, 0.1), body)
+		"crossbow":
+			# Besta: coronha ao longo do Z e arco atravessado na frente.
+			add_box(node, Vector3(0.1, 0.1, 0.8), Vector3(0.0, 0.0, 0.1), wood)
+			add_box(node, Vector3(0.9, 0.06, 0.06), Vector3(0.0, 0.03, -0.26), body)
+			add_box(node, Vector3(0.04, 0.04, 0.5), Vector3(0.0, 0.08, -0.05), glow)
+		"grenade_launcher":
+			# Lanca-granadas: cano curto e grosso com tambor redondo embaixo.
+			add_box(node, Vector3(0.2, 0.2, 0.7), Vector3(0.0, 0.06, -0.05), body)
+			add_box(node, Vector3(0.32, 0.32, 0.24), Vector3(0.0, -0.08, 0.18), body)
+			add_box(node, Vector3(0.22, 0.22, 0.06), Vector3(0.0, 0.06, -0.42), glow)
+			add_box(node, Vector3(0.12, 0.24, 0.3), Vector3(0.0, -0.1, 0.5), wood)
 		_:
 			# Rifle/carabina: cano longo, mira em cima e coronha de madeira.
 			add_box(node, Vector3(0.12, 0.12, 1.0), Vector3(0.0, 0.02, 0.14), body)

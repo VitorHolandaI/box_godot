@@ -12,7 +12,7 @@ extends RefCounted
 
 ## Durabilidade triplicada (pedido de jogo): armas de crate quebravam rapido demais.
 ## Mesma ordem de PlayerCharacter.Weapon (o jogador usa os mesmos inteiros).
-enum Kind { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE, SAWED_OFF, AUTO_SHOTGUN, LASER_RIFLE, PLASMA_SMG, RAILGUN, AK47, M4, AUG, BERETTA, SNIPER, BAZOOKA }
+enum Kind { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE, SAWED_OFF, AUTO_SHOTGUN, LASER_RIFLE, PLASMA_SMG, RAILGUN, AK47, M4, AUG, BERETTA, SNIPER, BAZOOKA, CROSSBOW, GRENADE_LAUNCHER }
 
 const DEFAULT_TRACER_COLOR := Color(1.0, 0.72, 0.08)
 
@@ -411,6 +411,59 @@ const STATS_BY_KIND: Dictionary = {
 		"flash_scale": 2.4,
 		"sound": "launcher",
 		"tracer_speed": 100.0,
+	},
+	## Besta: quase sem som (a horda nao ouve de longe) e a seta atravessa a fila.
+	Kind.CROSSBOW: {
+		"label": "Besta",
+		"damage": 85,
+		"pellets": 1,
+		"pierce": 4,
+		# Besta de repeticao: com pente 1 cada segundo clique so recarregava.
+		"mag_size": 5,
+		"max_reserve": 30,
+		"grant_reserve": 20,
+		"attack_cooldown": 0.9,
+		"max_durability": 150,
+		"degraded_below": 45,
+		"jam_chance": 0.05,
+		"spread_deg": 0.0,
+		"degraded_spread_deg": 2.5,
+		"noise_radius": 8.0,
+		"color": Color(0.36, 0.24, 0.12),
+		"model": "crossbow",
+		"tracer_color": Color(0.85, 0.95, 0.75),
+		"tracer_scale": Vector3(0.5, 0.5, 2.2),
+		"recoil": 0.05,
+		"recoil_lift": 0.04,
+		"flash_scale": 0.2,
+		"sound": "crossbow",
+		"tracer_speed": 70.0,
+	},
+	## Lanca-granadas: tambor de 6, explosao menor que a bazuca e cadencia maior.
+	Kind.GRENADE_LAUNCHER: {
+		"label": "Lanca-granadas",
+		"damage": 95,
+		"pellets": 1,
+		"mag_size": 6,
+		"max_reserve": 24,
+		"grant_reserve": 12,
+		"attack_cooldown": 0.75,
+		"explosive_radius": 3.8,
+		"max_durability": 90,
+		"degraded_below": 30,
+		"jam_chance": 0.06,
+		"spread_deg": 1.0,
+		"degraded_spread_deg": 4.0,
+		"noise_radius": 95.0,
+		"color": Color(0.3, 0.36, 0.22),
+		"model": "grenade_launcher",
+		"tracer_color": Color(0.55, 1.0, 0.2),
+		"tracer_scale": Vector3(1.6, 1.6, 1.0),
+		"recoil": 0.22,
+		"recoil_lift": 0.2,
+		"flash_scale": 1.8,
+		"sound": "grenade",
+		"tracer_speed": 55.0,
 	},
 }
 
