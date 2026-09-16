@@ -5,7 +5,9 @@ signal state_changed
 signal wave_started(wave_index: int)
 
 const SURVIVAL_WAVE_SCHEDULE_SCRIPT := preload("res://scripts/survival_wave_schedule.gd")
-const SPAWN_INTERVAL := 0.18
+## Entrada gradual da horda: um zumbi a cada 0,45 s (~2,2/s) para o load de
+## instantiate+variante nao picar o frame no inicio de cada onda.
+const SPAWN_INTERVAL := 0.45
 ## GAME OVER com jogador presente reinicia sozinho depois deste tempo.
 const GAME_OVER_RESTART_SECONDS := 8.0
 
