@@ -112,6 +112,17 @@ static func _add_parts(node: Node3D, model: String, body: Material, wood: Materi
 			add_box(node, Vector3(0.24, 0.24, 1.2), Vector3(0.0, 0.08, 0.0), body)
 			add_box(node, Vector3(0.28, 0.28, 0.1), Vector3(0.0, 0.08, -0.6), glow)
 			add_box(node, Vector3(0.1, 0.22, 0.1), Vector3(0.0, -0.14, 0.1), body)
+		"chainsaw":
+			# Motosserra: motor atras, sabre comprido na frente com corrente brilhando.
+			add_box(node, Vector3(0.24, 0.26, 0.34), Vector3(0.0, 0.0, 0.2), body)
+			add_box(node, Vector3(0.05, 0.14, 0.75), Vector3(0.0, -0.02, -0.35), body)
+			add_box(node, Vector3(0.06, 0.03, 0.75), Vector3(0.0, 0.06, -0.35), glow)
+			add_box(node, Vector3(0.08, 0.2, 0.08), Vector3(0.0, 0.2, 0.2), wood)
+		"flamethrower":
+			# Lanca-chamas: tanque redondo embaixo, cano longo e chama-piloto na ponta.
+			add_box(node, Vector3(0.1, 0.1, 0.9), Vector3(0.0, 0.04, 0.05), body)
+			add_box(node, Vector3(0.28, 0.28, 0.32), Vector3(0.0, -0.18, 0.25), body)
+			add_box(node, Vector3(0.12, 0.12, 0.08), Vector3(0.0, 0.04, -0.42), glow)
 		"crossbow":
 			# Besta: coronha ao longo do Z e arco atravessado na frente.
 			add_box(node, Vector3(0.1, 0.1, 0.8), Vector3(0.0, 0.0, 0.1), wood)

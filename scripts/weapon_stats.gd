@@ -12,7 +12,7 @@ extends RefCounted
 
 ## Durabilidade triplicada (pedido de jogo): armas de crate quebravam rapido demais.
 ## Mesma ordem de PlayerCharacter.Weapon (o jogador usa os mesmos inteiros).
-enum Kind { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE, SAWED_OFF, AUTO_SHOTGUN, LASER_RIFLE, PLASMA_SMG, RAILGUN, AK47, M4, AUG, BERETTA, SNIPER, BAZOOKA, CROSSBOW, GRENADE_LAUNCHER }
+enum Kind { KNIFE, PISTOL, SHOTGUN, UZI, MAGNUM, DOUBLE_BARREL, CARBINE, SAWED_OFF, AUTO_SHOTGUN, LASER_RIFLE, PLASMA_SMG, RAILGUN, AK47, M4, AUG, BERETTA, SNIPER, BAZOOKA, CROSSBOW, GRENADE_LAUNCHER, CHAINSAW, FLAMETHROWER }
 
 const DEFAULT_TRACER_COLOR := Color(1.0, 0.72, 0.08)
 
@@ -464,6 +464,66 @@ const STATS_BY_KIND: Dictionary = {
 		"flash_scale": 1.8,
 		"sound": "grenade",
 		"tracer_speed": 55.0,
+	},
+	## Motosserra: segura o botao e corta todo zumbi no cone curto da frente.
+	## "municao" e gasolina (1 por tick de 0,1 s = 10 s por tanque).
+	Kind.CHAINSAW: {
+		"label": "Motosserra",
+		"damage": 14,
+		"pellets": 1,
+		"cone_range": 2.2,
+		"cone_deg": 70.0,
+		"mag_size": 100,
+		"max_reserve": 300,
+		"grant_reserve": 200,
+		"attack_cooldown": 0.1,
+		"is_auto": true,
+		"max_durability": 1500,
+		"degraded_below": 300,
+		"jam_chance": 0.02,
+		"spread_deg": 0.0,
+		"degraded_spread_deg": 0.0,
+		"noise_radius": 50.0,
+		"color": Color(0.85, 0.45, 0.08),
+		"model": "chainsaw",
+		"tracer_color": Color(1.0, 0.85, 0.5),
+		"tracer_scale": Vector3(0.3, 0.3, 0.3),
+		"recoil": 0.02,
+		"recoil_lift": 0.01,
+		"flash_scale": 0.3,
+		"sound": "chainsaw",
+		"tracer_speed": 0.0,
+	},
+	## Lanca-chamas: cone mais longo e fino; quem e atingido pega fogo e o fogo
+	## passa para zumbis colados (ZombieBurn).
+	Kind.FLAMETHROWER: {
+		"label": "Lanca-chamas",
+		"damage": 6,
+		"pellets": 1,
+		"cone_range": 6.0,
+		"cone_deg": 32.0,
+		"burn_seconds": 4.0,
+		"burn_dps": 12.0,
+		"mag_size": 100,
+		"max_reserve": 300,
+		"grant_reserve": 200,
+		"attack_cooldown": 0.1,
+		"is_auto": true,
+		"max_durability": 1500,
+		"degraded_below": 300,
+		"jam_chance": 0.03,
+		"spread_deg": 0.0,
+		"degraded_spread_deg": 0.0,
+		"noise_radius": 45.0,
+		"color": Color(0.6, 0.1, 0.08),
+		"model": "flamethrower",
+		"tracer_color": Color(1.0, 0.5, 0.05),
+		"tracer_scale": Vector3(1.2, 1.2, 1.2),
+		"recoil": 0.02,
+		"recoil_lift": 0.01,
+		"flash_scale": 1.0,
+		"sound": "flame",
+		"tracer_speed": 0.0,
 	},
 }
 
