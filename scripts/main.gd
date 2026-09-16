@@ -346,7 +346,9 @@ func register_corpse(corpse: Node) -> void:
 		return
 	corpses.append(corpse)
 	if corpses.size() > MAX_CORPSES:
-		var oldest_corpse: Node = corpses.pop_front()
+		# Sem tipo: o mais antigo pode ja estar liberado (horda morrendo em massa)
+		# e atribuir instancia liberada a `var x: Node` dava SCRIPT ERROR (0004fbb).
+		var oldest_corpse = corpses.pop_front()
 		if is_instance_valid(oldest_corpse):
 			oldest_corpse.queue_free()
 
