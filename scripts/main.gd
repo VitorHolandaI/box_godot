@@ -59,7 +59,9 @@ const PLAYER_SPAWN_POINTS := [
 @onready var split_screen = $Interface/SplitScreen
 @onready var sun: DirectionalLight3D = $Sun
 @onready var in_game_menu: Control = $Interface/InGameMenu
-@onready var safehouse_door: Node = get_node_or_null("GeneratedCity/CentralSafehouse/SafehouseDoor")
+# Resolvida sob demanda: a cidade em etapas cria a safehouse com call_deferred,
+# depois do @onready (antes ficava null e a porta nunca abria no client).
+var safehouse_door: Node = null
 
 var local_players: Array[Node] = []
 var network_players: Dictionary = {}
@@ -804,7 +806,8 @@ func _apply_ground_snapshot(supply_states: Array, ground_weapons: Array) -> void
 
 func _send_player_snapshots(states: Array) -> void:
 	var packet_count := maxi(ceili(float(states.size()) / MAX_PLAYERS_PER_SNAPSHOT_PACKET), 1)
-	var door_open := safehouse_door != null and bool(safehouse_door.call("is_open_requested"))
+	var door := _find_safehouse_door()
+	var door_open := door != null and bool(door.call("is_open_requested"))
 	for packet_index in packet_count:
 		var packet_states: Array = []
 		var first_state := packet_index * MAX_PLAYERS_PER_SNAPSHOT_PACKET
@@ -851,12 +854,22 @@ func _send_zombie_snapshots(states: Array) -> void:
 	zombie_snapshot_sequence += 1
 
 
+## Porta da safehouse central, guardada assim que a cidade em etapas a cria.
+## Uso: var door := _find_safehouse_door()
+func _find_safehouse_door() -> Node:
+	if is_instance_valid(safehouse_door):
+		return safehouse_door
+	safehouse_door = get_node_or_null("GeneratedCity/CentralSafehouse/SafehouseDoor")
+	return safehouse_door
+
+
 @rpc("authority", "call_remote", "unreliable_ordered")
 func _apply_player_snapshot(player_states: Array, door_open: bool) -> void:
 	if not NetworkSession.is_client():
 		return
-	if safehouse_door != null:
-		safehouse_door.call("apply_network_open_state", door_open)
+	var door := _find_safehouse_door()
+	if door != null:
+		door.call("apply_network_open_state", door_open)
 	for state_value in player_states:
 		if not state_value is Dictionary:
 			continue
