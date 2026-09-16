@@ -67,7 +67,8 @@ func _ready() -> void:
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/benchmark_indoor_escape.tscn")
 		return
 
-	if OS.has_feature("dedicated_server") or "--server" in OS.get_cmdline_user_args():
+	if ServerTickPolicy.is_dedicated_server():
+		ServerTickPolicy.apply_dedicated_tick()
 		var error := start_server(server_port)
 		if error != OK:
 			push_error("Nao foi possivel iniciar o servidor: %s" % error_string(error))
