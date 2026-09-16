@@ -41,10 +41,14 @@ var _intentional_disconnect := false
 var _connected_to_server := false
 var _ping_elapsed := PING_INTERVAL
 var _discovery_socket: PacketPeerUDP
+## Servidor filho do "Hospedar partida" (no jogo do host) e, no proprio
+## servidor filho, o relogio que o encerra sem peers (`--host-idle-exit=`).
+var local_host := LocalHostLauncher.new()
 
 
 func _ready() -> void:
 	server_port = _get_command_line_port()
+	local_host.idle_exit_seconds = LocalHostLauncher.idle_exit_seconds_from_arguments(OS.get_cmdline_user_args())
 	_reset_world_config_from_arguments()
 	server_name = _get_command_line_server_name()
 	if server_port < 0:
@@ -116,6 +120,10 @@ func _ready() -> void:
 
 func _process(delta: float) -> void:
 	_poll_server_discovery()
+	if is_server() and local_host.should_exit_idle(delta, multiplayer.get_peers().size()):
+		print(JSON.stringify({"event": "hosted_server_idle_exit", "idle_seconds": local_host.idle_exit_seconds}))
+		get_tree().quit(0)
+		return
 	if not is_client() or not _connected_to_server:
 		return
 	_ping_elapsed += delta
@@ -123,6 +131,11 @@ func _process(delta: float) -> void:
 		return
 	_ping_elapsed = 0.0
 	_ping_request.rpc_id(SERVER_ID, Time.get_ticks_usec())
+
+
+## Jogo do host fechando: o servidor filho sai junto (menu e quit passam aqui).
+func _exit_tree() -> void:
+	local_host.stop()
 
 
 func start_server(port: int = DEFAULT_PORT) -> Error:
