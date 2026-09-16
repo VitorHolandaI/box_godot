@@ -171,7 +171,9 @@ func _ready() -> void:
 	health = max_health
 	_ground_collision_mask = collision_mask
 	safe_margin = 0.08
-	max_slides = 6
+	# 3 em vez de 6: na horda amontoada cada deslize extra e outra consulta de
+	# colisao; move_and_slide era ~60% da IA medida no servidor (sonda de frame).
+	max_slides = 3
 	network_target_position = global_position
 	network_target_rotation = rotation.y
 	_snapshot_prev_position = global_position
@@ -857,6 +859,9 @@ func set_vision_visible(is_visible: bool) -> void:
 ## um estalo do Thanos; ao voltar ele se remonta mais rapido e sem po.
 ## Uso: chamado a cada tick de fisica.
 func _update_visual_fade(delta: float) -> void:
+	# Servidor dedicado nao renderiza: o fade custava ~0.5 ms/frame na VPS.
+	if ServerTickPolicy.is_dedicated_server():
+		return
 	var should_show := vision_visible and not is_dead and lod_level != LodLevel.FAR
 	var target_opacity := 1.0 if should_show else 0.0
 	var fade_time := REASSEMBLE_TIME if should_show else DISSOLVE_OUT_TIME
