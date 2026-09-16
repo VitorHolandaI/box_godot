@@ -18,6 +18,10 @@ const LABEL_CHECK_INTERVAL := 0.15
 const BLINK_SECONDS := 10.0
 const FLOOR_PROBE_UP := 1.5
 const FLOOR_PROBE_DOWN := 6.0
+## Passar por cima (sem apertar E) de uma arma do mesmo tipo que o jogador ja
+## carrega transfere a municao que cabe na reserva dele.
+const AMMO_ABSORB_RADIUS := 1.2
+const AMMO_ABSORB_INTERVAL := 0.2
 
 var weapon_kind := WeaponStats.Kind.SHOTGUN
 var mag := 0
@@ -32,6 +36,7 @@ var name_label: Label3D
 var elapsed := 0.0
 var _snapped_to_floor := false
 var _label_check_elapsed := 0.0
+var _ammo_absorb_elapsed := 0.0
 
 
 func setup(kind: int, weapon_mag: int, weapon_reserve: int, weapon_durability: int) -> void:
@@ -60,6 +65,11 @@ func _process(delta: float) -> void:
 		GroundWeaponSync.mark_dirty()
 		queue_free()
 		return
+	if not NetworkSession.is_client():
+		_ammo_absorb_elapsed += delta
+		if _ammo_absorb_elapsed >= AMMO_ABSORB_INTERVAL:
+			_ammo_absorb_elapsed = 0.0
+			absorb_ammo_from_nearby_players(get_tree())
 	_animate_model(delta)
 	_update_name_label(delta)
 
@@ -74,11 +84,60 @@ func remaining_lifetime() -> float:
 ## chamador remove o no so quando a arma saiu do chao.
 ## Uso: var r := pickup.interact_with(player)
 func interact_with(player: Node) -> String:
+	# Mesma arma na mao: antes o E somava a reserva e sumia com a arma inteira,
+	# perdendo o que nao coube. Agora so sai a municao que cabe.
+	if bool(player.call("has_crate_weapon", weapon_kind)):
+		return "merged" if _give_ammo_to(player) > 0 else "full"
 	var result: String = player.call("take_ground_weapon", weapon_kind, mag, reserve, durability)
 	if result != "full":
 		GroundWeaponSync.mark_dirty()
 		queue_free()
 	return result
+
+
+## Autoridade: jogadores vivos a AMMO_ABSORB_RADIUS com a mesma arma levam a
+## municao que cabe; a arma some do chao quando esvazia.
+## Uso: pickup.absorb_ammo_from_nearby_players(get_tree())
+func absorb_ammo_from_nearby_players(tree: SceneTree) -> void:
+	for node in tree.get_nodes_in_group("player"):
+		if mag + reserve <= 0 or is_queued_for_deletion():
+			return
+		var player := node as Node3D
+		if player == null or int(player.get("health")) <= 0 or bool(player.get("is_eliminated")):
+			continue
+		if Vector2(player.global_position.x - global_position.x, player.global_position.z - global_position.z).length() > AMMO_ABSORB_RADIUS:
+			continue
+		if bool(player.call("has_crate_weapon", weapon_kind)):
+			_give_ammo_to(player)
+
+
+## Municao que sai da arma do chao para `space` de reserva: primeiro a reserva
+## dela, depois o pente. Devolve {taken, mag, reserve} com o que sobra no chao.
+## Uso: GroundWeaponPickup.split_ammo(22, 80, 50) -> {taken 50, mag 22, reserve 30}
+static func split_ammo(pickup_mag: int, pickup_reserve: int, space: int) -> Dictionary:
+	var taken := clampi(space, 0, maxi(pickup_mag, 0) + maxi(pickup_reserve, 0))
+	var from_reserve := mini(taken, maxi(pickup_reserve, 0))
+	return {
+		"taken": taken,
+		"reserve": maxi(pickup_reserve, 0) - from_reserve,
+		"mag": maxi(pickup_mag, 0) - (taken - from_reserve),
+	}
+
+
+func _give_ammo_to(player: Node) -> int:
+	var space := int(player.call("crate_reserve_space", weapon_kind))
+	var split := split_ammo(mag, reserve, space)
+	var added := int(player.call("absorb_ground_ammo", weapon_kind, int(split["taken"])))
+	if added <= 0:
+		return 0
+	# add_reserve pode aceitar menos que o previsto; recalcula a sobra real.
+	var actual := split_ammo(mag, reserve, added)
+	mag = int(actual["mag"])
+	reserve = int(actual["reserve"])
+	GroundWeaponSync.mark_dirty()
+	if mag + reserve <= 0:
+		queue_free()
+	return added
 
 
 ## Assenta no piso de verdade (rua ou andar de predio) no primeiro frame: o
