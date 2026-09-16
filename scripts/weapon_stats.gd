@@ -437,7 +437,8 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil_lift": 0.04,
 		"flash_scale": 0.2,
 		"sound": "crossbow",
-		"tracer_speed": 70.0,
+		# Dano e instantaneo (hitscan): tracer lento chegava depois do acerto.
+		"tracer_speed": 110.0,
 	},
 	## Lanca-granadas: tambor de 6, explosao menor que a bazuca e cadencia maior.
 	Kind.GRENADE_LAUNCHER: {
@@ -463,7 +464,7 @@ const STATS_BY_KIND: Dictionary = {
 		"recoil_lift": 0.2,
 		"flash_scale": 1.8,
 		"sound": "grenade",
-		"tracer_speed": 55.0,
+		"tracer_speed": 100.0,
 	},
 	## Motosserra: segura o botao e corta todo zumbi no cone curto da frente.
 	## "municao" e gasolina (1 por tick de 0,1 s = 10 s por tanque).
@@ -471,8 +472,9 @@ const STATS_BY_KIND: Dictionary = {
 		"label": "Motosserra",
 		"damage": 14,
 		"pellets": 1,
-		"cone_range": 2.2,
-		"cone_deg": 70.0,
+		# 2,2 m / 70 graus era curto demais em jogo (pedido): alcanca a fila da frente.
+		"cone_range": 3.5,
+		"cone_deg": 90.0,
 		"mag_size": 100,
 		"max_reserve": 300,
 		"grant_reserve": 200,

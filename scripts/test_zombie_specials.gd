@@ -171,7 +171,8 @@ func _test_weapons_have_own_sound_and_fast_tracer(test_root: Node) -> void:
 	var slow: Array[String] = []
 	for kind in WeaponStats.crate_kinds():
 		profiles[String(WeaponStats.stats_for(kind).get("sound", ""))] = true
-		if WeaponStats.tracer_speed_for(kind) < 100.0:
+		# Motosserra/lanca-chamas nao tem tracer (visual de cone).
+		if WeaponStats.tracer_speed_for(kind) < 100.0 and not WeaponStats.stats_for(kind).has("cone_range"):
 			slow.append(String(WeaponStats.stats_for(kind)["label"]))
 	var streams: Dictionary = {}
 	for profile in profiles:
