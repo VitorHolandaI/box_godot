@@ -113,7 +113,8 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
 - `test_local_host_launcher.gd`: regressoes do servidor hospedado (argumentos exportado/editor, saida ociosa, IPs da LAN, parar sem servidor).
-- `test_build_info.gd`: regressoes da identidade de build: linha de build com todos os campos e handshake que ignora o commit (servidor do fonte x cliente export) e recusa build/versao diferentes.
+- `test_build_info.gd`: regressoes da identidade de build: linha de build com todos os campos, handshake que ignora o commit (servidor do fonte x cliente export), recusa de build/versao diferentes e guarda da superficie de RPC contra o build declarado.
+- `test_build_info.gd`: (2/2) guarda a superficie de RPC (hash de todas as declaracoes `@rpc`) contra o BUILD DECLARADO: mudar RPC sem subir `GAME_BUILD` faz cliente antigo conectar e nao andar, e este teste obriga a atualizar os dois.
 - `test_pvp_match.gd`: regressoes do mata-mata (dinheiro inicial/premio por abate, gasto sem saldo, regras de compra, fim por abates e por tempo, teto de dinheiro).
 - `test_snapshot_interp_buffer.gd`: regressoes do buffer de interpolacao: continuidade entre snapshots (sem frame congelado), interpolacao entre amostras guardadas, reinicio em realocacao, primeira amostra sem teleporte, atraso adaptativo, rotacao pelo caminho mais curto e historico limitado.
 - `test_server_tick_policy.gd`: regressoes do corte de custo do servidor dedicado (30 Hz, 2 passos por frame, deteccao por `--server`, max_slides do zumbi).
