@@ -41,7 +41,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `player_capacity.gd`: limite de jogadores por servidor separado da tela dividida (`--max-players=N`, padrao 8; ate 4 locais por computador) e spawn em aneis para quem passa dos 4 marcadores.
 - `player_equipment.gd`: contagem de granadas, facas de arremesso, ataques aereos e SWAT (inicio, maximo, consumo e 4 bytes no snapshot). Ganha ataque aereo a cada 3 ondas e SWAT a cada 5.
 - `player_slots_replication.gd`: decide quando os slots de arma entram no snapshot (3 snapshots apos cada mudanca e refresh a cada 20 com fase por jogador).
-- `player_snapshot_codec.gd`: snapshot binario de jogadores (47 bytes sem slots de arma), varios por pacote abaixo do MTU e codificado uma vez para todos os peers.
+- `player_snapshot_codec.gd`: snapshot binario de jogadores (47 bytes sem slots de arma), varios por pacote abaixo do MTU e codificado uma vez para todos os peers; o id de peer vai como int32 COM sinal (o ENet sorteia ids negativos e o esquadrao SWAT usa reservados: em u32 o cliente nao achava o no e descartava o estado).
 - `player_throwables.gd`: uso dos itens na autoridade: granada em arco, faca de arremesso silenciosa que atravessa 2 e pedido de ataque aereo/SWAT a cena.
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
@@ -54,7 +54,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador; municao automatica ao passar pela mesma arma.
 - `test_in_game_settings.gd`: regressoes das configuracoes na partida (captura por dispositivo, tecla nova no InputMap, menu do Esc abrindo graficos e teclas).
 - `test_player_capacity.gd`: regressoes do `--max-players`, da recusa de entrada e do spawn sem empilhar alem de 4 jogadores.
-- `test_player_snapshot_codec.gd`: regressoes do snapshot binario de jogadores (ida e volta, tamanho, 24 jogadores em poucos pacotes, truncado, envio dos slots).
+- `test_player_snapshot_codec.gd`: regressoes do snapshot binario de jogadores (ida e volta, tamanho, 24 jogadores em poucos pacotes, truncado, envio dos slots e id de peer negativo).
 - `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada por raio entre aliados.
@@ -83,7 +83,9 @@ Logica de jogo, rede, interface e testes automatizados.
 - `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
 - `procedural/`: blueprints, geradores, assemblers e navegacao da cidade procedural experimental ativada por `--procedural-city`.
-- `run_4_bots.sh`: inicializa servidor dedicado e abre 4 janelas com bots jogando sozinhos em grade 2x2.
+- `run_4_bots.sh`: abre 4 janelas com bots jogando sozinhos em grade 2x2; sem o segundo argumento sobe um servidor dedicado local, com ele (`run_4_bots.sh 27015 195.35.42.208`) os bots entram no servidor indicado.
+- `build_info.gd`: identidade do build (commit, data, versao do jogo e do Godot) impressa na subida por servidor e cliente; `build_exports.sh` injeta o commit no export e restaura depois. O servidor recusa peer que reporte build diferente (ou que nao reporte) com mensagem legivel — sem isso um cliente antigo dava `rpc node checksum failed`, o input era recusado e o jogador nao andava sem nenhuma pista.
+- `test_session.sh`: checagem padrao de sessao em duas fases: (1) servidor + bot exigindo `BOT_TEST_PASS` (conectou, andou, gastou stamina, viu bala e matou zumbi) e (2) servidor com `--smoke-test-swat` + cliente conferindo que os 4 soldados existem NO CLIENTE e se movem (`swat_seen_done`), alem da linha de build nos dois lados, handshake aceito e zero erro de RPC.
 - `server_entrypoint.sh`: cria a seed a partir do container e inicia o servidor dedicado.
 - `survival_map_builder.gd`: cria a arena compacta e suas barreiras para sobrevivencia.
 - `survival_wave_controller.gd`: controla spawning, limpeza e conclusao das ondas, GAME OVER com reinicio automatico e sync de onda/restantes para o cliente.
