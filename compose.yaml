@@ -3,7 +3,7 @@ services:
     build:
       context: .
     image: box-godot-server:local
-    command: ["--server", "--server-port=${GAME_SERVER_PORT:-27015}", "${GAME_SERVER_TEST_MODE:---production}", "${GAME_SERVER_CITY_MODE:---procedural-city}", "${GAME_SERVER_GAME_MODE:---survival}"]
+    command: ["--server", "--server-port=${GAME_SERVER_PORT:-27015}", "${GAME_SERVER_TEST_MODE:---production}", "${GAME_SERVER_CITY_MODE:---procedural-city}", "${GAME_SERVER_GAME_MODE:---survival}", "${GAME_SERVER_PVP_BOTS:---pvp-bots=0}"]
     environment:
       GAME_SERVER_WORLD_SEED: "${GAME_SERVER_WORLD_SEED:-}"
     restart: unless-stopped
