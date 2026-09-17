@@ -6,6 +6,7 @@ extends RefCounted
 ## Uso: PvpMatchTests.new().run(test_root)
 
 const PVPMATCH_SCRIPT := preload("res://scripts/pvp_match.gd")
+const WEAPON_SLOTS_SCRIPT := preload("res://scripts/weapon_slots.gd")
 const A1 := "101:0"
 const A2 := "102:0"
 const B1 := "201:0"
@@ -14,12 +15,15 @@ const B2 := "202:0"
 
 func run(test_root: Node) -> void:
 	_test_teams_balanced_and_start_money(test_root)
+	_test_teams_stay_even_on_sequential_joins(test_root)
 	_test_kill_reward_and_deaths(test_root)
 	_test_spend_never_goes_negative(test_root)
 	_test_buy_only_during_buy_phase(test_root)
 	_test_best_of_three_rounds(test_root)
 	_test_round_by_time_and_money_cap(test_root)
 	_test_prices_are_defined(test_root)
+	_test_frozen_input_keeps_only_aim(test_root)
+	_test_pvp_gives_huge_reserve_and_no_wear(test_root)
 
 
 func _match_with_four() -> PvpMatch:
@@ -47,6 +51,27 @@ func _test_teams_balanced_and_start_money(test_root: Node) -> void:
 		_fail(test_root, "Dinheiro inicial deveria ser %d; veio %d." % [PVPMATCH_SCRIPT.MONEY_START, money])
 		return
 	print("PASS: Times 2x2 e $%d inicial." % money)
+
+
+## Entrando um a um (o caso real da sala), a diferenca entre times nunca passa
+## de 1 — e ao sair alguem, o proximo entra no time que ficou menor.
+func _test_teams_stay_even_on_sequential_joins(test_root: Node) -> void:
+	print("Testando distribuicao uniforme na entrada...")
+	var match_state := PVPMATCH_SCRIPT.new()
+	for index in 9:
+		match_state.register_player("%d:0" % (500 + index))
+		var counts: Array = match_state.team_counts()
+		if absi(int(counts[0]) - int(counts[1])) > 1:
+			_fail(test_root, "Com %d jogadores os times ficaram %s (diferenca > 1)." % [index + 1, counts])
+			return
+	# Alguem do time 0 sai: o proximo entra no time 0 para reequilibrar.
+	match_state.remove_player("500:0")
+	match_state.register_player("900:0")
+	var counts_after: Array = match_state.team_counts()
+	if int(counts_after[1]) - int(counts_after[0]) > 1:
+		_fail(test_root, "Depois de uma saida o proximo deveria entrar no time menor; times=%s." % [counts_after])
+		return
+	print("PASS: Times sempre equilibrados na entrada (%s)." % [counts_after])
 
 
 func _test_kill_reward_and_deaths(test_root: Node) -> void:
@@ -168,6 +193,75 @@ func _test_prices_are_defined(test_root: Node) -> void:
 		_fail(test_root, "Preco definido para arma que nao e de crate: %s." % [caras])
 		return
 	print("PASS: %d armas compraveis com preco." % kinds.size())
+
+
+## Freezetime: so olhar e o slot passam; movimento/tiro/itens ficam zerados.
+func _test_frozen_input_keeps_only_aim(test_root: Node) -> void:
+	print("Testando entrada congelada do tempo de compra...")
+	var raw := {
+		"slot": 1, "move": Vector2(1.0, 1.0), "aim": Vector2(0.5, -0.5),
+		"jump": true, "sprint": true, "attack": true, "grenade": true, "reload": true,
+	}
+	var frozen: Dictionary = PVPMATCH_SCRIPT.frozen_input(raw)
+	if frozen["move"] != Vector2.ZERO:
+		_fail(test_root, "Movimento deveria ser zerado no freezetime; veio %s." % frozen["move"])
+		return
+	if frozen["aim"] != raw["aim"] or int(frozen["slot"]) != 1:
+		_fail(test_root, "Olhar e slot deveriam passar; aim=%s slot=%s." % [frozen["aim"], frozen["slot"]])
+		return
+	for action in ["jump", "sprint", "attack", "grenade", "reload"]:
+		if bool(frozen[action]):
+			_fail(test_root, "%s deveria ficar falso no freezetime." % action)
+			return
+	if raw["move"] != Vector2(1.0, 1.0) or not bool(raw["attack"]):
+		_fail(test_root, "A entrada original nao pode ser alterada; veio %s." % raw)
+		return
+	print("PASS: Freezetime deixa so olhar e slot.")
+
+
+## Mata-mata: arma comprada vem com reserva multiplicada e o tiro NAO desgasta.
+## Tambem garante que o survival continua desgastando normalmente.
+func _test_pvp_gives_huge_reserve_and_no_wear(test_root: Node) -> void:
+	print("Testando reserva grande e sem durabilidade no PVP...")
+	var kind := WeaponStats.Kind.AK47
+	var stats := WeaponStats.stats_for(kind)
+	var base_reserve := int(stats["grant_reserve"])
+	var pvp_before: bool = NetworkSession.pvp_mode
+	NetworkSession.pvp_mode = true
+	var pvp_slots: WeaponSlots = WEAPON_SLOTS_SCRIPT.new()
+	pvp_slots.grant(kind)
+	var pvp_state: Dictionary = pvp_slots.state_of(kind)
+	var expected_reserve: int = mini(base_reserve * WEAPON_SLOTS_SCRIPT.PVP_RESERVE_MULTIPLIER, WEAPON_SLOTS_SCRIPT.PVP_RESERVE_CAP)
+	if int(pvp_state["reserve"]) != expected_reserve or expected_reserve <= base_reserve:
+		_fail(test_root, "Reserva do PVP deveria ser %d (base %d); veio %s." % [expected_reserve, base_reserve, pvp_state["reserve"]])
+		NetworkSession.pvp_mode = pvp_before
+		return
+	var durability_before := int(pvp_state["durability"])
+	for shot in 200:
+		pvp_slots.wear(kind)
+	if int(pvp_slots.state_of(kind)["durability"]) != durability_before:
+		_fail(test_root, "No PVP a durabilidade nao pode cair; foi de %d para %s." % [durability_before, pvp_slots.state_of(kind)["durability"]])
+		NetworkSession.pvp_mode = pvp_before
+		return
+	if pvp_slots.is_degraded(kind):
+		_fail(test_root, "Arma do PVP nunca fica degradada.")
+		NetworkSession.pvp_mode = pvp_before
+		return
+	# Survival continua igual: desgasta e degrada.
+	NetworkSession.pvp_mode = false
+	var survival_slots: WeaponSlots = WEAPON_SLOTS_SCRIPT.new()
+	survival_slots.grant(kind)
+	if int(survival_slots.state_of(kind)["reserve"]) != base_reserve:
+		_fail(test_root, "No survival a reserva deveria continuar %d; veio %s." % [base_reserve, survival_slots.state_of(kind)["reserve"]])
+		NetworkSession.pvp_mode = pvp_before
+		return
+	survival_slots.wear(kind)
+	if int(survival_slots.state_of(kind)["durability"]) != durability_before - 1:
+		_fail(test_root, "No survival o tiro deveria desgastar 1 ponto; veio %s." % survival_slots.state_of(kind)["durability"])
+		NetworkSession.pvp_mode = pvp_before
+		return
+	NetworkSession.pvp_mode = pvp_before
+	print("PASS: PVP com reserva %d (base %d) e sem desgaste." % [expected_reserve, base_reserve])
 
 
 func _fail(test_root: Node, message: String) -> void:

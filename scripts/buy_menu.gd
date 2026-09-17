@@ -16,6 +16,7 @@ var _panel: PanelContainer
 var _money_label: Label
 var _phase_label: Label
 var _status_label: Label
+var _banner: Label
 var _rows: VBoxContainer
 var _buttons: Dictionary = {}
 var _player: Node = null
@@ -63,6 +64,16 @@ func _ready() -> void:
 	var hint := Label.new()
 	hint.text = "B fecha | compre dentro da sua base na fase de compra"
 	column.add_child(hint)
+	# Aviso de freezetime: fica na tela mesmo com o menu fechado, para o jogador
+	# saber que pode comprar e que o movimento esta travado.
+	_banner = Label.new()
+	_banner.set_anchors_preset(Control.PRESET_CENTER_TOP)
+	_banner.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_banner.position = Vector2(-220.0, 60.0)
+	_banner.custom_minimum_size = Vector2(440.0, 0.0)
+	_banner.add_theme_font_size_override("font_size", 22)
+	_banner.visible = false
+	add_child(_banner)
 
 
 func _process(_delta: float) -> void:
@@ -72,6 +83,20 @@ func _process(_delta: float) -> void:
 		_panel.visible = not _panel.visible
 	if _panel.visible:
 		refresh()
+	_refresh_banner()
+
+
+## Freezetime: contagem na tela enquanto a fase de compra estiver aberta.
+func _refresh_banner() -> void:
+	if _banner == null:
+		return
+	var scene := get_tree().current_scene
+	var in_buy: bool = scene != null and bool(scene.get("pvp_buy_open"))
+	_banner.visible = in_buy
+	if not in_buy:
+		return
+	var seconds := int(ceil(float(scene.get("pvp_buy_seconds_left")))) if scene != null else 0
+	_banner.text = "TEMPO DE COMPRA — %ds\nB para comprar na sua base" % maxi(seconds, 0)
 
 
 ## Recria as linhas quando o jogador aparece (setup pode vir antes do _ready).

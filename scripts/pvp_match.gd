@@ -40,13 +40,37 @@ var round_wins: Array[int] = [0, 0]
 var scores: Dictionary = {}
 
 
-## Entra na partida na fase de compra, com a economia inicial. Time escolhido
-## para equilibrar (menos gente primeiro); quem ja estava nao muda de time.
+## Entra na partida na fase de compra, com a economia inicial. O time e o que
+## tem MENOS gente (empate no 0); quem ja estava nao muda de time. Assim
+## entrando um a um os times ficam sempre com diferenca de no maximo 1.
 ## Uso: match.register_player("123:0")
 func register_player(key: String) -> void:
 	if scores.has(key):
 		return
-	scores[key] = {"kills": 0, "deaths": 0, "money": MONEY_START, "team": _smallest_team()}
+	scores[key] = {"kills": 0, "deaths": 0, "money": MONEY_START, "team": smallest_team()}
+
+
+## Id do time com menos gente registrada (empate devolve 0).
+## Uso: var time := match.smallest_team()
+func smallest_team() -> int:
+	var counts := team_counts()
+	var smallest := 0
+	for team in TEAM_COUNT:
+		if counts[team] < counts[smallest]:
+			smallest = team
+	return smallest
+
+
+## Quantos jogadores registrados por time. Uso: var n := match.team_counts()
+func team_counts() -> Array[int]:
+	var counts: Array[int] = []
+	counts.resize(TEAM_COUNT)
+	counts.fill(0)
+	for key in scores:
+		var team := int((scores[key] as Dictionary)["team"])
+		if team >= 0 and team < TEAM_COUNT:
+			counts[team] += 1
+	return counts
 
 
 func remove_player(key: String) -> void:
@@ -95,6 +119,19 @@ func spend(key: String, amount: int) -> bool:
 		return false
 	entry["money"] = int(entry["money"]) - amount
 	return true
+
+
+## Entrada congelada do freezetime: so olhar (aim) e o slot do jogador passam;
+## movimento, pulo, tiro e itens ficam zerados. E o "tempo de compra" do CS:
+## o servidor ignora o movimento nessa fase, entao o cliente nao anda mesmo que
+## mande input. Funcao pura para testar.
+## Uso: var congelado := PvpMatch.frozen_input(estado)
+static func frozen_input(state: Dictionary) -> Dictionary:
+	var frozen := state.duplicate()
+	for action in ["jump", "sprint", "attack", "knife", "pistol", "reload", "interact", "shotgun", "uzi", "magnum", "double_barrel", "carbine", "drop", "cycle", "grenade", "throw_knife", "air_strike", "swat", "buy"]:
+		frozen[action] = false
+	frozen["move"] = Vector2.ZERO
+	return frozen
 
 
 ## Motivo da recusa de uma compra, ou "" quando pode comprar. A posicao (base)
@@ -238,10 +275,4 @@ func hud_text() -> String:
 			return "FIM | vencedor: %s | %s" % ["Time A" if winner == 0 else ("Time B" if winner == 1 else "empate"), team_score_text()]
 
 
-func _smallest_team() -> int:
-	var counts: Array[int] = [0, 0]
-	for key in scores:
-		var team := int((scores[key] as Dictionary)["team"])
-		if team >= 0 and team < TEAM_COUNT:
-			counts[team] += 1
-	return 0 if counts[0] <= counts[1] else 1
+
