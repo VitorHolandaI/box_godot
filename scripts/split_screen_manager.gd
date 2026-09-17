@@ -161,6 +161,21 @@ func _update_hud_text() -> void:
 		var player := players[index]
 		if not is_instance_valid(player):
 			continue
+		if NetworkSession.pvp_mode:
+			# Mata-mata nao tem zumbi/sonar: o HUD fica so com vida, arma e a
+			# linha da partida (dinheiro/K-D ja vem no get_lives_text).
+			hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\n%s" % [
+				index + 1,
+				player.input_device_name,
+				player.get_lives_text(),
+				player.health,
+				player.max_health,
+				player.get_stamina_text(),
+				player.get_weapon_name(),
+				player.get_ammo_text(),
+				get_tree().current_scene.get_survival_hud_text() if get_tree().current_scene.has_method("get_survival_hud_text") else "",
+			]
+			continue
 		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\n%s\nZumbis: %d | Abates: %d\n%s\n%s" % [
 			index + 1,
 			player.input_device_name,
