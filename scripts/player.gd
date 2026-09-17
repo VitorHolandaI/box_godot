@@ -21,6 +21,9 @@ const KNIFE_ATTACK_DURATION := 0.4
 const KNIFE_DOOR_REACH := 1.8
 const MAX_LIVES := 3
 const MAX_RESERVE_AMMO := 144
+## PVP: teto de reserva da pistola. O survival limita a 144 porque a municao e
+## recurso escasso; no mata-mata isso so atrapalha.
+const MAX_RESERVE_AMMO_PVP := 999
 ## Cone de visao aposentado (pedido de jogo): o jogador ve todo zumbi a ate
 ## VIEW_RADIUS em qualquer direcao, sem raio de oclusao (mais barato que o cone).
 const VIEW_RADIUS := 35.0
@@ -77,7 +80,7 @@ var pvp_respawn_left := 0.0
 ## Ultimo a machucar este jogador: e quem leva o credito do abate.
 var last_attacker: Node = null
 const PVP_START_PISTOL_MAG := 12
-const PVP_START_PISTOL_RESERVE := 48
+const PVP_START_PISTOL_RESERVE := 240
 var infinite_ammo := false
 
 @onready var model: Node3D = $Model
@@ -851,14 +854,15 @@ func register_zombie_kill() -> void:
 	zombie_kills += 1
 
 
-## Adiciona municao a reserva do jogador ate o limite MAX_RESERVE_AMMO.
+## Adiciona municao a reserva do jogador ate o limite do modo.
 ## Retorna a quantidade de municao efetivamente adicionada.
 ## Uso:
 ##   var adicionado := player.add_ammo(24)
 func add_ammo(amount: int) -> int:
-	if amount <= 0 or reserve_ammo >= MAX_RESERVE_AMMO:
+	var reserve_cap := _reserve_ammo_cap()
+	if amount <= 0 or reserve_ammo >= reserve_cap:
 		return 0
-	var space := MAX_RESERVE_AMMO - reserve_ammo
+	var space := reserve_cap - reserve_ammo
 	var added := mini(amount, space)
 	reserve_ammo += added
 	return added
@@ -868,7 +872,13 @@ func add_ammo(amount: int) -> int:
 ## Uso:
 ##   if player.can_pickup_ammo():
 func can_pickup_ammo() -> bool:
-	return reserve_ammo < MAX_RESERVE_AMMO
+	return reserve_ammo < _reserve_ammo_cap()
+
+
+## Teto da reserva de pistola: bem maior no mata-mata.
+## Uso: var espaco := _reserve_ammo_cap() - reserve_ammo
+func _reserve_ammo_cap() -> int:
+	return MAX_RESERVE_AMMO_PVP if NetworkSession.pvp_mode else MAX_RESERVE_AMMO
 
 
 ## Recupera vida sem ultrapassar o maximo e retorna o total recebido.
@@ -1112,6 +1122,8 @@ func get_weapon_name() -> String:
 		_:
 			var state := weapon_slots.state_of(current_weapon)
 			var stats := WeaponStats.stats_for(current_weapon)
+			if NetworkSession.pvp_mode:
+				return "%s (%d dano) | Durab ∞" % [stats["label"], stats["damage"]]
 			return "%s (%d dano) | Durab %d/%d" % [stats["label"], stats["damage"], state.get("durability", 0), stats["max_durability"]]
 
 

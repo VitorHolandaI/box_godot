@@ -10,6 +10,11 @@ extends RefCounted
 ##   slots.grant(WeaponStats.Kind.SHOTGUN)
 
 const MAX_SLOTS := 1
+## Mata-mata: arma comprada vem com MUITA reserva e sem desgaste. No survival a
+## municao e um recurso escasso (voce repoe com drops); no PVP a rodada dura
+## pouco e morrer ja custa caro, entao reserva curta so vira tempo perdido.
+const PVP_RESERVE_MULTIPLIER := 4
+const PVP_RESERVE_CAP := 2000
 
 var kinds: Array[int] = []
 var state_by_kind: Dictionary = {}
@@ -38,9 +43,18 @@ func grant(kind: int) -> void:
 	kinds.append(kind)
 	state_by_kind[kind] = {
 		"mag": int(stats["mag_size"]),
-		"reserve": int(stats["grant_reserve"]),
+		"reserve": _grant_reserve_for(stats),
 		"durability": int(stats["max_durability"]),
 	}
+
+
+## Reserva que a arma recebe ao ser comprada/pega: no PVP multiplica e limita o
+## excesso. Uso: var reserva := _grant_reserve_for(WeaponStats.stats_for(kind))
+func _grant_reserve_for(stats: Dictionary) -> int:
+	var reserve := int(stats["grant_reserve"])
+	if NetworkSession.pvp_mode:
+		reserve = mini(reserve * PVP_RESERVE_MULTIPLIER, PVP_RESERVE_CAP)
+	return reserve
 	_bump()
 
 
@@ -111,6 +125,9 @@ func wear(kind: int) -> int:
 	var state := state_of(kind)
 	if state.is_empty():
 		return 0
+	if NetworkSession.pvp_mode:
+		# Mata-mata nao tem durabilidade: a arma comprada dura a partida toda.
+		return int(state["durability"])
 	state["durability"] = maxi(int(state["durability"]) - 1, 0)
 	_bump()
 	return int(state["durability"])

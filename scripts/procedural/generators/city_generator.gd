@@ -62,9 +62,13 @@ static func _generate_lots(block, block_seed: int, survival_mode: bool, pvp_mode
 	for x_index in 2:
 		for z_index in 2:
 			var is_safehouse_lot := is_zero_approx(block.position.x) and is_zero_approx(block.position.y) and x_index == 0 and z_index == 1
-			# PVP: a segunda safehouse ocupa o lote oposto (canto sudeste), entao
-			# ele tambem nasce vazio.
-			var is_pvp_safehouse_lot := pvp_mode and is_equal_approx(block.position.x, 48.0) and is_equal_approx(block.position.y, -48.0) and x_index == 1 and z_index == 0
+			# PVP: as duas casas ficam nos cantos opostos do mapa (lote sudoeste
+			# do bloco -48/-48 e lote nordeste do bloco 48/48), entao esses lotes
+			# nascem vazios.
+			var is_pvp_safehouse_lot := pvp_mode and (
+				(is_equal_approx(block.position.x, -48.0) and is_equal_approx(block.position.y, -48.0) and x_index == 0 and z_index == 0)
+				or (is_equal_approx(block.position.x, 48.0) and is_equal_approx(block.position.y, 48.0) and x_index == 1 and z_index == 1)
+			)
 			var reserved_lot := is_safehouse_lot or is_pvp_safehouse_lot
 			var jitter := Vector2.ZERO if reserved_lot else Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
 			var lot_position: Vector2 = block.position + Vector2(-10.5 + float(x_index) * 21.0, -10.5 + float(z_index) * 21.0) + jitter
