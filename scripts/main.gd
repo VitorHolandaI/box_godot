@@ -650,6 +650,10 @@ func _tick_client_swat_smoke(delta: float) -> void:
 		print(JSON.stringify({"event": "swat_seen", "alive": bots.size(), "travel": travels}))
 	if smoke_swat_elapsed < 8.0:
 		return
+	if bots.is_empty() and smoke_swat_elapsed < 20.0:
+		# Sem esquadrao nenhum: nao espera para sempre (o teste tem timeout, mas
+		# um smoke que trava ate ser morto nao serve de sinal).
+		return
 	var max_travel := 0.0
 	var at_origin := 0
 	for bot in bots:
