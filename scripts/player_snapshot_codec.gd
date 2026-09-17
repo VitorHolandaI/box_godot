@@ -6,7 +6,7 @@ extends RefCounted
 ## 10 Hz): no benchmark da VPS o envio foi de 1,5 ms com 12 jogadores a 7-14 ms
 ## com 24. Aqui sao RECORD_BYTES por jogador e varios por pacote.
 ## Layout little-endian por jogador:
-##   u32 peer | u8 slot | f32 x y z | u16 rotacao | u16 vida | u16 stamina*10
+##   s32 peer | u8 slot | f32 x y z | u16 rotacao | u16 vida | u16 stamina*10
 ##   | u8 flags (0 correndo, 1 eliminado, 2 caido, 3 tem slots) | u8 arma
 ##   | u8 municao pistola | u16 reserva | u16 ms postura, recuo, faca, clarao, tranco
 ##   | i8 hit_dir_x*127 | u8 vidas | u32 abates | u16 teleporte | u8 reviver*255
