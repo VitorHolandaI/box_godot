@@ -146,8 +146,11 @@ func _generate_test_bot_input(player: Node3D, zombies_node: Node) -> Dictionary:
 ## Entrada de um bot em mata-mata PVP: caca o jogador inimigo mais perto,
 ## mantem distancia de tiro, sai do cerco e nunca fica parado (patrulha quando
 ## nao ha ninguem a vista). Sem troca de arma: em PVP o bot comeca de pistola.
-## Uso: bot.apply_network_input(ai.collect_pvp_input(bot, tree, slot, delta))
-func collect_pvp_input(player: Node3D, tree: SceneTree, slot: int, delta: float) -> Dictionary:
+## `hunt_position` e para onde ir quando nao ha inimigo a vista (o main manda a
+## proxima esquina da rota pelas ruas; sem isso o bot atravessava o predio reto
+## e ficava empurrando parede).
+## Uso: bot.apply_network_input(ai.collect_pvp_input(bot, tree, slot, delta, rumo))
+func collect_pvp_input(player: Node3D, tree: SceneTree, slot: int, delta: float, hunt_position: Vector3 = Vector3.ZERO) -> Dictionary:
 	var target := _nearest_enemy_player(player, tree)
 	var target_offset := Vector3.ZERO
 	var target_dist := 0.0
@@ -155,7 +158,7 @@ func collect_pvp_input(player: Node3D, tree: SceneTree, slot: int, delta: float)
 		target_offset = target.global_position - player.global_position
 		target_offset.y = 0.0
 		target_dist = target_offset.length()
-	var move := _pvp_movement(player, slot, target, target_offset, target_dist, delta)
+	var move := _pvp_movement(player, slot, target, target_offset, target_dist, delta, hunt_position)
 	var aim := move
 	if target_dist > 0.01:
 		aim = Vector2(target_offset.x, target_offset.z).normalized()
@@ -211,7 +214,7 @@ func _nearest_enemy_player(player: Node3D, tree: SceneTree) -> Node3D:
 
 ## Movimento do bot em PVP: cerco (foge de 2+ inimigos colados), aproxima de
 ## longe, recua de perto e ciranda na faixa de tiro; sem alvo, patrulha.
-func _pvp_movement(player: Node3D, slot: int, target: Node3D, target_offset: Vector3, target_dist: float, delta: float) -> Vector2:
+func _pvp_movement(player: Node3D, slot: int, target: Node3D, target_offset: Vector3, target_dist: float, delta: float, hunt_position: Vector3 = Vector3.ZERO) -> Vector2:
 	_update_unstuck_logic(player, slot, delta)
 	var unstuck_duration: float = unstuck_durations.get(slot, 0.0)
 	if unstuck_duration > 0.0:
@@ -226,9 +229,12 @@ func _pvp_movement(player: Node3D, slot: int, target: Node3D, target_offset: Vec
 		strafe_dir = -strafe_dir
 		strafe_dirs[slot] = strafe_dir
 	if target == null:
-		# Sem inimigo a vista (todos caidos): fica parado. Patrulhar pontos
-		# fixos do bot de teste empurrava o bot contra a parede do predio.
-		return Vector2.ZERO
+		# Sem inimigo a vista: segue a rota pelas ruas ate o lado inimigo.
+		var to_hunt := hunt_position - player.global_position
+		to_hunt.y = 0.0
+		if to_hunt.length() < 4.0:
+			return Vector2.ZERO
+		return Vector2(to_hunt.x, to_hunt.z).normalized()
 	var dir := Vector2(target_offset.x, target_offset.z).normalized()
 	var perpendicular := Vector2(-dir.y, dir.x) * strafe_dir
 	if target_dist > 12.0:
