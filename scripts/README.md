@@ -84,7 +84,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
 - `procedural/`: blueprints, geradores, assemblers e navegacao da cidade procedural experimental ativada por `--procedural-city`.
 - `run_4_bots.sh`: abre 4 janelas com bots jogando sozinhos em grade 2x2; sem o segundo argumento sobe um servidor dedicado local, com ele (`run_4_bots.sh 27015 bitssand.blog`) os bots entram no servidor indicado.
-- `build_info.gd`: identidade do build (commit, data, versao do jogo e do Godot) impressa na subida por servidor e cliente; `build_exports.sh` injeta o commit no export e restaura depois. O servidor recusa peer que reporte build diferente (ou que nao reporte) com mensagem legivel — sem isso um cliente antigo dava `rpc node checksum failed`, o input era recusado e o jogador nao andava sem nenhuma pista.
+- `build_info.gd`: identidade do build impressa na subida por servidor e cliente; `build_exports.sh` injeta o commit no export e restaura depois. O handshake compara o BUILD DECLARADO (`GAME_BUILD`, subir quando mudar RPC/snapshot) + versao do jogo, nunca o commit: o servidor da VPS roda do fonte no container (commit sempre "dev") e o cliente e um export. O servidor recusa peer com build diferente (ou que nao reporte em 8 s) com mensagem legivel — sem isso um cliente antigo dava `rpc node checksum failed`, o input era recusado e o jogador nao andava sem pista nenhuma.
 - `test_session.sh`: checagem padrao de sessao em duas fases: (1) servidor + bot exigindo `BOT_TEST_PASS` (conectou, andou, gastou stamina, viu bala e matou zumbi) e (2) servidor com `--smoke-test-swat` + cliente conferindo que os 4 soldados existem NO CLIENTE e se movem (`swat_seen_done`), alem da linha de build nos dois lados, handshake aceito e zero erro de RPC.
 - `server_entrypoint.sh`: cria a seed a partir do container e inicia o servidor dedicado.
 - `survival_map_builder.gd`: cria a arena compacta e suas barreiras para sobrevivencia.
@@ -111,6 +111,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
 - `test_local_host_launcher.gd`: regressoes do servidor hospedado (argumentos exportado/editor, saida ociosa, IPs da LAN, parar sem servidor).
+- `test_build_info.gd`: regressoes da identidade de build: linha de build com todos os campos e handshake que ignora o commit (servidor do fonte x cliente export) e recusa build/versao diferentes.
 - `test_snapshot_interp_buffer.gd`: regressoes do buffer de interpolacao: continuidade entre snapshots (sem frame congelado), interpolacao entre amostras guardadas, reinicio em realocacao, primeira amostra sem teleporte, atraso adaptativo, rotacao pelo caminho mais curto e historico limitado.
 - `test_server_tick_policy.gd`: regressoes do corte de custo do servidor dedicado (30 Hz, 2 passos por frame, deteccao por `--server`, max_slides do zumbi).
 - `test_frame_perf_probe.gd`: regressoes da sonda de custo por frame (argumento, linha de hitch e relatorio periodico).
