@@ -3,7 +3,7 @@
 # local; com alvo (ex.: o VPS), os bots entram nele e nenhum servidor local sobe.
 # Uso:
 #   scripts/run_4_bots.sh [porta] [ip_do_servidor]
-#   scripts/run_4_bots.sh 27015 bitssand.blog
+#   scripts/run_4_bots.sh 27015 203.0.113.10
 set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
