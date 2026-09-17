@@ -45,6 +45,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `player_throwables.gd`: uso dos itens na autoridade: granada em arco, faca de arremesso silenciosa que atravessa 2 e pedido de ataque aereo/SWAT a cena.
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
+- `snapshot_interp_buffer.gd`: buffer de interpolacao dos proxies no client (zumbi e jogador): guarda varias amostras, procura o par que envolve o tempo de render (agora - atraso de 2 intervalos, ajustado ao jitter, 150-450 ms) e reinicia em realocacao do servidor.
 - `server_tick_policy.gd`: servidor dedicado roda fisica a 30 Hz com no maximo 2 passos por frame (corta a bola de neve de ticks medida na VPS) e pula o fade visual dos zumbis.
 - `swat_squad.gd`: esquadrao SWAT de 3 soldados que segue quem chamou por 20 s atirando no zumbi mais perto (posicoes replicadas a 10 Hz).
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
@@ -108,6 +109,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
 - `test_local_host_launcher.gd`: regressoes do servidor hospedado (argumentos exportado/editor, saida ociosa, IPs da LAN, parar sem servidor).
+- `test_snapshot_interp_buffer.gd`: regressoes do buffer de interpolacao: continuidade entre snapshots (sem frame congelado), interpolacao entre amostras guardadas, reinicio em realocacao, primeira amostra sem teleporte, atraso adaptativo, rotacao pelo caminho mais curto e historico limitado.
 - `test_server_tick_policy.gd`: regressoes do corte de custo do servidor dedicado (30 Hz, 2 passos por frame, deteccao por `--server`, max_slides do zumbi).
 - `test_frame_perf_probe.gd`: regressoes da sonda de custo por frame (argumento, linha de hitch e relatorio periodico).
 - `test_network_join_sync.gd`: regressoes de dessincronia online: variante do zumbi no cliente, pacote de jogador abaixo do MTU, regras e reinicio do GAME OVER, restantes da onda, cliques com pacotes agrupados e pontos de spawn livres.
