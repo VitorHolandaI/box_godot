@@ -16,6 +16,28 @@ func run(test_root: Node) -> void:
 	_test_many_players_share_packets(test_root)
 	_test_truncated_payload_keeps_complete_records(test_root)
 	_test_slots_sent_on_change_and_periodically(test_root)
+	_test_negative_peer_id_survives_roundtrip(test_root)
+
+
+## Id de peer do ENet tem 32 bits COM sinal, e o esquadrao SWAT usa ids
+## reservados negativos. Em u32 o cliente lia -1001 como 4294966295, nao achava
+## o no e descartava o estado: os soldados ficavam parados na origem, invisiveis.
+func _test_negative_peer_id_survives_roundtrip(test_root: Node) -> void:
+	print("Testando id de peer negativo no snapshot de jogadores...")
+	var codec := CODEC_SCRIPT
+	var states: Array = [
+		_real_state(test_root, "-1001:0"),
+		_real_state(test_root, "592707482:3"),
+	]
+	var payload: PackedByteArray = codec.encode(states, {})
+	var decoded: Array = codec.decode(payload)
+	var keys: Array[String] = []
+	for state_value in decoded:
+		keys.append(String((state_value as Dictionary).get("key", "")))
+	if keys != ["-1001:0", "592707482:3"]:
+		_fail(test_root, "Chaves deveriam voltar iguais (inclusive id negativo); veio %s." % [keys])
+		return
+	print("PASS: Id de peer negativo sobrevive ao roundtrip.")
 
 
 func _real_state(test_root: Node, key: String) -> Dictionary:
