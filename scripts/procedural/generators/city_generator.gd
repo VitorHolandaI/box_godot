@@ -14,10 +14,10 @@ const BLOCK_SIZE := Vector2(42.0, 42.0)
 const LOT_SIZE := Vector2(19.0, 19.0)
 
 
-static func generate_world(world_seed: int, survival_mode: bool = false):
+static func generate_world(world_seed: int, survival_mode: bool = false, pvp_mode: bool = false):
 	var city = CITY_BLUEPRINT.new(world_seed)
 	_generate_roads(city, world_seed)
-	_generate_blocks(city, world_seed, survival_mode)
+	_generate_blocks(city, world_seed, survival_mode, pvp_mode)
 	return city
 
 
@@ -43,26 +43,30 @@ static func _add_curved_road(city, axis_position: float, vertical: bool, width: 
 		city.add_road(ROAD_BLUEPRINT.new(road_type, midpoint, finish, width))
 
 
-static func _generate_blocks(city, world_seed: int, survival_mode: bool) -> void:
+static func _generate_blocks(city, world_seed: int, survival_mode: bool, pvp_mode: bool = false) -> void:
 	var block_index := 0
 	for x_index in 3:
 		for z_index in 3:
 			var center: Vector2 = Vector2(-48.0 + float(x_index) * 48.0, -48.0 + float(z_index) * 48.0)
 			var district := "urban" if z_index < 2 else "suburban"
 			var block = BLOCK_BLUEPRINT.new("Block_%02d" % block_index, district, center, BLOCK_SIZE)
-			_generate_lots(block, world_seed + block_index * 97, survival_mode)
+			_generate_lots(block, world_seed + block_index * 97, survival_mode, pvp_mode)
 			city.add_block(block)
 			block_index += 1
 
 
-static func _generate_lots(block, block_seed: int, survival_mode: bool) -> void:
+static func _generate_lots(block, block_seed: int, survival_mode: bool, pvp_mode: bool = false) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = block_seed
 	var lot_index := 0
 	for x_index in 2:
 		for z_index in 2:
 			var is_safehouse_lot := is_zero_approx(block.position.x) and is_zero_approx(block.position.y) and x_index == 0 and z_index == 1
-			var jitter := Vector2.ZERO if is_safehouse_lot else Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
+			# PVP: a segunda safehouse ocupa o lote oposto (canto sudeste), entao
+			# ele tambem nasce vazio.
+			var is_pvp_safehouse_lot := pvp_mode and is_equal_approx(block.position.x, 48.0) and is_equal_approx(block.position.y, -48.0) and x_index == 1 and z_index == 0
+			var reserved_lot := is_safehouse_lot or is_pvp_safehouse_lot
+			var jitter := Vector2.ZERO if reserved_lot else Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
 			var lot_position: Vector2 = block.position + Vector2(-10.5 + float(x_index) * 21.0, -10.5 + float(z_index) * 21.0) + jitter
 			var lot_seed := block_seed + lot_index * 31
 			var archetype := "house"
@@ -71,7 +75,7 @@ static func _generate_lots(block, block_seed: int, survival_mode: bool) -> void:
 				archetype = "store" if urban_variant == 0 else "grocery" if urban_variant == 1 else "apartment" if urban_variant == 2 else "house"
 			var lot = LOT_BLUEPRINT.new("%s_Lot_%d" % [block.id, lot_index], lot_seed, block.district, lot_position, LOT_SIZE)
 			lot.building_rotation_y = 0.0 if z_index == 0 else PI
-			if not is_safehouse_lot:
+			if not reserved_lot:
 				lot.building = BUILDING_GENERATOR.generate(lot_seed, archetype)
 			block.add_lot(lot)
 			lot_index += 1
