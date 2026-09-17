@@ -60,6 +60,11 @@ var input_device_name := "Teclado"
 var simulation_enabled := true
 var reads_local_input := true
 var is_local_controller := true
+## Soldado do esquadrao SWAT: invulneravel, ignora troca de arma e nao gasta
+## municao nem durabilidade (suporte temporario; ver SwatSquadBot.configure).
+var is_swat_bot := false
+const SWAT_UNIFORM_COLOR := Color(0.07, 0.08, 0.1)
+var infinite_ammo := false
 
 @onready var model: Node3D = $Model
 @onready var head: Node3D = $Model/Head
@@ -451,13 +456,14 @@ func _fire_crate_weapon() -> void:
 		# Falha de mecanismo: gasta cooldown, nao gasta bala nem durabilidade.
 		attack_cooldown = 0.35
 		return
-	weapon_slots.consume_mag(current_weapon)
+	if not infinite_ammo:
+		weapon_slots.consume_mag(current_weapon)
 	attack_cooldown = float(WeaponStats.stats_for(current_weapon)["attack_cooldown"])
 	muzzle_flash_time = 0.08
 	gunshot_noise_time = 0.6
 	crate_weapon_stance_time = 10.0
 	_fire_pellets(current_weapon)
-	if weapon_slots.wear(current_weapon) <= 0:
+	if not infinite_ammo and weapon_slots.wear(current_weapon) <= 0:
 		_break_crate_weapon(current_weapon)
 
 
@@ -862,6 +868,9 @@ func can_pickup_health() -> bool:
 ## Uso:
 ##   player.take_damage(25, Vector3.FORWARD, "bullet")
 func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _source: Node = null) -> void:
+	if is_swat_bot:
+		# Soldado do esquadrao e suporte, nao baixa: nada machuca ele.
+		return
 	if is_eliminated or is_downed:
 		# Caido fica fora do combate ate ser reanimado (ou virar a rodada).
 		return
@@ -1170,6 +1179,19 @@ func _clear_transient_input() -> void:
 	swat_pressed = false
 
 
+## Equipa e seleciona uma arma de crate na autoridade (esquadrao SWAT com Uzi).
+## Devolve false quando o tipo nao e arma de crate.
+## Uso: if player.equip_crate_weapon(WeaponStats.Kind.UZI): ...
+func equip_crate_weapon(kind: int) -> bool:
+	if not WeaponStats.is_crate_weapon(kind):
+		return false
+	if not weapon_slots.has_kind(kind) and not weapon_slots.has_free_slot():
+		return false
+	weapon_slots.grant(kind)
+	_equip_weapon(kind)
+	return true
+
+
 ## Define o indice de cor do uniforme do jogador.
 ## Uso:
 ##   player.set_color_index(0)
@@ -1182,7 +1204,9 @@ func _apply_player_color() -> void:
 	var colors := [Color(0.2, 0.3, 0.13), Color(0.28, 0.22, 0.11), Color(0.12, 0.25, 0.28), Color(0.3, 0.12, 0.1)]
 	var active_index := color_index if color_index >= 0 else local_slot
 	var uniform_material := StandardMaterial3D.new()
-	uniform_material.albedo_color = colors[posmod(active_index, colors.size())]
+	# Soldado do esquadrao SWAT usa uniforme escuro proprio, igual nos dois
+	# lados (o cliente nao ve o resto da configuracao do bot do servidor).
+	uniform_material.albedo_color = SWAT_UNIFORM_COLOR if is_swat_bot else colors[posmod(active_index, colors.size())]
 	uniform_material.roughness = 0.8
 	$Model/Torso.material_override = uniform_material
 	$Model/LeftArm/Mesh.material_override = uniform_material
