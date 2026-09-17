@@ -139,4 +139,10 @@ func _update_delay(arrival_interval_ms: float) -> void:
 		# a media com um outlier que nunca se repete.
 		return
 	_interval_ms = lerpf(_interval_ms, clampf(arrival_interval_ms, 1.0, MAX_INTERVAL_MS), INTERVAL_WEIGHT)
+	# O atraso nunca pode passar do historico guardado: o render time precisa
+	# cair ENTRE duas amostras. Com snapshots rapidos (servidor a 15-30 Hz) o
+	# piso de MIN_DELAY_MS sozinho estourava a janela e o proxy voltava a
+	# congelar/saltar, calado. MAX_SAMPLES - 2 deixa sempre um par em volta.
+	var history_ms := float(MAX_SAMPLES - 2) * _interval_ms
 	delay_ms = clampf(_interval_ms * DELAY_INTERVALS, MIN_DELAY_MS, MAX_DELAY_MS)
+	delay_ms = minf(delay_ms, maxf(history_ms, _interval_ms))
