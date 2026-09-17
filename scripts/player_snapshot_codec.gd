@@ -11,12 +11,14 @@ extends RefCounted
 ##   | u8 municao pistola | u16 reserva | u16 ms postura, recuo, faca, clarao, tranco
 ##   | i8 hit_dir_x*127 | u8 vidas | u32 abates | u16 teleporte | u8 reviver*255
 ##   | u8 granadas, facas, ataque aereo, swat
+##   | u16 dinheiro | u8 abates | u8 mortes | u8 segundos de compra (PVP)
 ##   [u16 tamanho | var_to_bytes(weapon_slots)] quando flags tem 3
 ## Uso:
 ##   var payload := PlayerSnapshotCodec.encode(states, {"123:0": true})
 ##   var states := PlayerSnapshotCodec.decode(payload)
 
-const RECORD_BYTES := 51
+## 51 bytes base + 5 do PVP (dinheiro/abates/mortes/tempo de compra).
+const RECORD_BYTES := 56
 const FLAG_SPRINTING := 1
 const FLAG_ELIMINATED := 2
 const FLAG_DOWNED := 4
@@ -142,6 +144,11 @@ static func _write_record(payload: PackedByteArray, offset: int, state: Dictiona
 		if equipment_counts is PackedByteArray and index < (equipment_counts as PackedByteArray).size():
 			count = (equipment_counts as PackedByteArray)[index]
 		payload.encode_u8(offset + 47 + index, clampi(count, 0, 255))
+	# PVP: dinheiro (16 bits), abates, mortes e segundos de compra restantes.
+	payload.encode_u16(offset + 51, clampi(int(state.get("pvp_money", 0)), 0, 65535))
+	payload.encode_u8(offset + 53, clampi(int(state.get("pvp_kills", 0)), 0, 255))
+	payload.encode_u8(offset + 54, clampi(int(state.get("pvp_deaths", 0)), 0, 255))
+	payload.encode_u8(offset + 55, clampi(roundi(float(state.get("pvp_buy_left", 0.0))), 0, 255))
 
 
 static func _read_record(payload: PackedByteArray, offset: int) -> Dictionary:
@@ -164,6 +171,10 @@ static func _read_record(payload: PackedByteArray, offset: int) -> Dictionary:
 		"teleport_sequence": payload.decode_u16(offset + 44),
 		"revive_progress": float(payload.decode_u8(offset + 46)) / 255.0,
 		"equipment": payload.slice(offset + 47, offset + 51),
+		"pvp_money": payload.decode_u16(offset + 51),
+		"pvp_kills": payload.decode_u8(offset + 53),
+		"pvp_deaths": payload.decode_u8(offset + 54),
+		"pvp_buy_left": float(payload.decode_u8(offset + 55)),
 	}
 	for index in TIMER_KEYS.size():
 		state[TIMER_KEYS[index]] = float(payload.decode_u16(offset + 28 + index * 2)) / 1000.0

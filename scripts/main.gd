@@ -128,6 +128,16 @@ var swat_squads: Dictionary = {}
 var swat_squad_index := 0
 ## Cerebro dos soldados: mesma IA do bot de teste, em modo esquadrao.
 var swat_bot_ai := PlayerBotAI.new()
+## Mata-mata (--pvp): economia, placar e respawn vivem aqui no servidor.
+var pvp_match: PvpMatch = null
+## Bots de PVP criados no servidor (--pvp-bots=N): chaves no dicionario de
+## jogadores de rede, para o cliente enxergar eles pelo snapshot normal.
+var pvp_bot_keys: Dictionary = {}
+## Ids reservados dos bots (negativos, fora do sorteio do ENet).
+const PVP_BOT_PEER_ID_BASE := -2000
+## Contagem para comecar uma partida nova depois do fim (0 = sem partida).
+var pvp_restart_left := 0.0
+const PVP_RESTART_SECONDS := 10.0
 var loot_rng := RandomNumberGenerator.new()
 ## Armas soltas por zumbis ainda no chao, da mais antiga para a mais nova.
 var zombie_weapon_drops: Array[Node] = []
@@ -145,7 +155,10 @@ func _ready() -> void:
 			survival_wave_controller.wave_index = clampi(w, 0, survival_wave_controller.schedule.TARGETS.size() - 1)
 		if arg == "--test-wave-8":
 			survival_wave_controller.wave_index = 7
-	if not NetworkSession.is_client():
+	if not NetworkSession.is_client() and NetworkSession.pvp_mode:
+		# PVP: sem supimentos/airdrop/loot de sobrevivencia no mapa.
+		pvp_match = PvpMatch.new()
+	if not NetworkSession.is_client() and not NetworkSession.pvp_mode:
 		wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
 		airdrop_controller = AIRDROP_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
 		airdrop_controller.airdrop_requested.connect(_launch_airdrop)
@@ -188,6 +201,8 @@ func _ready() -> void:
 	if NetworkSession.is_server():
 		door_state_replicator.watch(get_tree())
 		_prespawn_load_test_zombies(LOAD_TEST_OPTIONS_SCRIPT.prespawn_zombie_count(OS.get_cmdline_user_args()))
+		if NetworkSession.pvp_mode:
+			_spawn_pvp_bots(LOAD_TEST_OPTIONS_SCRIPT.pvp_bot_count(OS.get_cmdline_user_args()))
 	_notify_scene_loaded.call_deferred()
 
 
@@ -288,6 +303,10 @@ func _process(delta: float) -> void:
 		# os sinais com o mundo completo (watch e idempotente).
 		_city_doors_watched = true
 		door_state_replicator.watch(get_tree())
+	if NetworkSession.pvp_mode:
+		# Mata-mata nao tem zumbi: sem isso o spawner do modo classico (que roda
+		# quando survival_mode e falso) enchia o mapa de zumbi durante o PVP.
+		return
 	if NetworkSession.survival_mode:
 		_check_survival_game_over()
 		if survival_wave_controller.game_over:
@@ -316,6 +335,8 @@ func _physics_process(delta: float) -> void:
 	# O smoke roda nos dois papeis: no servidor cria o esquadrao, no cliente
 	# confere que os soldados aparecem e se movem.
 	_tick_swat_smoke(delta)
+	if pvp_match != null:
+		_tick_pvp(delta)
 	if NetworkSession.is_client():
 		if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 			bot_ai.update(delta, get_tree())
@@ -327,7 +348,7 @@ func _physics_process(delta: float) -> void:
 		input_elapsed += delta
 		if input_elapsed >= INPUT_INTERVAL:
 			input_elapsed = 0.0
-			_submit_inputs.rpc_id(NetworkSession.SERVER_ID, _collect_local_inputs())
+			_submit_inputs.rpc_id(NetworkSession.SERVER_ID, _collect_local_inputs(delta))
 		var drain_start := FramePerfProbe.begin()
 		_drain_zombie_spawn_queue()
 		FramePerfProbe.end("spawn_drain", drain_start)
@@ -570,11 +591,14 @@ func _update_swat_squads(delta: float) -> void:
 			bot.apply_network_input(input)
 
 
-## O reconcile nao mexe nas chaves do esquadrao: elas nao vem do roster de
-## peers reais, quem cria e libera e _enlist_swat_squad/_retire_swat_squad.
-## A checagem e por pertencimento, nao por faixa de id: o ENet sorteia id de
-## peer de 32 bits e um jogador de verdade pode cair no mesmo valor reservado.
-func _is_swat_player_key(key: String) -> bool:
+## Chaves criadas pelo servidor (esquadrao SWAT e bots de PVP) nao vem do
+## roster de peers reais: quem cria e libera sao as rotinas proprias, e o
+## reconcile tem que deixar elas em paz. A checagem e por pertencimento, nao por
+## faixa de id: o ENet sorteia id de peer de 32 bits e um jogador de verdade
+## pode cair no mesmo valor reservado.
+func _is_reserved_player_key(key: String) -> bool:
+	if pvp_bot_keys.has(key):
+		return true
 	for squad_value in swat_squads.values():
 		if (squad_value as Dictionary)["keys"].has(key):
 			return true
@@ -815,6 +839,7 @@ func _spawn_offline_player(slot: int, config: Dictionary) -> void:
 	player.set_spawn_position(player.global_position)
 	_connect_crate_weapon_signals(player)
 	local_players.append(player)
+	_register_pvp_player(player)
 
 
 func _connect_crate_weapon_signals(player: Node) -> void:
@@ -1006,10 +1031,12 @@ func _reconcile_network_players() -> void:
 				_spawn_network_player(peer_id, slot, key)
 
 	for key in network_players.keys():
-		if expected.has(key) or _is_swat_player_key(key):
+		if expected.has(key) or _is_reserved_player_key(key):
 			continue
 		var player = network_players[key]
 		network_players.erase(key)
+		if pvp_match != null:
+			pvp_match.remove_player(key)
 		player_slots_replication.forget(key)
 		if is_instance_valid(player):
 			player.queue_free()
@@ -1024,6 +1051,9 @@ func _on_peer_scene_loaded(peer_id: int) -> void:
 		return
 	# Antes saia cedo na onda 0: quem entrava num servidor em game over na onda 0
 	# nunca reiniciava a horda, e quem entrava cedo ficava sem os itens do chao.
+	if pvp_bot_keys.size() > 0:
+		# Quem entra no meio do mata-mata tambem precisa ver os bots.
+		_spawn_pvp_bots_rpc.rpc_id(peer_id, pvp_bot_keys.size())
 	if survival_wave_controller.game_over:
 		_restart_survival()
 	_wave_state.rpc_id(peer_id, survival_wave_controller.wave_index, survival_wave_controller.total_kills, survival_wave_controller.alive_in_wave, survival_wave_controller.game_over)
@@ -1090,6 +1120,7 @@ func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
 	players_node.add_child(player, true)
 	player.set_spawn_position(player.global_position)
 	network_players[key] = player
+	_register_pvp_player(player)
 	if player.simulation_enabled:
 		_connect_crate_weapon_signals(player)
 
@@ -1105,8 +1136,10 @@ func _refresh_local_views() -> void:
 	split_screen.configure(local_players)
 
 
-func _collect_local_inputs() -> Array:
+func _collect_local_inputs(delta: float = 1.0 / 30.0) -> Array:
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
+		if NetworkSession.pvp_mode:
+			return bot_ai.collect_pvp_inputs(local_players, get_tree(), delta)
 		return bot_ai.collect_inputs(local_players, zombies, get_tree())
 	if in_game_menu.is_open:
 		return _collect_neutral_inputs()
@@ -1486,7 +1519,185 @@ func _reset_wave_lives(_wave_index: int) -> void:
 
 
 func get_survival_hud_text() -> String:
+	if NetworkSession.pvp_mode:
+		return pvp_match.hud_text() if pvp_match != null else ""
 	return survival_wave_controller.get_hud_text() if NetworkSession.survival_mode else ""
+
+
+## Teste jogador vs bot: cria `count` jogadores de verdade simulados no
+## servidor, cacando os outros (mesma IA de PVP dos clientes bot). O cliente
+## ve eles como qualquer jogador, pelo snapshot.
+## Uso: godot --headless --path . -- --server --pvp --pvp-bots=4
+func _spawn_pvp_bots(count: int) -> void:
+	if not NetworkSession.pvp_mode or count <= 0:
+		return
+	for index in count:
+		_create_pvp_bot(index, NetworkSession.is_server() or NetworkSession.is_offline())
+	# O cliente so cria jogador do roster de peers; os bots sao do servidor,
+	# entao precisam deste RPC para existir do outro lado (senao o estado deles
+	# chega no snapshot e nao ha no para receber: o humano nao ve os bots).
+	if NetworkSession.is_server():
+		for peer_id in multiplayer.get_peers():
+			_spawn_pvp_bots_rpc.rpc_id(int(peer_id), count)
+	print(JSON.stringify({"event": "pvp_bots_spawned", "count": pvp_bot_keys.size()}))
+
+
+@rpc("authority", "call_remote", "reliable")
+func _spawn_pvp_bots_rpc(count: int) -> void:
+	if not NetworkSession.is_client():
+		return
+	for index in count:
+		_create_pvp_bot(index, false)
+
+
+## Cria (ou reaproveita) o no de um bot de PVP. `simulate` so no servidor: no
+## cliente o bot e um proxy como qualquer jogador de rede.
+## Uso: _create_pvp_bot(0, NetworkSession.is_server())
+func _create_pvp_bot(index: int, simulate: bool) -> void:
+	var key := "%d:%d" % [PVP_BOT_PEER_ID_BASE - index, 0]
+	if pvp_bot_keys.has(key):
+		return
+	var bot = PLAYER_SCENE.instantiate()
+	bot.name = "PvpBot_%d" % index
+	bot.local_slot = index
+	bot.simulation_enabled = simulate
+	bot.owner_peer_id = PVP_BOT_PEER_ID_BASE - index
+	bot.reads_local_input = false
+	bot.is_local_controller = false
+	bot.position = _get_player_spawn_position(index + 1)
+	players_node.add_child(bot, true)
+	bot.set_spawn_position(bot.global_position)
+	bot.set_color_index(index + 1)
+	bot.set("input_device_name", "Bot PVP %d" % (index + 1))
+	if simulate:
+		bot.reset_pvp_loadout()
+	network_players[key] = bot
+	pvp_bot_keys[key] = true
+	if simulate:
+		_register_pvp_player(bot)
+
+
+## Alimenta a IA dos bots de PVP (servidor simula; o cliente so ve o snapshot).
+func _tick_pvp_bots(delta: float) -> void:
+	var slot := 0
+	for key in pvp_bot_keys.keys().duplicate():
+		var bot = network_players.get(key)
+		if not is_instance_valid(bot):
+			pvp_bot_keys.erase(key)
+			network_players.erase(key)
+			if pvp_match != null:
+				pvp_match.remove_player(String(key))
+			continue
+		if bool(bot.get("is_eliminated")):
+			continue
+		bot.apply_network_input(bot_ai.collect_pvp_input(bot, get_tree(), slot, delta))
+		slot += 1
+
+
+## Entra na partida de PVP com a economia inicial e a janela de compra aberta.
+## Uso: chamado no spawn de cada jogador (servidor/offline).
+func _register_pvp_player(player: Node) -> void:
+	if pvp_match == null or not is_instance_valid(player):
+		return
+	var key := _key_for_player(player)
+	if key.is_empty():
+		return
+	pvp_match.register_player(key)
+	player.set("pvp_money", pvp_match.money_of(key))
+	player.set("pvp_buy_left", PvpMatch.BUY_SECONDS)
+	if not player.pvp_died.is_connected(_on_pvp_died):
+		player.pvp_died.connect(_on_pvp_died.bind(player))
+
+
+## Chave de rede do jogador ("" quando nao esta no dicionario).
+## Uso: var key := _key_for_player(player)
+func _key_for_player(player: Node) -> String:
+	for key in network_players:
+		if network_players[key] == player:
+			return String(key)
+	return ""
+
+
+## Abate no mata-mata: credita quem matou, conta a morte e encerra a partida
+## quando alguem chega no alvo. Callable.bind anexa a vitima no FIM.
+## Uso: conectado ao sinal pvp_died de cada jogador.
+func _on_pvp_died(killer: Node, victim: Node) -> void:
+	if pvp_match == null:
+		return
+	var killer_key := _key_for_player(killer) if is_instance_valid(killer) else ""
+	var victim_key := _key_for_player(victim)
+	if victim_key.is_empty():
+		return
+	var ended := pvp_match.register_kill(killer_key, victim_key)
+	print(JSON.stringify({"event": "pvp_kill", "killer": killer_key, "victim": victim_key, "kills": pvp_match.kills_of(killer_key)}))
+	if ended:
+		_pvp_announce_end()
+
+
+func _pvp_announce_end() -> void:
+	pvp_restart_left = PVP_RESTART_SECONDS
+	print(JSON.stringify({"event": "pvp_over", "winner": pvp_match.winner_key(), "standings": pvp_match.standings()}))
+
+
+## Avanca a partida: relogios, respawn (longe dos vivos) e reinicio apos o fim.
+## Uso: chamado em _physics_process no servidor/offline.
+func _tick_pvp(delta: float) -> void:
+	pvp_match.tick(delta)
+	_tick_pvp_bots(delta)
+	for key in network_players.keys().duplicate():
+		var player = network_players.get(key)
+		if not is_instance_valid(player) or bool(player.get("is_swat_bot")):
+			continue
+		player.tick_pvp(delta)
+		player.set("pvp_money", pvp_match.money_of(String(key)))
+		if bool(player.get("is_eliminated")) and float(player.get("pvp_respawn_left")) <= 0.0:
+			player.pvp_respawn_at(_pvp_respawn_position_for(player))
+	if pvp_restart_left <= 0.0:
+		return
+	pvp_restart_left -= delta
+	if pvp_restart_left > 0.0:
+		return
+	pvp_restart_left = 0.0
+	_pvp_start_new_match()
+
+
+## Partida nova: economia zerada e todo mundo de volta na pistola.
+## Uso: chamado quando o reinicio vence.
+func _pvp_start_new_match() -> void:
+	pvp_match = PvpMatch.new()
+	for key in network_players.keys().duplicate():
+		var player = network_players.get(key)
+		if not is_instance_valid(player) or bool(player.get("is_swat_bot")):
+			continue
+		_register_pvp_player(player)
+		player.set("pvp_kills", 0)
+		player.set("pvp_deaths", 0)
+		player.pvp_respawn_at(_pvp_respawn_position_for(player))
+	print(JSON.stringify({"event": "pvp_restart"}))
+
+
+## Ponto de respawn mais longe dos vivos (marcadores da safehouse + offset por
+## vaga). Sem ninguem vivo, usa a primeira vaga.
+## Uso: var posicao := _pvp_respawn_position_for(player)
+func _pvp_respawn_position_for(player: Node) -> Vector3:
+	var living: Array[Vector3] = []
+	for other in network_players.values():
+		if not is_instance_valid(other) or other == player or bool(other.get("is_swat_bot")):
+			continue
+		if bool(other.get("is_eliminated")):
+			continue
+		living.append((other as Node3D).global_position)
+	var best_position := _get_player_spawn_position(0)
+	var best_distance := -1.0
+	for slot in PLAYER_SPAWN_POINTS.size():
+		var candidate := _get_player_spawn_position(slot)
+		var nearest := INF
+		for position in living:
+			nearest = minf(nearest, candidate.distance_to(position))
+		if nearest > best_distance:
+			best_distance = nearest
+			best_position = candidate
+	return best_position
 
 
 ## Transicao de onda: o barato roda na hora (vidas, estado do HUD) e o que
