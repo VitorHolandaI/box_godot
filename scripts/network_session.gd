@@ -36,6 +36,8 @@ var loaded_peers: Dictionary = {}
 var latency_ms := -1
 var procedural_city_enabled := true
 var survival_mode := true
+## Mata-mata estilo CS: sem zumbis/ondas, economia e placar proprios.
+var pvp_mode := false
 var world_seed := DEFAULT_WORLD_SEED
 var server_name := "Box Godot"
 var discovered_servers: Array[Dictionary] = []
@@ -288,7 +290,7 @@ func _report_build(client_build: String, client_version: String) -> void:
 ## Derruba o peer com motivo; avisa antes (se o cliente tiver o RPC) para a
 ## mensagem aparecer no menu dele em vez de uma queda sem explicacao.
 func _kick_peer(peer_id: int, reason: String) -> void:
-	_join_result.rpc_id(peer_id, false, reason, procedural_city_enabled, world_seed, survival_mode)
+	_join_result.rpc_id(peer_id, false, reason, procedural_city_enabled, world_seed, survival_mode, pvp_mode)
 	var peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
 	if peer != null:
 		peer.disconnect_peer(peer_id)
@@ -302,14 +304,14 @@ func _request_slots(slot_count: int) -> void:
 	var sender_id := multiplayer.get_remote_sender_id()
 	var rejection := PlayerCapacity.join_rejection(_total_player_count(), slot_count, max_players)
 	if not rejection.is_empty():
-		_join_result.rpc_id(sender_id, false, rejection, procedural_city_enabled, world_seed, survival_mode)
+		_join_result.rpc_id(sender_id, false, rejection, procedural_city_enabled, world_seed, survival_mode, pvp_mode)
 		return
 	var requested_count := slot_count
 
 	peer_slots[sender_id] = requested_count
 	roster_changed.emit()
 	_sync_roster.rpc(peer_slots)
-	_join_result.rpc_id(sender_id, true, "", procedural_city_enabled, world_seed, survival_mode)
+	_join_result.rpc_id(sender_id, true, "", procedural_city_enabled, world_seed, survival_mode, pvp_mode)
 	print("Peer %d entrou com %d jogador(es)." % [sender_id, requested_count])
 
 
@@ -320,11 +322,12 @@ func _sync_roster(new_roster: Dictionary) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _join_result(accepted: bool, message: String, server_uses_procedural_city: bool, server_world_seed: int, server_uses_survival: bool) -> void:
+func _join_result(accepted: bool, message: String, server_uses_procedural_city: bool, server_world_seed: int, server_uses_survival: bool, server_uses_pvp: bool) -> void:
 	if accepted:
 		procedural_city_enabled = server_uses_procedural_city
 		world_seed = server_world_seed
 		survival_mode = server_uses_survival
+		pvp_mode = server_uses_pvp
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
 		join_accepted.emit()
 		return
@@ -523,6 +526,10 @@ func _reset_world_config_from_arguments() -> void:
 	var unit_test_mode := "--unit-test" in arguments
 	procedural_city_enabled = not unit_test_mode and "--legacy-city" not in arguments
 	survival_mode = not unit_test_mode and "--classic-mode" not in arguments
+	pvp_mode = not unit_test_mode and "--pvp" in arguments
+	if pvp_mode:
+		# PVP nao tem onda de sobrevivencia: o modo substitui o survival.
+		survival_mode = false
 	world_seed = DEFAULT_WORLD_SEED
 	for argument in OS.get_cmdline_user_args():
 		if not argument.begins_with("--world-seed="):

@@ -30,7 +30,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
 - `local_host_launcher.gd`: "Hospedar partida" do menu: sobe o servidor dedicado como processo filho headless, entra por 127.0.0.1, encerra ao voltar ao menu/fechar o jogo e o filho sai sozinho sem peers (`--host-idle-exit=`).
 - `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos que so somem longe dos jogadores e bot de teste.
-- `load_test_options.gd`: opcao `--prespawn-zombies=N` do servidor dedicado para teste de carga; `--smoke-test-swat` (main.gd) chama o esquadrao perto do primeiro jogador, spawna alvos em anel e imprime o estado dos 4 soldados a cada 2 s ate o esquadrao expirar.
+- `load_test_options.gd`: opcoes `--prespawn-zombies=N` (teste de carga) e `--pvp-bots=N` (bots de mata-mata no servidor, para jogar player vs bot sem outro cliente) do servidor dedicado; `--smoke-test-swat` (main.gd) chama o esquadrao perto do primeiro jogador, spawna alvos em anel e imprime o estado dos 4 soldados a cada 2 s ate o esquadrao expirar.
 - `menu.gd`: selecao local/multiplayer/hospedar partida (mostra IPs da LAN para os amigos), navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
 - `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT, atraso entre snapshots, KB/s e pacotes/s recebidos e FPS.
@@ -83,6 +83,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes.
 - `procedural/`: blueprints, geradores, assemblers e navegacao da cidade procedural experimental ativada por `--procedural-city`.
+- `pvp_match.gd`: mata-mata estilo CS autoritativo (economia $800 inicial, +$300 por abate, teto $16000, respawn 3 s, janela de compra 15 s, fim em 20 abates ou 10 min), validando compra (`buy_rejection`) e guardando placar por chave de peer.
 - `run_4_bots.sh`: abre 4 janelas com bots jogando sozinhos em grade 2x2; sem o segundo argumento sobe um servidor dedicado local, com ele (`run_4_bots.sh 27015 203.0.113.10`) os bots entram no servidor indicado.
 - `build_info.gd`: identidade do build impressa na subida por servidor e cliente; `build_exports.sh` injeta o commit no export e restaura depois. O handshake compara o BUILD DECLARADO (`GAME_BUILD`, subir quando mudar RPC/snapshot) + versao do jogo, nunca o commit: o servidor da VPS roda do fonte no container (commit sempre "dev") e o cliente e um export. O servidor recusa peer com build diferente (ou que nao reporte em 8 s) com mensagem legivel — sem isso um cliente antigo dava `rpc node checksum failed`, o input era recusado e o jogador nao andava sem pista nenhuma.
 - `test_session.sh`: checagem padrao de sessao em duas fases: (1) servidor + bot exigindo `BOT_TEST_PASS` (conectou, andou, gastou stamina, viu bala e matou zumbi) e (2) servidor com `--smoke-test-swat` + cliente conferindo que os 4 soldados existem NO CLIENTE e se movem (`swat_seen_done`), alem da linha de build nos dois lados, handshake aceito e zero erro de RPC.
@@ -112,6 +113,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
 - `test_local_host_launcher.gd`: regressoes do servidor hospedado (argumentos exportado/editor, saida ociosa, IPs da LAN, parar sem servidor).
 - `test_build_info.gd`: regressoes da identidade de build: linha de build com todos os campos e handshake que ignora o commit (servidor do fonte x cliente export) e recusa build/versao diferentes.
+- `test_pvp_match.gd`: regressoes do mata-mata (dinheiro inicial/premio por abate, gasto sem saldo, regras de compra, fim por abates e por tempo, teto de dinheiro).
 - `test_snapshot_interp_buffer.gd`: regressoes do buffer de interpolacao: continuidade entre snapshots (sem frame congelado), interpolacao entre amostras guardadas, reinicio em realocacao, primeira amostra sem teleporte, atraso adaptativo, rotacao pelo caminho mais curto e historico limitado.
 - `test_server_tick_policy.gd`: regressoes do corte de custo do servidor dedicado (30 Hz, 2 passos por frame, deteccao por `--server`, max_slides do zumbi).
 - `test_frame_perf_probe.gd`: regressoes da sonda de custo por frame (argumento, linha de hitch e relatorio periodico).

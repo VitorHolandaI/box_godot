@@ -2,6 +2,9 @@ class_name PlayerCharacter
 extends CharacterBody3D
 
 signal lives_changed(current_lives: int)
+## Morte em PVP: o main credita o abate (killer pode ser null) e agenda o
+## respawn num ponto longe dos vivos.
+signal pvp_died(killer: Node)
 signal player_eliminated()
 ## Slots totais: faca e pistola fixas; 1 slot para arma de crate (pegar outra
 ## troca, dropando a da mao no chao). Emitidos onde o jogador e simulado
@@ -64,6 +67,17 @@ var is_local_controller := true
 ## municao nem durabilidade (suporte temporario; ver SwatSquadBot.configure).
 var is_swat_bot := false
 const SWAT_UNIFORM_COLOR := Color(0.07, 0.08, 0.1)
+## Mata-mata: dinheiro, placar e janela de compra (autoridade no servidor).
+var pvp_money := 0
+var pvp_kills := 0
+var pvp_deaths := 0
+## Segundos restantes de compra e de respawn (0 = liberado / vivo).
+var pvp_buy_left := 0.0
+var pvp_respawn_left := 0.0
+## Ultimo a machucar este jogador: e quem leva o credito do abate.
+var last_attacker: Node = null
+const PVP_START_PISTOL_MAG := 12
+const PVP_START_PISTOL_RESERVE := 48
 var infinite_ammo := false
 
 @onready var model: Node3D = $Model
@@ -323,6 +337,10 @@ func get_network_state() -> Dictionary:
 		"downed": is_downed,
 		"revive_progress": revive_progress,
 		"equipment": equipment.to_counts(),
+		"pvp_money": pvp_money,
+		"pvp_kills": pvp_kills,
+		"pvp_deaths": pvp_deaths,
+		"pvp_buy_left": pvp_buy_left,
 	}
 
 
@@ -380,6 +398,11 @@ func apply_network_state(state: Dictionary) -> void:
 	var equipment_counts: Variant = state.get("equipment")
 	if equipment_counts is PackedByteArray:
 		equipment.apply_counts(equipment_counts)
+	if NetworkSession.pvp_mode:
+		pvp_money = maxi(pvp_money, int(state.get("pvp_money", pvp_money)))
+		pvp_kills = maxi(pvp_kills, int(state.get("pvp_kills", pvp_kills)))
+		pvp_deaths = maxi(pvp_deaths, int(state.get("pvp_deaths", pvp_deaths)))
+		pvp_buy_left = float(state.get("pvp_buy_left", pvp_buy_left))
 	var next_eliminated := bool(state.get("eliminated", is_eliminated))
 	if next_eliminated != is_eliminated:
 		is_eliminated = next_eliminated
@@ -867,18 +890,23 @@ func can_pickup_health() -> bool:
 ## Aplica dano ao jogador, acionando flinch de impacto e empurrao fisico.
 ## Uso:
 ##   player.take_damage(25, Vector3.FORWARD, "bullet")
-func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _source: Node = null) -> void:
+func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", source: Node = null) -> void:
 	if is_swat_bot:
 		# Soldado do esquadrao e suporte, nao baixa: nada machuca ele.
 		return
 	if is_eliminated or is_downed:
 		# Caido fica fora do combate ate ser reanimado (ou virar a rodada).
 		return
+	if is_instance_valid(source) and source != self:
+		last_attacker = source
 	health = maxi(health - amount, 0)
 	hit_reaction_time = 0.35
 	hit_direction = attack_direction.normalized()
 	velocity += hit_direction * 4.5 + Vector3.UP * 1.2
 	if health == 0:
+		if NetworkSession.pvp_mode:
+			_pvp_die()
+			return
 		lives -= 1
 		lives_changed.emit(lives)
 		if lives <= 0:
@@ -887,6 +915,62 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 			_go_downed()
 		else:
 			respawn()
+
+
+## Morte no mata-mata: sai do combate, perde as armas compradas (volta com
+## pistola) e avisa o main, que credita o abate e agenda o respawn.
+## Uso: chamado pelo take_damage quando NetworkSession.pvp_mode.
+func _pvp_die() -> void:
+	var killer: Node = last_attacker if is_instance_valid(last_attacker) else null
+	last_attacker = null
+	pvp_deaths += 1
+	pvp_respawn_left = PvpMatch.RESPAWN_SECONDS
+	is_eliminated = true
+	visible = false
+	collision_layer = 0
+	collision_mask = 0
+	velocity = Vector3.ZERO
+	health = 0
+	reset_pvp_loadout()
+	pvp_died.emit(killer)
+
+
+## Volta a pistola e faca, sem armas de crate (economia nova a cada vida).
+## Uso: player.reset_pvp_loadout()
+func reset_pvp_loadout() -> void:
+	for kind in weapon_slots.kinds.duplicate():
+		weapon_slots.remove_kind(kind)
+	current_weapon = Weapon.PISTOL
+	pistol_ammo = PVP_START_PISTOL_MAG
+	reserve_ammo = PVP_START_PISTOL_RESERVE
+	_update_weapon_models()
+
+
+## Respawna em PVP no ponto escolhido pelo main (longe dos vivos), com a janela
+## de compra reaberta. Uso: player.pvp_respawn_at(posicao)
+func pvp_respawn_at(respawn_position: Vector3) -> void:
+	global_position = respawn_position
+	velocity = Vector3.ZERO
+	teleport_sequence += 1
+	is_eliminated = false
+	is_downed = false
+	visible = true
+	collision_layer = 2
+	collision_mask = 23
+	health = max_health
+	stamina = max_stamina
+	hit_reaction_time = 0.0
+	pvp_respawn_left = 0.0
+	pvp_buy_left = PvpMatch.BUY_SECONDS
+	reset_pvp_loadout()
+
+
+## Avanca os relogios do PVP (compra e respawn). Roda onde o jogador e
+## simulado (servidor/offline). Uso: player.tick_pvp(delta)
+func tick_pvp(delta: float) -> void:
+	pvp_buy_left = maxf(pvp_buy_left - delta, 0.0)
+	if is_eliminated:
+		pvp_respawn_left = maxf(pvp_respawn_left - delta, 0.0)
 
 
 func respawn() -> void:
@@ -1005,6 +1089,9 @@ func can_see_position(target_position: Vector3) -> bool:
 
 
 func get_lives_text() -> String:
+	if NetworkSession.pvp_mode:
+		# Vidas nao existem no mata-mata: a linha vira dinheiro e placar.
+		return "PVP: $%d | %d/%d" % [pvp_money, pvp_kills, pvp_deaths]
 	if is_downed:
 		return "CAIDO | segure Interagir perto para reanimar"
 	if is_eliminated or lives <= 0:
