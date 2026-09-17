@@ -152,6 +152,15 @@ action_status() {
 	compose ps
 }
 
+run_without_mode() {
+	local action="$1"
+	case "$action" in
+		stop) action_stop ;;
+		logs) action_logs ;;
+		status) action_status ;;
+	esac
+}
+
 announce() {
 	local mode="$1"
 	local port
@@ -204,6 +213,9 @@ self_test() {
 
 	output="$(DRY_RUN=1 PORT=32000 "$0" survival start)"
 	check_contains "$output" "server-port=32000" "PORT alternativo respeitado"
+
+	output="$(DRY_RUN=1 "$0" status)"
+	check_contains "$output" "docker compose ps" "status funciona sem escolher modo"
 
 	if "$0" zumbi up >/dev/null 2>&1; then
 		echo "FALHA: modo invalido deveria sair com erro"
@@ -272,6 +284,14 @@ main() {
 		self_test
 		return 0
 	fi
+	# Acoes que nao dependem de modo: parar/ver log/status valem sem escolher
+	# sobrevivencia ou PVP (o compose tem um servico so).
+	case "$mode" in
+		stop | logs | status)
+			run_without_mode "$mode"
+			return 0
+			;;
+	esac
 	require_mode "$mode"
 	action="${action:-up}"
 	require_action "$action"
