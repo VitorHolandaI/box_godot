@@ -41,6 +41,12 @@ var server_name := "Box Godot"
 var discovered_servers: Array[Dictionary] = []
 var _intentional_disconnect := false
 var _connected_to_server := false
+## Build reportado por cada peer (peer_id -> {"commit","version"}); e o que
+## permite recusar cliente de build diferente com mensagem clara em vez do
+## `rpc node checksum failed` silencioso (o input era recusado e o jogador nao
+## andava). Fica vazio para quem nao reportar dentro de BUILD_REPORT_TIMEOUT.
+var peer_builds: Dictionary = {}
+const BUILD_REPORT_TIMEOUT := 8.0
 var _ping_elapsed := PING_INTERVAL
 var _discovery_socket: PacketPeerUDP
 ## Servidor filho do "Hospedar partida" (no jogo do host) e, no proprio
@@ -58,6 +64,7 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
+	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
@@ -155,6 +162,7 @@ func start_server(port: int = DEFAULT_PORT) -> Error:
 		push_error("Nao foi possivel abrir descoberta do servidor na porta %d: %s" % [_discovery_port_for(port), error_string(discovery_error)])
 		return discovery_error
 	print("Servidor dedicado ouvindo em UDP %d" % port)
+	print(BuildInfo.describe("server"))
 	return OK
 
 
@@ -236,7 +244,54 @@ func notify_scene_loaded() -> void:
 func _on_connected_to_server() -> void:
 	_connected_to_server = true
 	_ping_elapsed = PING_INTERVAL
+	print(BuildInfo.describe("client"))
+	_report_build.rpc_id(SERVER_ID, BuildInfo.COMMIT, BuildInfo.game_version())
 	_request_slots.rpc_id(SERVER_ID, requested_slots)
+
+
+## Servidor: novo peer entrou; se ele nao reportar o build em
+## BUILD_REPORT_TIMEOUT, e build antigo (nao tem o RPC) e nao pode jogar: o
+## input dele seria recusado sem explicacao.
+func _on_peer_connected(peer_id: int) -> void:
+	if not is_server():
+		return
+	print("Peer %d conectando; aguardando build." % peer_id)
+	_await_build_report(peer_id)
+
+
+func _await_build_report(peer_id: int) -> void:
+	await get_tree().create_timer(BUILD_REPORT_TIMEOUT).timeout
+	if not is_server() or peer_builds.has(peer_id):
+		return
+	if not multiplayer.get_peers().has(peer_id):
+		return
+	push_error("Peer %d nao reportou o build em %.0f s (cliente antigo?); desconectando. Servidor: %s." % [peer_id, BUILD_REPORT_TIMEOUT, BuildInfo.short_text()])
+	_kick_peer(peer_id, "Build antigo/incompativel: o cliente nao reportou a versao.")
+
+
+## Handshake de versao: recusa build diferente com mensagem legivel.
+## Uso: chamado pelo cliente ao conectar (_report_build.rpc_id).
+@rpc("any_peer", "call_remote", "reliable")
+func _report_build(commit: String, version: String) -> void:
+	if not is_server():
+		return
+	var sender_id := multiplayer.get_remote_sender_id()
+	if not BuildInfo.matches(commit, version):
+		push_error("Build diferente: servidor %s, cliente %d reportou v%s+%s. Atualize o cliente com o mesmo build do servidor; senao o input e recusado e o jogador nao anda." % [BuildInfo.short_text(), sender_id, version, commit])
+		_kick_peer(sender_id, "Build do cliente diferente do servidor: v%s+%s vs %s." % [version, commit, BuildInfo.short_text()])
+		return
+	peer_builds[sender_id] = {"commit": commit, "version": version}
+	print("Peer %d reportou build v%s+%s (ok)." % [sender_id, version, commit])
+
+
+## Derruba o peer com motivo; avisa antes (se o cliente tiver o RPC) para a
+## mensagem aparecer no menu dele em vez de uma queda sem explicacao.
+func _kick_peer(peer_id: int, reason: String) -> void:
+	_join_result.rpc_id(peer_id, false, reason, procedural_city_enabled, world_seed, survival_mode)
+	var peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	if peer != null:
+		peer.disconnect_peer(peer_id)
+	print("Peer %d recusado: %s" % [peer_id, reason])
 
 
 @rpc("any_peer", "call_remote", "reliable")
@@ -281,6 +336,7 @@ func _on_peer_disconnected(peer_id: int) -> void:
 		return
 	peer_slots.erase(peer_id)
 	loaded_peers.erase(peer_id)
+	peer_builds.erase(peer_id)
 	roster_changed.emit()
 	_sync_roster.rpc(peer_slots)
 	print("Peer %d desconectou." % peer_id)

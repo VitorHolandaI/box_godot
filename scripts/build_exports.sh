@@ -12,11 +12,42 @@ dist_dir="${DIST_DIR:-$project_dir/dist}"
 presets_file="$project_dir/export_presets.cfg"
 presets_backup="$(mktemp)"
 cp "$presets_file" "$presets_backup"
+build_info_file="$project_dir/scripts/build_info.gd"
+build_info_backup="$(mktemp)"
+cp "$build_info_file" "$build_info_backup"
 
 restore_presets() {
 	cp "$presets_backup" "$presets_file"
+	cp "$build_info_backup" "$build_info_file"
 }
 trap restore_presets EXIT
+
+# Grava commit/timestamp no BuildInfo antes do export (o binario imprime quem
+# ele e e o servidor recusa cliente de build diferente: senao o input e
+# recusado sem explicacao e o jogador nao anda). Restaurado no fim pelo trap.
+write_build_info() {
+	local commit
+	commit="$(git -C "$project_dir" rev-parse --short HEAD 2>/dev/null || echo desconhecido)"
+	if [[ -n "$(git -C "$project_dir" status --porcelain 2>/dev/null)" ]]; then
+		commit="${commit}+sujo"
+	fi
+	local built_at
+	built_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+	COMMIT_VALUE="$commit" BUILT_AT_VALUE="$built_at" BUILD_INFO_PATH="$build_info_file" python3 - <<'INNERPY'
+import os
+path = os.environ["BUILD_INFO_PATH"]
+commit = os.environ["COMMIT_VALUE"]
+built_at = os.environ["BUILT_AT_VALUE"]
+lines = open(path).read().split("\n")
+for index, line in enumerate(lines):
+    if line.startswith("const COMMIT :="):
+        lines[index] = 'const COMMIT := "%s"' % commit
+    elif line.startswith("const BUILT_AT :="):
+        lines[index] = 'const BUILT_AT := "%s"' % built_at
+open(path, "w").write("\n".join(lines))
+INNERPY
+	printf '%s\n' "BuildInfo do export: commit=$commit em $built_at"
+}
 
 # Os caminhos de template sao da maquina de build; o preset versionado fica vazio
 # e so recebe o caminho durante o export.
@@ -48,6 +79,7 @@ PY
 
 set_release_template 0 "${LINUX_TEMPLATE:-}"
 set_release_template 1 "${WINDOWS_TEMPLATE:-}"
+write_build_info
 
 mkdir -p "$dist_dir"
 godot --headless --path "$project_dir" --export-release Linux "$dist_dir/box-godot-linux.x86_64"
