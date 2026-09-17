@@ -113,7 +113,11 @@ static func _write_record(payload: PackedByteArray, offset: int, state: Dictiona
 		| (FLAG_ELIMINATED if bool(state.get("eliminated", false)) else 0) \
 		| (FLAG_DOWNED if bool(state.get("downed", false)) else 0) \
 		| (FLAG_HAS_SLOTS if has_slots else 0)
-	payload.encode_u32(offset, peer_id)
+	# s32, nao u32: o ENet sorteia id de peer de 32 bits COM sinal (o esquadrao
+	# SWAT usa ids negativos reservados). Em u32 o cliente lia -1001 como
+	# 4294966295 e nao achava o no: o estado era descartado e o soldado ficava
+	# parado na origem, invisivel.
+	payload.encode_s32(offset, peer_id)
 	payload.encode_u8(offset + 4, clampi(slot, 0, 255))
 	payload.encode_float(offset + 5, position.x)
 	payload.encode_float(offset + 9, position.y)
@@ -143,7 +147,7 @@ static func _write_record(payload: PackedByteArray, offset: int, state: Dictiona
 static func _read_record(payload: PackedByteArray, offset: int) -> Dictionary:
 	var flags := payload.decode_u8(offset + 23)
 	var state := {
-		"key": "%d:%d" % [payload.decode_u32(offset), payload.decode_u8(offset + 4)],
+		"key": "%d:%d" % [payload.decode_s32(offset), payload.decode_u8(offset + 4)],
 		"position": Vector3(payload.decode_float(offset + 5), payload.decode_float(offset + 9), payload.decode_float(offset + 13)),
 		"rotation": wrapf(float(payload.decode_u16(offset + 17)) / 65536.0 * TAU, -PI, PI),
 		"health": payload.decode_u16(offset + 19),
