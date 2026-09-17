@@ -65,9 +65,9 @@ func _test_idle_exit_clock(test_root: Node) -> void:
 
 func _test_lan_address_filter(test_root: Node) -> void:
 	print("Testando IPs da rede local mostrados para o host...")
-	var addresses := PackedStringArray(["127.0.0.1", "0:0:0:0:0:0:0:1", "192.168.0.25", "169.254.3.4", "fe80:0:0:0:9f89:23c5:863b:2f4f", "host-interno"])
+	var addresses := PackedStringArray(["127.0.0.1", "0:0:0:0:0:0:0:1", "192.168.1.25", "169.254.3.4", "fe80:0:0:0:9f89:23c5:863b:2f4f", "10.0.0.14"])
 	var lan: PackedStringArray = LOCAL_HOST_LAUNCHER_SCRIPT.filter_lan_ipv4(addresses)
-	if lan != PackedStringArray(["192.168.0.25", "host-interno"]):
+	if lan != PackedStringArray(["192.168.1.25", "10.0.0.14"]):
 		_fail(test_root, "IPs da LAN deveriam ser so IPv4 fora de loopback/link-local; veio %s." % lan)
 		return
 	print("PASS: IPs da rede local validados.")
