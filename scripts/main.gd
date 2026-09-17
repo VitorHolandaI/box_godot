@@ -157,8 +157,19 @@ const PVP_RESTART_SECONDS := 10.0
 const PVP_TEAM_SAFEHOUSES := ["PvpSafehouseA", "PvpSafehouseB"]
 ## Fallback quando a cidade nao tem as casas (modo legacy/teste).
 const PVP_TEAM_BASE_FALLBACK := [Vector3(-58.5, 1.18, -58.5), Vector3(58.5, 1.18, 58.5)]
-## Raio da zona de compra em volta da casa (a casa tem 12,8 m de lado).
-const PVP_BASE_RADIUS := 7.0
+## Raio da zona de compra em volta da casa (a casa tem 12,8 m de lado). Subiu
+## para 9 m porque os bots nascem no quintal, na frente da porta (7,6 m).
+const PVP_BASE_RADIUS := 9.0
+## Bots de PVP nascem no QUINTAL, na frente da porta da propria base: nascer
+## dentro da casa dependia de o bot achar a saida com movimento sem pathfinding,
+## e ele ficava preso num canto interno oscilando ate estourar a rodada
+## (medido: 80 s parado com o alvo a 126 m).
+const PVP_BOT_YARD_DISTANCE := 7.6
+## Espalhamento lateral entre os bots do mesmo time, no quintal.
+const PVP_BOT_YARD_SPREAD := 1.4
+## Distancia para considerar um waypoint da rota alcancado (o alvo passa a ser o
+## proximo). Uso: ver _pvp_bot_hunt_position.
+const PVP_WAYPOINT_ARRIVE_RADIUS := 6.0
 ## Rota entre as duas casas pelo ANEL DE RUAS do perimetro (as ruas ficam em
 ## -72/-24/24/72 e os quarteiroes vao ate 69, entao o anel externo e o unico
 ## caminho sem predio no meio). As duas portas davam para o mesmo lado (Z local):
@@ -1619,7 +1630,7 @@ func _create_pvp_bot(index: int, simulate: bool) -> void:
 	bot.owner_peer_id = PVP_BOT_PEER_ID_BASE - index
 	bot.reads_local_input = false
 	bot.is_local_controller = false
-	bot.position = _get_player_spawn_position(index + 1)
+	bot.position = _pvp_bot_yard_spawn(index)
 	players_node.add_child(bot, true)
 	bot.set_spawn_position(bot.global_position)
 	bot.set_color_index(index + 1)
@@ -1657,6 +1668,22 @@ func _tick_pvp_bots(delta: float) -> void:
 		slot += 1
 
 
+## Posicao de nascimento do bot de PVP: no quintal, na frente da porta da base
+## do time. O lado da porta segue a rotacao da casa (time 0 em -Z, time 1 em +Z).
+## Uso: var pos := _pvp_bot_yard_spawn_for_team(1, 0)
+func _pvp_bot_yard_spawn_for_team(team: int, slot: int) -> Vector3:
+	var base := _pvp_team_base(team)
+	var door_sign := -1.0 if team == 0 else 1.0
+	var lateral := (float(posmod(slot, 4)) - 1.5) * PVP_BOT_YARD_SPREAD
+	return Vector3(base.x + lateral, base.y + 1.0, base.z + door_sign * PVP_BOT_YARD_DISTANCE)
+
+
+## Chute inicial (antes do register o time ainda nao existe): por paridade.
+## Uso: var pos := _pvp_bot_yard_spawn(3)
+func _pvp_bot_yard_spawn(index: int) -> Vector3:
+	return _pvp_bot_yard_spawn_for_team(0 if index % 2 == 0 else 1, index)
+
+
 ## Proxima esquina da rota do bot ate o lado inimigo (anda para a frente quando
 ## chega perto). Sem rota definida para o time, devolve a base inimiga.
 ## Uso: var rumo := _pvp_bot_hunt_position(bot)
@@ -1667,19 +1694,16 @@ func _pvp_bot_hunt_position(bot: Node) -> Vector3:
 	var enemy_team := 0 if team == 1 else 1
 	var route: Array = PVP_STREET_ROUTE if team == 0 else _reversed_route_cached()
 	var position := (bot as Node3D).global_position
-	# Indice de progresso: a ultima esquina alcancada manda; o alvo e a SEGUINTE.
-	# Antes o alvo era a primeira esquina a mais de 8 m — que e a propria base —
-	# e o bot voltava pra casa em circulo.
-	var progress := 0
-	for index in route.size():
-		if position.distance_to(route[index]) <= 10.0:
-			progress = index
-	var next_index: int = mini(progress + 1, route.size() - 1)
-	var next_waypoint: Vector3 = route[next_index]
-	if team == 1:
-		# Rota invertida termina na base do time 0; ultimo alvo e a base inimiga.
-		pass
-	return next_waypoint if next_waypoint != position else _pvp_team_base(enemy_team)
+	# Alvo = o PRIMEIRO waypoint ainda nao alcancado. A logica anterior mirava "a
+	# ultima esquina a menos de 10 m" e pegava a SEGUINTE: como o spawn fica a
+	# ~20 m de todas, nenhuma entrava no raio, o indice ficava 0 e o bot mirava a
+	# esquina depois da porta — andando para a parede da casa em vez de sair por
+	# ela (medido: bot parado num canto interno por 80 s, alvo a 126 m).
+	for waypoint in route:
+		if position.distance_to(waypoint) > PVP_WAYPOINT_ARRIVE_RADIUS:
+			return waypoint
+	# Todos alcancados: empurra para dentro da base inimiga (ultimo trecho).
+	return _pvp_team_base(enemy_team) if route.is_empty() else route[route.size() - 1]
 
 
 ## Rota do time 1 montada UMA vez. Antes `_reversed_route()` criava um Array
@@ -1881,8 +1905,13 @@ func _pvp_spawn_position_for(player: Node) -> Vector3:
 	var team: int = pvp_match.team_of(key) if not key.is_empty() else 0
 	if team < 0 or team >= PVP_TEAM_SAFEHOUSES.size():
 		team = 0
-	# Marcador FIXO da safehouse do time, girando entre os 4 para nao empilhar.
 	pvp_spawn_counters[team] += 1
+	if pvp_bot_keys.has(key):
+		# Bot nasce e RENASCE no quintal: sair da casa com movimento sem
+		# pathfinding prendia ele num canto interno ate estourar a rodada.
+		return _pvp_bot_yard_spawn_for_team(team, pvp_spawn_counters[team])
+	# Humano: marcador FIXO da safehouse do time, girando entre os 4 para nao
+	# empilhar.
 	var slot := posmod(pvp_spawn_counters[team], 4) + 1
 	var marker := get_node_or_null("GeneratedCity/%s/PlayerSpawn%d" % [PVP_TEAM_SAFEHOUSES[team], slot]) as Marker3D
 	if marker != null:
