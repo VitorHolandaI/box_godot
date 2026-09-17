@@ -204,6 +204,15 @@ Para iniciar o modo sobrevivencia no servidor dedicado, use:
 GAME_SERVER_GAME_MODE=--survival docker compose up --build -d
 ```
 
+Mata-mata (PVP estilo CS) com bots do servidor, para testar sozinho:
+
+```bash
+GAME_SERVER_GAME_MODE=--pvp GAME_SERVER_PVP_BOTS=--pvp-bots=4 docker compose up --build -d
+
+# cliente (mesmo build do servidor):
+godot --path . -- --join=127.0.0.1 --server-port=27015
+```
+
 O modo possui ondas de 10, 20, 30, 40, 60, 80, 120, 140, 160 e depois
 incrementos de 20 ate a onda final de 600 zumbis. O cliente continua usando
 somente o IP e a porta; a configuracao e enviada pelo servidor.
