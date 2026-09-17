@@ -34,8 +34,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `menu.gd`: selecao local/multiplayer/hospedar partida (mostra IPs da LAN para os amigos), navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
 - `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT, atraso entre snapshots, KB/s e pacotes/s recebidos e FPS.
-- `network_channels.gd`: plano de canais do ENet por tipo de trafego (confiavel 0, snapshot de zumbis 1, snapshot de jogadores 2, input 3, efeitos 4) para um pacote confiavel reenviado nao segurar os snapshots atras dele.
-- `network_session.gd`: sessao ENet (limite de jogadores via `PlayerCapacity`), roster, handshake, ping, descoberta UDP de salas, abertura dos 5 canais do ENet por tipo de trafego e suporte a modo de teste unitario.
+- `network_session.gd`: sessao ENet (limite de jogadores via `PlayerCapacity`), roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
 - `network_zombie_proxy_factory.gd`: cria o zumbi do cliente a partir do snapshot, com a variante sorteada pelo servidor aplicada antes do _ready.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
@@ -47,7 +46,6 @@ Logica de jogo, rede, interface e testes automatizados.
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
 - `server_tick_policy.gd`: servidor dedicado roda fisica a 30 Hz com no maximo 2 passos por frame (corta a bola de neve de ticks medida na VPS) e pula o fade visual dos zumbis.
-- `snapshot_interp_buffer.gd`: buffer de interpolacao dos proxies no client (zumbi e jogador): 2 snapshots, atraso de 2 intervalos ajustado ao jitter de chegada (150-450 ms) e reinicio em realocacao do servidor; substitui perseguir o ultimo pacote, que dava o "teleporte" em ping alto.
 - `swat_squad.gd`: esquadrao SWAT de 3 soldados que segue quem chamou por 20 s atirando no zumbi mais perto (posicoes replicadas a 10 Hz).
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
 - `test_cone_weapons.gd`: regressoes da motosserra e do lanca-chamas (cone com linha de visao, sem empurrao, fogo que queima, espalha e apaga).
@@ -111,9 +109,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_network_lag_probe.gd`: regressoes da sonda de lag remota.
 - `test_local_host_launcher.gd`: regressoes do servidor hospedado (argumentos exportado/editor, saida ociosa, IPs da LAN, parar sem servidor).
 - `test_server_tick_policy.gd`: regressoes do corte de custo do servidor dedicado (30 Hz, 2 passos por frame, deteccao por `--server`, max_slides do zumbi).
-- `test_snapshot_interp_buffer.gd`: regressoes do buffer de interpolacao dos proxies: primeira amostra sem teleporte, interpolacao entre snapshots, atraso adaptativo com jitter, reinicio em realocacao, deteccao de buffer sem amostra e rotacao pelo caminho mais curto.
 - `test_frame_perf_probe.gd`: regressoes da sonda de custo por frame (argumento, linha de hitch e relatorio periodico).
-- `test_network_channels.gd`: regressoes do plano de canais do ENet (plano consistente, canais distintos para snapshot/input/efeitos e COUNT/NAMES cobrindo todos); o teste de ponta a ponta e o smoke dedicado, onde o bot so passa se os quatro canais entregarem.
 - `test_network_join_sync.gd`: regressoes de dessincronia online: variante do zumbi no cliente, pacote de jogador abaixo do MTU, regras e reinicio do GAME OVER, restantes da onda, cliques com pacotes agrupados e pontos de spawn livres.
 - `test_script_error_counter.gd`: logger que faz a suite falhar em qualquer erro de script.
 - `test_zombie_snapshot_codec.gd`: regressoes do snapshot binario de zumbis.

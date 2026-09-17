@@ -23,9 +23,7 @@ const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
 const MAX_CORPSES := 20
 const SPAWN_INTERVAL := 1.0
 const INPUT_INTERVAL := 1.0 / 30.0
-## Cadencia de snapshot em relogio de parede (10 Hz): nao pode depender do delta
-## da fisica, que o servidor dedicado dilata quando nao acompanha os 30 Hz.
-const SNAPSHOT_INTERVAL_MSEC := 100
+const SNAPSHOT_INTERVAL := 1.0 / 10.0
 ## Suprimentos/armas no chao sao lentos: 2 Hz basta e mantem o pacote fino.
 const GROUND_STATE_INTERVAL := 0.5
 # Payload binario por RPC abaixo do MTU do ENet (~1400 bytes com cabecalhos).
@@ -71,7 +69,7 @@ var ragdolls: Array[Node] = []
 var ragdolls_by_zombie: Dictionary = {}
 var spawn_index := 0
 var input_elapsed := 0.0
-var snapshot_sent_ms := 0
+var snapshot_elapsed := 0.0
 var zombie_snapshot_sequence := 0
 var received_zombie_snapshot_sequence := -1
 var received_zombie_snapshot_chunks: Dictionary = {}
@@ -316,14 +314,9 @@ func _physics_process(delta: float) -> void:
 			ground_state_elapsed = 0.0
 			_send_ground_states()
 			_send_wave_progress()
-		# O relogio do envio e o de parede, nao o delta da fisica: o servidor
-		# dedicado roda a 30 Hz com no maximo 2 passos por frame, e um engasgo
-		# maior que isso atrasa o tempo da fisica — com o delta acumulado os
-		# snapshots saiam a menos de 10 Hz e o buffer do client ficava sem
-		# amostra, que e o "teleporte" de zumbi e jogador (VPS, onda 1-3).
-		var snapshot_now_ms := Time.get_ticks_msec()
-		if snapshot_now_ms - snapshot_sent_ms >= SNAPSHOT_INTERVAL_MSEC:
-			snapshot_sent_ms = snapshot_now_ms
+		snapshot_elapsed += delta
+		if snapshot_elapsed >= SNAPSHOT_INTERVAL:
+			snapshot_elapsed = 0.0
 			# So para quem ja carregou; antes um jogador carregando a cidade
 			# congelava os snapshots de todos os outros ate terminar.
 			if not NetworkSession.loaded_peers.is_empty():
@@ -472,7 +465,7 @@ func replicate_swat_positions(squad_id: int, positions: PackedVector3Array) -> v
 		_apply_swat_positions.rpc_id(int(peer_id), squad_id, positions)
 
 
-@rpc("authority", "call_remote", "unreliable_ordered", NetworkChannels.EFFECTS)
+@rpc("authority", "call_remote", "unreliable_ordered")
 func _apply_swat_positions(squad_id: int, positions: PackedVector3Array) -> void:
 	if not NetworkSession.is_client():
 		return
@@ -490,7 +483,7 @@ func replicate_thrown_grenade(start: Vector3, start_velocity: Vector3) -> void:
 		_spawn_thrown_grenade.rpc_id(int(peer_id), start, start_velocity)
 
 
-@rpc("authority", "call_remote", "unreliable", NetworkChannels.EFFECTS)
+@rpc("authority", "call_remote", "unreliable")
 func _spawn_thrown_grenade(start: Vector3, start_velocity: Vector3) -> void:
 	if not NetworkSession.is_client():
 		return
@@ -510,7 +503,7 @@ func show_thrown_knife(origin: Vector3, direction: Vector3) -> void:
 		_show_thrown_knife.rpc_id(int(peer_id), origin, direction)
 
 
-@rpc("authority", "call_remote", "unreliable", NetworkChannels.EFFECTS)
+@rpc("authority", "call_remote", "unreliable")
 func _show_thrown_knife(origin: Vector3, direction: Vector3) -> void:
 	if NetworkSession.is_client():
 		_spawn_knife_trail(origin, direction)
@@ -536,7 +529,7 @@ func show_zombie_burning(zombie: Node3D, seconds: float) -> void:
 		_show_zombie_burning.rpc_id(int(peer_id), String(zombie.name), seconds)
 
 
-@rpc("authority", "call_remote", "unreliable", NetworkChannels.EFFECTS)
+@rpc("authority", "call_remote", "unreliable")
 func _show_zombie_burning(zombie_name: String, seconds: float) -> void:
 	if not NetworkSession.is_client():
 		return
@@ -546,7 +539,7 @@ func _show_zombie_burning(zombie_name: String, seconds: float) -> void:
 ## any_peer: o visual de bala e cosmico (tracer, dano 0) e o handler roda
 ## apenas no cliente; modo "authority" spamava erro quando o rpc chegava
 ## de um peer que nao e o servidor. Uso: enviado por replicate_bullet_visual.
-@rpc("any_peer", "call_remote", "unreliable_ordered", NetworkChannels.EFFECTS)
+@rpc("any_peer", "call_remote", "unreliable_ordered")
 func _spawn_bullet_visual(spawn_position: Vector3, bullet_direction: Vector3, pellet_count: int = 1, spread_deg: float = 0.0, weapon_kind: int = -1) -> void:
 	if not NetworkSession.is_client():
 		return
@@ -906,7 +899,7 @@ func _collect_neutral_inputs() -> Array:
 	return states
 
 
-@rpc("any_peer", "call_remote", "unreliable_ordered", NetworkChannels.INPUT)
+@rpc("any_peer", "call_remote", "unreliable_ordered")
 func _submit_inputs(states: Array) -> void:
 	if not NetworkSession.is_server():
 		return
@@ -1047,7 +1040,7 @@ func _find_safehouse_door() -> Node:
 	return safehouse_door
 
 
-@rpc("authority", "call_remote", "unreliable_ordered", NetworkChannels.SNAPSHOT_PLAYERS)
+@rpc("authority", "call_remote", "unreliable_ordered")
 func _apply_player_snapshot(payload: PackedByteArray, door_open: bool) -> void:
 	if not NetworkSession.is_client():
 		return
@@ -1061,7 +1054,7 @@ func _apply_player_snapshot(payload: PackedByteArray, door_open: bool) -> void:
 			bot_ai.notify_player_state(state, player in local_players)
 
 
-@rpc("authority", "call_remote", "unreliable_ordered", NetworkChannels.SNAPSHOT_ZOMBIES)
+@rpc("authority", "call_remote", "unreliable_ordered")
 func _apply_zombie_snapshot(
 		payload: PackedByteArray,
 		snapshot_sequence: int,
