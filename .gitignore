@@ -13,3 +13,5 @@ dist/*
 # Binarios ficam so em dist/ (versionar aqui engorda o repo a cada release)
 box-godot-linux*.x86_64
 box-godot-windows*.exe
+# Mapa de IPs reais usado pela publicacao (contem valores internos)
+.publish-ip-map.txt
