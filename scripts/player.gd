@@ -128,14 +128,12 @@ var crate_weapon_rng := RandomNumberGenerator.new()
 var crate_weapon_models: Dictionary = {}
 var sonar_pulse_time := 0.0
 var sonar_interval_timer := SONAR_INTERVAL
-## Buffer de interpolacao dos snapshots do servidor (mesmo do zumbi): o proxy
-## do aliado remoto renderiza com atraso controlado em vez de perseguir o ultimo
-## pacote, que e o que dava o "teleporte" do jogador em ping alto.
-var snapshot_buffer := SnapshotInterpBuffer.new()
+var network_target_position := Vector3.ZERO
 var unstuck_cooldown := 0.0
 ## Sobe a cada teleporte do servidor (destravar, respawn); o cliente pula a
 ## interpolacao, que colidiria com o que prendeu o boneco.
 var teleport_sequence := 0
+var network_target_rotation := 0.0
 var remote_buttons: Dictionary = {}
 var remote_input_age := 0.0
 var color_index := -1
@@ -148,7 +146,8 @@ func _ready() -> void:
 	safe_margin = 0.08
 	max_slides = 6
 	spawn_position = global_position
-	snapshot_buffer.reset(float(Time.get_ticks_msec()), global_position, rotation.y)
+	network_target_position = global_position
+	network_target_rotation = rotation.y
 	_apply_player_color()
 	_build_crate_weapon_models()
 	_update_weapon_models()
@@ -175,18 +174,13 @@ func _physics_process(delta: float) -> void:
 	muzzle_flash.visible = muzzle_flash_time > 0.0
 	if not simulation_enabled:
 		var previous_position := global_position
-		# Interpolacao por buffer (2 snapshots, atraso adaptativo) em vez de
-		# perseguir o ultimo pacote a 16/s: com jitter o proxy mudava de direcao
-		# a cada snapshot e parecia teleportar. O move_and_collide segue no
-		# caminho do alvo para nao atravessar parede.
-		snapshot_buffer.sample(float(Time.get_ticks_msec()))
-		var target_pos := snapshot_buffer.position
+		var target_pos := global_position.lerp(network_target_position, minf(delta * 16.0, 1.0))
 		var motion := target_pos - global_position
 		if motion.length_squared() > 0.00001:
 			var col := move_and_collide(motion)
 			if col != null:
 				move_and_collide(col.get_remainder().slide(col.get_normal()))
-		rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
+		rotation.y = lerp_angle(rotation.y, network_target_rotation, minf(delta * 16.0, 1.0))
 		PlayerAnimator.animate_pose(self, delta, previous_position.distance_squared_to(global_position) > 0.0001)
 		return
 
@@ -325,21 +319,14 @@ func get_network_state() -> Dictionary:
 
 func apply_network_state(state: Dictionary) -> void:
 	var position_value: Variant = state.get("position")
-	var received_teleport := int(state.get("teleport_sequence", teleport_sequence))
 	if position_value is Vector3:
-		var next_position: Vector3 = position_value
-		var next_rotation := float(state.get("rotation", snapshot_buffer.rotation))
-		if received_teleport != teleport_sequence:
-			# Teleporte autorizado (destravar/respawn): o buffer reinicia e o no
-			# pula, senao o proxy deslizaria atravessando o mapa.
-			snapshot_buffer.reset(float(Time.get_ticks_msec()), next_position, next_rotation)
-			global_position = next_position
-			rotation.y = next_rotation
-			velocity = Vector3.ZERO
-		elif snapshot_buffer.push(float(Time.get_ticks_msec()), next_position, next_rotation, global_position, rotation.y):
-			global_position = snapshot_buffer.position
-			rotation.y = snapshot_buffer.rotation
-	teleport_sequence = received_teleport
+		network_target_position = position_value
+	var received_teleport := int(state.get("teleport_sequence", teleport_sequence))
+	if received_teleport != teleport_sequence:
+		teleport_sequence = received_teleport
+		global_position = network_target_position
+		velocity = Vector3.ZERO
+	network_target_rotation = float(state.get("rotation", network_target_rotation))
 	health = clampi(int(state.get("health", health)), 0, max_health)
 	stamina = clampf(float(state.get("stamina", stamina)), 0.0, max_stamina)
 	is_sprinting = bool(state.get("sprinting", false))
