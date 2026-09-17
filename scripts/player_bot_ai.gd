@@ -43,6 +43,11 @@ var strafe_timers: Dictionary = {}
 var bot_kills := 0
 var _squad_targets: Dictionary = {}
 var _squad_target_timers: Dictionary = {}
+## Pulsos de ataque por vaga em PVP: pistola e semi-automatica e so dispara na
+## BORDA do botao; mandar "attack" segurado fazia o bot atirar uma vez e parar.
+var _pvp_attack_timers: Dictionary = {}
+const PVP_ATTACK_CYCLE := 0.25
+const PVP_ATTACK_PULSE := 0.12
 
 
 ## Atualiza contadores e valida condicoes de teste ou desempenho.
@@ -136,6 +141,101 @@ func _generate_test_bot_input(player: Node3D, zombies_node: Node) -> Dictionary:
 		"pistol": fmod(bot_elapsed, 1.0) < 0.25,
 		"reload": false,
 	}
+
+
+## Entrada de um bot em mata-mata PVP: caca o jogador inimigo mais perto,
+## mantem distancia de tiro, sai do cerco e nunca fica parado (patrulha quando
+## nao ha ninguem a vista). Sem troca de arma: em PVP o bot comeca de pistola.
+## Uso: bot.apply_network_input(ai.collect_pvp_input(bot, tree, slot, delta))
+func collect_pvp_input(player: Node3D, tree: SceneTree, slot: int, delta: float) -> Dictionary:
+	var target := _nearest_enemy_player(player, tree)
+	var target_offset := Vector3.ZERO
+	var target_dist := 0.0
+	if target != null:
+		target_offset = target.global_position - player.global_position
+		target_offset.y = 0.0
+		target_dist = target_offset.length()
+	var move := _pvp_movement(player, slot, target, target_offset, target_dist, delta)
+	var aim := move
+	if target_dist > 0.01:
+		aim = Vector2(target_offset.x, target_offset.z).normalized()
+	var pulse := float(_pvp_attack_timers.get(slot, 0.0)) + delta
+	if pulse >= PVP_ATTACK_CYCLE:
+		pulse = 0.0
+	_pvp_attack_timers[slot] = pulse
+	var in_range: bool = target != null and target_dist <= SQUAD_ENGAGE_RANGE
+	var can_attack: bool = _squad_can_attack(player, target, target_offset, target_dist) or in_range
+	return {
+		"slot": slot,
+		"move": move,
+		"aim": aim,
+		"jump": false,
+		"sprint": float(player.get("stamina")) > SQUAD_SPRINT_STAMINA,
+		"attack": can_attack and pulse < PVP_ATTACK_PULSE,
+		"knife": false,
+		"pistol": false,
+		"reload": false,
+	}
+
+
+## Entradas de todos os jogadores locais em PVP (um estado por jogador).
+## Uso: var inputs := ai.collect_pvp_inputs(local_players, get_tree(), delta)
+func collect_pvp_inputs(local_players: Array[Node], tree: SceneTree, delta: float) -> Array:
+	var states: Array = []
+	for index in local_players.size():
+		var player := local_players[index] as Node3D
+		if is_instance_valid(player):
+			states.append(collect_pvp_input(player, tree, index, delta))
+	return states
+
+
+## Jogador inimigo vivo mais perto (o proprio bot e os caidos ficam de fora).
+## Uso: var alvo := _nearest_enemy_player(bot, tree)
+func _nearest_enemy_player(player: Node3D, tree: SceneTree) -> Node3D:
+	if tree == null:
+		return null
+	var nearest: Node3D = null
+	var nearest_distance := 1e9
+	for node in tree.get_nodes_in_group("player"):
+		var candidate := node as Node3D
+		if candidate == null or candidate == player or not is_instance_valid(candidate):
+			continue
+		if bool(candidate.get("is_eliminated")) or bool(candidate.get("is_swat_bot")):
+			continue
+		var distance := candidate.global_position.distance_to(player.global_position)
+		if distance < nearest_distance:
+			nearest_distance = distance
+			nearest = candidate
+	return nearest
+
+
+## Movimento do bot em PVP: cerco (foge de 2+ inimigos colados), aproxima de
+## longe, recua de perto e ciranda na faixa de tiro; sem alvo, patrulha.
+func _pvp_movement(player: Node3D, slot: int, target: Node3D, target_offset: Vector3, target_dist: float, delta: float) -> Vector2:
+	_update_unstuck_logic(player, slot, delta)
+	var unstuck_duration: float = unstuck_durations.get(slot, 0.0)
+	if unstuck_duration > 0.0:
+		unstuck_durations[slot] = unstuck_duration - delta
+		return unstuck_dirs.get(slot, Vector2.UP)
+	_strafe_bootstrap(slot, slot)
+	var strafe_time: float = strafe_timers.get(slot, 0.0) + delta
+	strafe_timers[slot] = strafe_time
+	var strafe_dir: float = strafe_dirs.get(slot, 1.0)
+	if strafe_time > 1.6:
+		strafe_timers[slot] = 0.0
+		strafe_dir = -strafe_dir
+		strafe_dirs[slot] = strafe_dir
+	if target == null:
+		# Sem inimigo a vista (todos caidos): fica parado. Patrulhar pontos
+		# fixos do bot de teste empurrava o bot contra a parede do predio.
+		return Vector2.ZERO
+	var dir := Vector2(target_offset.x, target_offset.z).normalized()
+	var perpendicular := Vector2(-dir.y, dir.x) * strafe_dir
+	if target_dist > 12.0:
+		return dir
+	if target_dist < 4.0:
+		return (-dir * 0.9 + perpendicular * 0.3).normalized()
+	return (dir * 0.1 + perpendicular * 0.95).normalized()
 
 
 ## Entrada de um soldado do esquadrao SWAT: caca o zumbi mais perto dentro do

@@ -7,6 +7,22 @@ extends RefCounted
 ##   var count := LoadTestOptions.prespawn_zombie_count(OS.get_cmdline_user_args())
 
 const MAX_PRESPAWN_ZOMBIES := 2000
+const MAX_PVP_BOTS := 8
+
+
+## Quantidade de bots de mata-mata a criar no servidor (0 quando ausente).
+## Servem para jogar contra bot sem precisar de outro cliente.
+## Uso: var count := LoadTestOptions.pvp_bot_count(PackedStringArray(["--pvp-bots=4"]))
+static func pvp_bot_count(arguments: PackedStringArray) -> int:
+	for argument in arguments:
+		if not argument.begins_with("--pvp-bots="):
+			continue
+		var raw_value := argument.trim_prefix("--pvp-bots=")
+		if not raw_value.is_valid_int() or int(raw_value) < 0 or int(raw_value) > MAX_PVP_BOTS:
+			push_error("Valor invalido para --pvp-bots: '%s'; esperado inteiro entre 0 e %d." % [raw_value, MAX_PVP_BOTS])
+			return 0
+		return int(raw_value)
+	return 0
 
 
 ## Quantidade de zumbis a criar ao iniciar o servidor (0 quando ausente/invalido).
