@@ -1,6 +1,17 @@
 class_name PlayerBotAI
 extends RefCounted
 
+## Alcance de tiro do esquadrao SWAT (Uzi) e stamina minima para sprintar.
+const SQUAD_ENGAGE_RANGE := 32.0
+const SQUAD_SPRINT_STAMINA := 20.0
+## O alvo (com linha de visao) e rebuscado a cada N s por bot: o raycast nao
+## precisa rodar em todo tick.
+const SQUAD_TARGET_INTERVAL := 0.25
+## Candidatos testados por busca, do mais perto para o mais longe: sem isso o
+## bot mira num zumbi atras da parede e fura o cenario (medido no smoke: 253 de
+## 258 tiros acertaram o Safehouse).
+const SQUAD_LOS_CANDIDATES := 5
+
 const PATROL_POINTS: Array[Vector3] = [
 	Vector3(0.0, 0.12, 0.0),
 	Vector3(22.0, 0.12, 0.0),
@@ -30,6 +41,8 @@ var unstuck_durations: Dictionary = {}
 var strafe_dirs: Dictionary = {}
 var strafe_timers: Dictionary = {}
 var bot_kills := 0
+var _squad_targets: Dictionary = {}
+var _squad_target_timers: Dictionary = {}
 
 
 ## Atualiza contadores e valida condicoes de teste ou desempenho.
@@ -123,6 +136,171 @@ func _generate_test_bot_input(player: Node3D, zombies_node: Node) -> Dictionary:
 		"pistol": fmod(bot_elapsed, 1.0) < 0.25,
 		"reload": false,
 	}
+
+
+## Entrada de um soldado do esquadrao SWAT: caca o zumbi mais perto dentro do
+## alcance, mantem distancia de tiro, sai do cerco e volta para o dono quando
+## passa do leash. Nunca troca de arma (Uzi) nem recarrega: municao infinita.
+## `slot` separa o estado interno de cada bot; `formation_index` e a vaga dele
+## na formacao em volta do dono (0..COUNT-1).
+## Uso: bot.apply_network_input(ai.collect_squad_input(bot, dono, zombies, slot, i))
+func collect_squad_input(player: Node3D, anchor: Node3D, zombies_node: Node, slot: int, formation_index: int, delta: float) -> Dictionary:
+	var player_pos := player.global_position
+	var anchor_pos := player_pos
+	if is_instance_valid(anchor):
+		anchor_pos = (anchor as Node3D).global_position
+	var to_anchor := anchor_pos - player_pos
+	to_anchor.y = 0.0
+	var target := _squad_target_for(player, zombies_node, slot, delta)
+	var target_offset := Vector3.ZERO
+	var target_dist := 0.0
+	if target != null:
+		target_offset = target.global_position - player_pos
+		target_offset.y = 0.0
+		target_dist = target_offset.length()
+	var move_plan := _squad_movement(player, slot, formation_index, target, target_offset, target_dist, anchor_pos, to_anchor, zombies_node, delta)
+	var aim: Vector2 = move_plan["move"]
+	if target != null and not target_offset.is_zero_approx():
+		aim = Vector2(target_offset.x, target_offset.z).normalized()
+	return {
+		"slot": slot,
+		"move": move_plan["move"],
+		"aim": aim,
+		"jump": move_plan["jump"],
+		"sprint": move_plan["sprint"],
+		"attack": _squad_can_attack(player, target, target_offset, target_dist),
+		"knife": false,
+		"pistol": false,
+		"reload": false,
+	}
+
+
+## Uzi atira segurando o botao: alinhado, dentro do alcance e com linha de tiro.
+func _squad_can_attack(player: Node3D, target: Node3D, target_offset: Vector3, target_dist: float) -> bool:
+	if target_dist <= 0.01 or target_dist > SQUAD_ENGAGE_RANGE:
+		return false
+	if not is_instance_valid(player) or not is_instance_valid(target):
+		return false
+	var forward: Vector3 = -player.global_transform.basis.z
+	if forward.dot(target_offset.normalized()) <= 0.6:
+		return false
+	return _has_shot_line(player, target)
+
+
+## Alvo do soldado: o zumbi vivo mais perto dentro do alcance E com linha de
+## visao. A busca roda a cada SQUAD_TARGET_INTERVAL; entre as buscas vale o
+## cache (alvo que morre ou sai do alcance cai fora sozinho).
+## Uso: var alvo := _squad_target_for(bot, zombies, slot, delta)
+func _squad_target_for(player: Node3D, zombies_node: Node, slot: int, delta: float) -> Node3D:
+	_squad_target_timers[slot] = float(_squad_target_timers.get(slot, 0.0)) - delta
+	var cached = _squad_targets.get(slot)
+	var cache_valid: bool = cached != null and is_instance_valid(cached) and not bool((cached as Node).get("is_dead"))
+	if cache_valid and float(_squad_target_timers[slot]) > 0.0:
+		return cached as Node3D
+	if not cache_valid and float(_squad_target_timers[slot]) > 0.0:
+		return null
+	_squad_target_timers[slot] = SQUAD_TARGET_INTERVAL
+	var target := _nearest_visible_zombie(player, zombies_node)
+	_squad_targets[slot] = target
+	return target
+
+
+func _nearest_visible_zombie(player: Node3D, zombies_node: Node, max_distance: float = SQUAD_ENGAGE_RANGE) -> Node3D:
+	if zombies_node == null:
+		return null
+	var origin := player.global_position
+	var candidates: Array = []
+	for node in zombies_node.get_children():
+		var zombie := node as Node3D
+		if zombie == null or bool(zombie.get("is_dead")):
+			continue
+		var dist := zombie.global_position.distance_to(origin)
+		if dist > max_distance:
+			continue
+		candidates.append({"node": zombie, "dist": dist})
+	if candidates.is_empty():
+		return null
+	candidates.sort_custom(func(first: Dictionary, second: Dictionary) -> bool: return float(first["dist"]) < float(second["dist"]))
+	for index in mini(candidates.size(), SQUAD_LOS_CANDIDATES):
+		var zombie: Node3D = candidates[index]["node"]
+		if _has_shot_line(player, zombie):
+			return zombie
+	return null
+
+
+## Linha de tiro livre ate o alvo, com a mesma mascara dos tiros: parede no
+## caminho devolve false e o bot nao gasta bala no cenario.
+func _has_shot_line(player: Node3D, target: Node3D) -> bool:
+	var body := player as CollisionObject3D
+	if body == null or not body.is_inside_tree():
+		return false
+	var from := player.global_position + Vector3.UP * 1.2
+	var to := target.global_position + Vector3.UP * 0.9
+	var collider := Bullet.first_hit_collider(player.get_world_3d().direct_space_state, from, to, [body.get_rid()])
+	if collider == null:
+		return true
+	var node := collider as Node
+	while node != null:
+		if node == target:
+			return true
+		node = node.get_parent()
+	return false
+
+
+## Movimento tatico do soldado: leash primeiro, depois cerco, faixa de tiro e,
+## sem alvo, a vaga na formacao em volta do dono.
+func _squad_movement(player: Node3D, slot: int, formation_index: int, target: Node3D, target_offset: Vector3, target_dist: float, anchor_pos: Vector3, to_anchor: Vector3, zombies_node: Node, delta: float) -> Dictionary:
+	_update_unstuck_logic(player, slot, delta)
+	var unstuck_duration: float = unstuck_durations.get(slot, 0.0)
+	if unstuck_duration > 0.0:
+		unstuck_durations[slot] = unstuck_duration - delta
+		return {"move": unstuck_dirs.get(slot, Vector2.UP), "jump": true, "sprint": true}
+	var sprint := float(player.get("stamina")) > SQUAD_SPRINT_STAMINA
+	var anchor_distance := to_anchor.length()
+	# Passou do leash (ou ficou muito longe sem alvo): voltar vale mais que
+	# perseguir zumbi.
+	if anchor_distance > SwatSquadBot.LEASH_DISTANCE or (target == null and anchor_distance > SwatSquadBot.LEASH_DISTANCE * 0.6):
+		return {"move": Vector2(to_anchor.x, to_anchor.z).normalized(), "jump": false, "sprint": sprint}
+	if target == null:
+		# Sem alvo no alcance de tiro: cacar o zumbi visivel mais perto dentro do
+		# leash (o soldado avanca em sprint e passa a atirar quando chega).
+		var hunt := _nearest_visible_zombie(player, zombies_node, SwatSquadBot.LEASH_DISTANCE)
+		if hunt != null:
+			var to_hunt := hunt.global_position - player.global_position
+			to_hunt.y = 0.0
+			if to_hunt.length() > SwatSquadBot.ENGAGE_DISTANCE:
+				return {"move": Vector2(to_hunt.x, to_hunt.z).normalized(), "jump": false, "sprint": sprint}
+		var formation := SwatSquadBot.formation_position(anchor_pos, formation_index)
+		var to_slot := formation - player.global_position
+		to_slot.y = 0.0
+		if to_slot.length() < 0.6:
+			return {"move": Vector2.ZERO, "jump": false, "sprint": false}
+		return {"move": Vector2(to_slot.x, to_slot.z).normalized(), "jump": false, "sprint": sprint}
+	var swarm := _swarm_flee_direction(player.global_position, zombies_node)
+	if swarm != Vector2.ZERO:
+		return {"move": swarm, "jump": false, "sprint": sprint}
+	_strafe_bootstrap(slot, formation_index)
+	var strafe_time: float = strafe_timers.get(slot, 0.0) + delta
+	strafe_timers[slot] = strafe_time
+	var strafe_dir: float = strafe_dirs.get(slot, 1.0)
+	if strafe_time > 1.6:
+		strafe_timers[slot] = 0.0
+		strafe_dir = -strafe_dir
+		strafe_dirs[slot] = strafe_dir
+	var dir := Vector2(target_offset.x, target_offset.z).normalized()
+	var perpendicular := Vector2(-dir.y, dir.x) * strafe_dir
+	if target_dist > SwatSquadBot.KEEP_DISTANCE + 1.5:
+		return {"move": (dir * 0.85 + perpendicular * 0.35).normalized(), "jump": false, "sprint": sprint}
+	if target_dist < SwatSquadBot.ENGAGE_DISTANCE:
+		return {"move": (-dir * 0.9 + perpendicular * 0.4).normalized(), "jump": false, "sprint": sprint}
+	return {"move": (dir * 0.15 + perpendicular * 0.9).normalized(), "jump": false, "sprint": false}
+
+
+## Cada bot comeca a ciranda para um lado, para os quatro nao girarem juntos.
+func _strafe_bootstrap(slot: int, formation_index: int) -> void:
+	if strafe_dirs.has(slot):
+		return
+	strafe_dirs[slot] = 1.0 if posmod(formation_index, 2) == 0 else -1.0
 
 
 func _generate_autoplay_input(player: Node3D, slot: int, zombies_node: Node, _tree: SceneTree) -> Dictionary:
@@ -295,11 +473,11 @@ func _calculate_combat(player: Node3D, _slot: int, target: Node3D) -> Dictionary
 	return {"attack": can_shoot, "knife": false, "pistol": want_pistol, "reload": false}
 
 
-func _find_nearest_live_zombie(player_pos: Vector3, zombies_node: Node) -> Node3D:
+func _find_nearest_live_zombie(player_pos: Vector3, zombies_node: Node, max_distance: float = 55.0) -> Node3D:
 	if zombies_node == null:
 		return null
 	var nearest: Node3D = null
-	var nearest_distance := 55.0
+	var nearest_distance := max_distance
 	for child in zombies_node.get_children():
 		var zombie := child as Node3D
 		if zombie == null or bool(zombie.get("is_dead")):

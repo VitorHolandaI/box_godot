@@ -30,7 +30,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
 - `local_host_launcher.gd`: "Hospedar partida" do menu: sobe o servidor dedicado como processo filho headless, entra por 127.0.0.1, encerra ao voltar ao menu/fechar o jogo e o filho sai sozinho sem peers (`--host-idle-exit=`).
 - `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos que so somem longe dos jogadores e bot de teste.
-- `load_test_options.gd`: opcao `--prespawn-zombies=N` do servidor dedicado para teste de carga.
+- `load_test_options.gd`: opcao `--prespawn-zombies=N` do servidor dedicado para teste de carga; `--smoke-test-swat` (main.gd) chama o esquadrao perto do primeiro jogador, spawna alvos em anel e imprime o estado dos 4 soldados a cada 2 s ate o esquadrao expirar.
 - `menu.gd`: selecao local/multiplayer/hospedar partida (mostra IPs da LAN para os amigos), navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
 - `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT, atraso entre snapshots, KB/s e pacotes/s recebidos e FPS.
@@ -47,7 +47,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
 - `snapshot_interp_buffer.gd`: buffer de interpolacao dos proxies no client (zumbi e jogador): guarda varias amostras, procura o par que envolve o tempo de render (agora - atraso de 2 intervalos, ajustado ao jitter, 150-450 ms) e reinicia em realocacao do servidor.
 - `server_tick_policy.gd`: servidor dedicado roda fisica a 30 Hz com no maximo 2 passos por frame (corta a bola de neve de ticks medida na VPS) e pula o fade visual dos zumbis.
-- `swat_squad.gd`: esquadrao SWAT de 3 soldados que segue quem chamou por 20 s atirando no zumbi mais perto (posicoes replicadas a 10 Hz).
+- `swat_squad_bot.gd`: esquadrao SWAT como 4 jogadores de verdade simulados no servidor (IA do bot de teste em modo esquadrao, Uzi com municao infinita, invulneraveis e fora do grupo "player", presos a 40 m do dono), replicados pelo snapshot de jogadores.
 - `test_ammo_loot.gd`: regressoes da municao por classe: queda por abate, reposicao e etiqueta/cor por classe.
 - `test_cone_weapons.gd`: regressoes da motosserra e do lanca-chamas (cone com linha de visao, sem empurrao, fogo que queima, espalha e apaga).
 - `test_equipment.gd`: regressoes dos itens (contagem, teclas sem conflito, granada no pavio, arremesso de granada e faca, item de granadas no chao).
@@ -58,7 +58,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
 - `test_safehouse_roof.gd`: regressoes do telhado da casa segura: estrutura, subida ao telhado e saida pelos fundos.
 - `test_shared_vision.gd`: regressoes da visao compartilhada por raio entre aliados.
-- `test_support_calls.gd`: regressoes das chamadas de apoio (cargas por onda, bombardeio em linha apos o atraso, SWAT seguindo, atirando e indo embora).
+- `test_support_calls.gd`: regressoes das chamadas de apoio: cargas ganhas por onda (aereo a cada 3, SWAT a cada 5), a linha bombardeada pelo ataque aereo e o esquadrao SWAT como jogadores simulados (fora do grupo player, invulneraveis, Uzi com municao infinita, leash e formacao).
 - `test_weapon_arsenal.gd`: regressoes do arsenal: cada arma de crate ligada em municao, drop, crate e modelo, railgun atravessando a fila e tracers futuristas. Inclui o papel da besta (silenciosa, perfura) e do lanca-granadas (area).
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
 - `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
