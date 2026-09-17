@@ -26,21 +26,16 @@ const KEEP_DISTANCE := 6.5
 ## Onde ele fica quando nao ha zumbi: formacao em volta do dono, para nao
 ## empilhar os quatro no mesmo ponto.
 const FORMATION_RADIUS := 3.2
-## Id de peer reservado para os soldados (negativo: o ENet so atribui ids
-## positivos). A chave precisa continuar no formato "peer:slot" que o
-## PlayerSnapshotCodec valida, entao o esquadrao id vira o peer.
+## Id de peer reservado para os soldados. A chave precisa continuar no formato
+## "peer:slot" que o PlayerSnapshotCodec valida, entao o id do esquadrao vira o
+## peer. O ENet sorteia id de 32 bits (pode ser negativo) e um jogador de
+## verdade pode cair no mesmo numero: quem decide se uma chave e do esquadrao e
+## o pertencimento a `swat_squads`, nunca uma faixa de id (main._is_swat_player_key).
 const NPC_PEER_ID_BASE := -1000
 ## Uso: var key := SwatSquadBot.key_for(squad_id, 2)
 static func key_for(squad_id: int, index: int) -> String:
 	return "%d:%d" % [NPC_PEER_ID_BASE - squad_id, index]
 
-
-## Uso: if SwatSquadBot.is_swat_key(key): continue
-static func is_swat_key(key: String) -> bool:
-	var parts := key.split(":")
-	if parts.size() != 2 or not parts[0].is_valid_int():
-		return false
-	return int(parts[0]) <= NPC_PEER_ID_BASE
 
 
 ## Chaves das `count` vagas do esquadrao.
