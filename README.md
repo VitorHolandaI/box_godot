@@ -207,7 +207,9 @@ GAME_SERVER_GAME_MODE=--survival docker compose up --build -d
 Mata-mata (PVP estilo CS) por times, melhor de 3, com bots do servidor: cada
 time nasce numa base em canto oposto do mapa, compra arma **so na fase de
 compra e dentro da propria base** (tecla **B**) e quem morre fica fora ate o
-proximo round. Bots do servidor compram sozinhos a melhor arma que couber.
+proximo round. Bots do servidor compram sozinhos a melhor arma que couber. A sala
+aparece como **Mata-mata PVP** e o HUD nao mostra nada de zumbi (sem contador de
+horda, sem sonar).
 
 ```bash
 GAME_SERVER_GAME_MODE=--pvp GAME_SERVER_PVP_BOTS=--pvp-bots=4 docker compose up --build -d
