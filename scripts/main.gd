@@ -150,6 +150,8 @@ var buy_menu: BuyMenu = null
 var pvp_spawn_counters: Array[int] = [0, 0]
 ## Rota invertida (time 1) preguicosa: ver _reversed_route_cached().
 var pvp_reversed_route: Array = []
+## Waypoint atual de cada bot de PVP (chave -> indice), monotonico por rodada.
+var pvp_bot_route_index: Dictionary = {}
 const PVP_RESTART_SECONDS := 10.0
 ## Bases dos dois times: uma safehouse por canto OPOSTO do mapa (~165 m entre
 ## elas). Cada time nasce nos marcadores fixos PlayerSpawn1..4 da sua casa e so
@@ -1694,16 +1696,21 @@ func _pvp_bot_hunt_position(bot: Node) -> Vector3:
 	var enemy_team := 0 if team == 1 else 1
 	var route: Array = PVP_STREET_ROUTE if team == 0 else _reversed_route_cached()
 	var position := (bot as Node3D).global_position
-	# Alvo = o PRIMEIRO waypoint ainda nao alcancado. A logica anterior mirava "a
-	# ultima esquina a menos de 10 m" e pegava a SEGUINTE: como o spawn fica a
-	# ~20 m de todas, nenhuma entrava no raio, o indice ficava 0 e o bot mirava a
-	# esquina depois da porta — andando para a parede da casa em vez de sair por
-	# ela (medido: bot parado num canto interno por 80 s, alvo a 126 m).
-	for waypoint in route:
-		if position.distance_to(waypoint) > PVP_WAYPOINT_ARRIVE_RADIUS:
-			return waypoint
-	# Todos alcancados: empurra para dentro da base inimiga (ultimo trecho).
-	return _pvp_team_base(enemy_team) if route.is_empty() else route[route.size() - 1]
+	if route.is_empty():
+		return _pvp_team_base(enemy_team)
+	var key := _key_for_player(bot)
+	var index: int = int(pvp_bot_route_index.get(key, 0))
+	# Avanca o indice de forma MONOTONICA. Recalcular "a primeira esquina nao
+	# alcancada" a cada tick fazia o bot oscilar no limite do raio: ao andar para
+	# a esquina 2 a esquina 1 voltava a ficar fora do raio e ele voltava (medido:
+	# vai e volta em volta de (-53,-68) por minutos).
+	while index < route.size() - 1 and position.distance_to(route[index]) <= PVP_WAYPOINT_ARRIVE_RADIUS:
+		index += 1
+	pvp_bot_route_index[key] = index
+	if index == route.size() - 1 and position.distance_to(route[index]) <= PVP_WAYPOINT_ARRIVE_RADIUS:
+		# Fim da rota: empurra para dentro da base inimiga.
+		return _pvp_team_base(enemy_team)
+	return route[index]
 
 
 ## Rota do time 1 montada UMA vez. Antes `_reversed_route()` criava um Array
@@ -1908,7 +1915,9 @@ func _pvp_spawn_position_for(player: Node) -> Vector3:
 	pvp_spawn_counters[team] += 1
 	if pvp_bot_keys.has(key):
 		# Bot nasce e RENASCE no quintal: sair da casa com movimento sem
-		# pathfinding prendia ele num canto interno ate estourar a rodada.
+		# pathfinding prendia ele num canto interno ate estourar a rodada. O
+		# indice da rota volta ao comeco para ele refazer o caminho das ruas.
+		pvp_bot_route_index.erase(key)
 		return _pvp_bot_yard_spawn_for_team(team, pvp_spawn_counters[team])
 	# Humano: marcador FIXO da safehouse do time, girando entre os 4 para nao
 	# empilhar.
