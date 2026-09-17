@@ -8,6 +8,7 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const BULLET_SCENE := preload("res://scenes/bullet.tscn")
 const BULLET_SCRIPT := preload("res://scripts/bullet.gd")
+const PVP_NAVIGATION_TESTS_SCRIPT := preload("res://scripts/test_pvp_navigation.gd")
 const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const ZOMBIE_SPAWN_SCHEDULE_SCRIPT := preload("res://scripts/zombie_spawn_schedule.gd")
@@ -53,6 +54,7 @@ const IN_GAME_SETTINGS_TESTS_SCRIPT := preload("res://scripts/test_in_game_setti
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
+	"pvp_navigation": PVP_NAVIGATION_TESTS_SCRIPT,
 	"zombie_unstuck": ZOMBIE_UNSTUCK_TESTS_SCRIPT,
 	"player_unstuck": PLAYER_UNSTUCK_TESTS_SCRIPT,
 	"network_join_sync": NETWORK_JOIN_SYNC_TESTS_SCRIPT,
