@@ -12,6 +12,11 @@ const SAFEHOUSE_LOT_AREA := Rect2(-17.5, 3.5, 14.0, 14.0)
 ## nasce nos marcadores fixos da sua casa e so compra dentro dela.
 const PVP_SAFEHOUSE_NAMES := ["PvpSafehouseA", "PvpSafehouseB"]
 const PVP_SAFEHOUSE_POSITIONS := [Vector3(-58.5, 0.12, -58.5), Vector3(58.5, 0.12, 58.5)]
+## A porta da casa nasce no lado -Z local. A casa A ja fica com a porta virada
+## para a rua de baixo (z=-72); a casa B e girada 180 graus para a porta dar na
+## rua de cima (z=72). Sem isso o bot nascia preso: o alvo ficava do lado oposto
+## da porta e ele empurrava a parede ate estourar o tempo da rodada.
+const PVP_SAFEHOUSE_YAWS := [0.0, PI]
 const TREE_SCENES := [
 	preload("res://scenes/tree.tscn"),
 	preload("res://scenes/tree_pine.tscn"),
@@ -148,15 +153,16 @@ func _create_procedural_safehouse() -> void:
 	if not NetworkSession.pvp_mode:
 		return
 	for index in PVP_SAFEHOUSE_NAMES.size():
-		_build_safehouse(PVP_SAFEHOUSE_NAMES[index], PVP_SAFEHOUSE_POSITIONS[index])
+		_build_safehouse(PVP_SAFEHOUSE_NAMES[index], PVP_SAFEHOUSE_POSITIONS[index], PVP_SAFEHOUSE_YAWS[index])
 
 
 ## Constroi uma safehouse (com os marcadores PlayerSpawn1..4 dela) e configura o
 ## recorte na cidade. Uso: _build_safehouse("PvpSafehouse", PVP_SAFEHOUSE_POSITION)
-func _build_safehouse(house_name: String, house_position: Vector3) -> void:
+func _build_safehouse(house_name: String, house_position: Vector3, house_yaw: float = 0.0) -> void:
 	var safehouse: StaticBody3D = SafehouseBuilder.build_safehouse()
 	safehouse.name = house_name
 	safehouse.position = house_position
+	safehouse.rotation.y = house_yaw
 	add_child(safehouse)
 	var safehouse_min := safehouse.global_position + Vector3(-6.4, 0.0, -6.4)
 	# Ate o topo da mureta do telhado (6.47 + 1.0).
