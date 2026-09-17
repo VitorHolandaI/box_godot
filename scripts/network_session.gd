@@ -245,7 +245,8 @@ func _on_connected_to_server() -> void:
 	_connected_to_server = true
 	_ping_elapsed = PING_INTERVAL
 	print(BuildInfo.describe("client"))
-	_report_build.rpc_id(SERVER_ID, BuildInfo.COMMIT, BuildInfo.game_version())
+	var handshake: Array = BuildInfo.handshake_payload()
+	_report_build.rpc_id(SERVER_ID, String(handshake[0]), String(handshake[1]))
 	_request_slots.rpc_id(SERVER_ID, requested_slots)
 
 
@@ -272,16 +273,16 @@ func _await_build_report(peer_id: int) -> void:
 ## Handshake de versao: recusa build diferente com mensagem legivel.
 ## Uso: chamado pelo cliente ao conectar (_report_build.rpc_id).
 @rpc("any_peer", "call_remote", "reliable")
-func _report_build(commit: String, version: String) -> void:
+func _report_build(client_build: String, client_version: String) -> void:
 	if not is_server():
 		return
 	var sender_id := multiplayer.get_remote_sender_id()
-	if not BuildInfo.matches(commit, version):
-		push_error("Build diferente: servidor %s, cliente %d reportou v%s+%s. Atualize o cliente com o mesmo build do servidor; senao o input e recusado e o jogador nao anda." % [BuildInfo.short_text(), sender_id, version, commit])
-		_kick_peer(sender_id, "Build do cliente diferente do servidor: v%s+%s vs %s." % [version, commit, BuildInfo.short_text()])
+	if not BuildInfo.matches(client_build, client_version):
+		push_error("Build diferente: servidor %s, cliente %d reportou v%s build %s. Atualize o cliente com o mesmo build do servidor; senao o input e recusado e o jogador nao anda." % [BuildInfo.short_text(), sender_id, client_version, client_build])
+		_kick_peer(sender_id, "Build do cliente diferente do servidor: v%s build %s vs %s." % [client_version, client_build, BuildInfo.short_text()])
 		return
-	peer_builds[sender_id] = {"commit": commit, "version": version}
-	print("Peer %d reportou build v%s+%s (ok)." % [sender_id, version, commit])
+	peer_builds[sender_id] = {"build": client_build, "version": client_version}
+	print("Peer %d reportou build %s (ok)." % [sender_id, client_build])
 
 
 ## Derruba o peer com motivo; avisa antes (se o cliente tiver o RPC) para a
