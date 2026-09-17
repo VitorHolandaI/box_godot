@@ -7,11 +7,11 @@ const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/ge
 const PROCEDURAL_CITY_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/city_assembler.gd")
 const STREET_LIGHT_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/street_light_assembler.gd")
 const SAFEHOUSE_LOT_AREA := Rect2(-17.5, 3.5, 14.0, 14.0)
-## Segunda safehouse do mata-mata: lote oposto (canto sudeste do mapa), a ~97 m
-## da central. Cada time nasce nos marcadores fixos da sua casa e so compra
-## dentro dela. Uso: var casa := _pvp_safehouse_node()
-const PVP_SAFEHOUSE_NAME := "PvpSafehouse"
-const PVP_SAFEHOUSE_POSITION := Vector3(58.5, 0.12, -58.5)
+## Safehouses do mata-mata: uma em cada canto OPOSTO do mapa (58.5 m do centro,
+## ~165 m entre elas), para os times comecarem longe um do outro. Cada time
+## nasce nos marcadores fixos da sua casa e so compra dentro dela.
+const PVP_SAFEHOUSE_NAMES := ["PvpSafehouseA", "PvpSafehouseB"]
+const PVP_SAFEHOUSE_POSITIONS := [Vector3(-58.5, 0.12, -58.5), Vector3(58.5, 0.12, 58.5)]
 const TREE_SCENES := [
 	preload("res://scenes/tree.tscn"),
 	preload("res://scenes/tree_pine.tscn"),
@@ -144,9 +144,11 @@ func _hide_legacy_center_roads() -> void:
 
 func _create_procedural_safehouse() -> void:
 	_build_safehouse("CentralSafehouse", Vector3(-10.5, 0.12, 10.5))
-	# PVP: a segunda casa e a base do outro time, no lote oposto do mapa.
-	if NetworkSession.pvp_mode:
-		_build_safehouse(PVP_SAFEHOUSE_NAME, PVP_SAFEHOUSE_POSITION)
+	# PVP: uma casa por time, nos cantos opostos do mapa.
+	if not NetworkSession.pvp_mode:
+		return
+	for index in PVP_SAFEHOUSE_NAMES.size():
+		_build_safehouse(PVP_SAFEHOUSE_NAMES[index], PVP_SAFEHOUSE_POSITIONS[index])
 
 
 ## Constroi uma safehouse (com os marcadores PlayerSpawn1..4 dela) e configura o
@@ -162,10 +164,6 @@ func _build_safehouse(house_name: String, house_position: Vector3) -> void:
 	PROCEDURAL_CITY_ASSEMBLER.configure_cutout_bounds(safehouse, safehouse_min, safehouse_max)
 	PROCEDURAL_CITY_ASSEMBLER.MESH_BATCHER.merge_static_meshes(safehouse)
 
-
-## No da segunda safehouse (null fora do PVP). Uso: var casa := _pvp_safehouse_node()
-func _pvp_safehouse_node() -> Node3D:
-	return get_node_or_null("GeneratedCity/" + PVP_SAFEHOUSE_NAME) as Node3D
 
 
 func _create_roads() -> void:
