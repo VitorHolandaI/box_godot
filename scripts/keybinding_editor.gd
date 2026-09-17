@@ -33,6 +33,7 @@ const ACTION_LABELS := [
 	["throw_knife", "Arremessar faca"],
 	["air_strike", "Chamar ataque aereo"],
 	["swat", "Chamar SWAT"],
+	["buy", "Comprar arma (PVP)"],
 ]
 
 

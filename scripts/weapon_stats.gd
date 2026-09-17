@@ -536,6 +536,48 @@ static func stats_for(kind: int) -> Dictionary:
 	return STATS_BY_KIND.get(kind, {})
 
 
+## Precos do modo PVP (mata-mata estilo CS). Fonte unica para o menu de compra
+## e para a validacao no servidor; arma fora daqui nao pode ser comprada.
+## Uso: var preco := WeaponStats.price_for(WeaponStats.Kind.UZI)
+const PRICES_BY_KIND: Dictionary = {
+	Kind.UZI: 1400,
+	Kind.SHOTGUN: 1200,
+	Kind.MAGNUM: 700,
+	Kind.DOUBLE_BARREL: 900,
+	Kind.SAWED_OFF: 1100,
+	Kind.CARBINE: 2000,
+	Kind.AUTO_SHOTGUN: 2200,
+	Kind.AK47: 2700,
+	Kind.M4: 2900,
+	Kind.AUG: 3300,
+	Kind.BERETTA: 500,
+	Kind.SNIPER: 4500,
+	Kind.CROSSBOW: 3600,
+	Kind.BAZOOKA: 6000,
+	Kind.GRENADE_LAUNCHER: 4000,
+	Kind.CHAINSAW: 3000,
+	Kind.FLAMETHROWER: 3500,
+	Kind.LASER_RIFLE: 5200,
+	Kind.PLASMA_SMG: 4800,
+	Kind.RAILGUN: 7000,
+}
+
+
+## Preco da arma (0 quando nao e compravel). Uso: var preco := WeaponStats.price_for(kind)
+static func price_for(kind: int) -> int:
+	return int(PRICES_BY_KIND.get(kind, 0))
+
+
+## Armas compraveis, na ordem do catalogo (menor preco primeiro).
+## Uso: for kind in WeaponStats.purchasable_kinds(): ...
+static func purchasable_kinds() -> Array[int]:
+	var kinds: Array[int] = []
+	for kind in PRICES_BY_KIND:
+		kinds.append(int(kind))
+	kinds.sort_custom(func(first: int, second: int) -> bool: return price_for(first) < price_for(second))
+	return kinds
+
+
 ## So armas de crate degradam; faca e pistola padrao sao permanentes.
 ## Uso: if WeaponStats.is_crate_weapon(kind): ...
 static func is_crate_weapon(kind: int) -> bool:
