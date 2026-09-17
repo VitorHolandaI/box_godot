@@ -124,6 +124,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_script_error_counter.gd`: logger que faz a suite falhar em qualquer erro de script.
 - `test_zombie_snapshot_codec.gd`: regressoes do snapshot binario de zumbis.
 - `test_survival_mode.gd`: regressoes de ondas, mapa com predominio de casas, portas, abates, audio real, alvos e skin do ragdoll.
+- `server_menu.sh`: menu do servidor local no docker compose — escolhe no ato sobrevivencia ou mata-mata PVP, com ou sem rebuild, e ainda parar/logs/status. Aceita modo+acao por argumento (`pvp up`, `survival start`), variaveis `PVP_BOTS`/`PORT`/`SERVER_NAME`, `DRY_RUN=1` para so mostrar o comando e `self-test` (checa o script sem docker).
 - `test_container.sh`: smoke test do servidor Docker.
 - `test_dedicated.sh`: smoke test do servidor Godot nativo executando testes unitarios e teste com bot.
 - `zombie.gd`: IA de zumbi com perseguicao global do jogador, rota pelo navmesh do edificio (sai de comodos, usa escadas, quebra portas sem abri-las), empurrao de bando limitado, desintegracao por FOV, sentidos, combate bloqueado por paredes, knockback e variantes anatomicas.
