@@ -39,7 +39,10 @@ var survival_mode := true
 ## Mata-mata estilo CS: sem zumbis/ondas, economia e placar proprios.
 var pvp_mode := false
 var world_seed := DEFAULT_WORLD_SEED
-var server_name := "Box Godot"
+## Nome padrao e nome proprio da sala de mata-mata (aparece na descoberta).
+const DEFAULT_SERVER_NAME := "Box Godot"
+const PVP_SERVER_NAME := "Mata-mata PVP"
+var server_name := DEFAULT_SERVER_NAME
 var discovered_servers: Array[Dictionary] = []
 var _intentional_disconnect := false
 var _connected_to_server := false
@@ -62,6 +65,10 @@ func _ready() -> void:
 	local_host.idle_exit_seconds = LocalHostLauncher.idle_exit_seconds_from_arguments(OS.get_cmdline_user_args())
 	_reset_world_config_from_arguments()
 	server_name = _get_command_line_server_name()
+	if server_name == DEFAULT_SERVER_NAME and pvp_mode:
+		# Sala de mata-mata sem nome escolhido: usa um nome proprio para a
+		# listagem/descoberta nao mostrar "Box Godot" como se fosse sobrevivencia.
+		server_name = PVP_SERVER_NAME
 	if server_port < 0:
 		get_tree().quit(1)
 		return
@@ -490,6 +497,8 @@ func _is_saved_server(address: String, port: int) -> bool:
 
 
 func _server_mission_name() -> String:
+	if pvp_mode:
+		return "Mata-mata (2 times)"
 	if survival_mode:
 		return "Sobrevivencia"
 	if procedural_city_enabled:
@@ -518,7 +527,7 @@ func _get_command_line_server_name() -> String:
 			var configured_name := argument.trim_prefix("--server-name=").strip_edges()
 			if not configured_name.is_empty():
 				return configured_name
-	return "Box Godot"
+	return DEFAULT_SERVER_NAME
 
 
 func _reset_world_config_from_arguments() -> void:
