@@ -10,3 +10,6 @@ export_credentials.cfg
 # Local release artifacts
 dist/*
 !dist/README.md
+# Binarios ficam so em dist/ (versionar aqui engorda o repo a cada release)
+box-godot-linux*.x86_64
+box-godot-windows*.exe
