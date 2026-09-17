@@ -148,6 +148,8 @@ var last_purchase_rejection := ""
 var buy_menu: BuyMenu = null
 ## Gira os marcadores fixos de spawn de cada time (nao empilha os 4 no mesmo).
 var pvp_spawn_counters: Array[int] = [0, 0]
+## Rota invertida (time 1) preguicosa: ver _reversed_route_cached().
+var pvp_reversed_route: Array = []
 const PVP_RESTART_SECONDS := 10.0
 ## Bases dos dois times: uma safehouse por canto OPOSTO do mapa (~165 m entre
 ## elas). Cada time nasce nos marcadores fixos PlayerSpawn1..4 da sua casa e so
@@ -157,9 +159,20 @@ const PVP_TEAM_SAFEHOUSES := ["PvpSafehouseA", "PvpSafehouseB"]
 const PVP_TEAM_BASE_FALLBACK := [Vector3(-58.5, 1.18, -58.5), Vector3(58.5, 1.18, 58.5)]
 ## Raio da zona de compra em volta da casa (a casa tem 12,8 m de lado).
 const PVP_BASE_RADIUS := 7.0
-## Rota pelas ruas entre as duas casas (ruas em -72/-48/-24/24/48/72): o bot sem
-## pathfinding segue de esquina em esquina em vez de atravessar predio.
-const PVP_STREET_ROUTE := [Vector3(-58.5, 1.3, -58.5), Vector3(-24.0, 1.3, -24.0), Vector3(24.0, 1.3, 24.0), Vector3(58.5, 1.3, 58.5)]
+## Rota entre as duas casas pelo ANEL DE RUAS do perimetro (as ruas ficam em
+## -72/-24/24/72 e os quarteiroes vao ate 69, entao o anel externo e o unico
+## caminho sem predio no meio). As duas portas davam para o mesmo lado (Z local):
+## a casa B foi girada 180 graus, entao cada porta cai a ~4 m da sua rua de
+## perimetro. O time 0 desce a rua de baixo, sobe a direita e entra na casa B
+## pela porta; o time 1 percorre a mesma rota ao contrario — de frente um com o
+## outro.
+const PVP_STREET_ROUTE := [
+	Vector3(-58.5, 1.3, -72.0),
+	Vector3(72.0, 1.3, -72.0),
+	Vector3(72.0, 1.3, 72.0),
+	Vector3(58.5, 1.3, 72.0),
+	Vector3(58.5, 1.3, 58.5),
+]
 var loot_rng := RandomNumberGenerator.new()
 ## Armas soltas por zumbis ainda no chao, da mais antiga para a mais nova.
 var zombie_weapon_drops: Array[Node] = []
@@ -1652,7 +1665,7 @@ func _pvp_bot_hunt_position(bot: Node) -> Vector3:
 		return _pvp_team_base(1)
 	var team: int = pvp_match.team_of(_key_for_player(bot))
 	var enemy_team := 0 if team == 1 else 1
-	var route: Array = PVP_STREET_ROUTE if team == 0 else _reversed_route()
+	var route: Array = PVP_STREET_ROUTE if team == 0 else _reversed_route_cached()
 	var position := (bot as Node3D).global_position
 	# Indice de progresso: a ultima esquina alcancada manda; o alvo e a SEGUINTE.
 	# Antes o alvo era a primeira esquina a mais de 8 m — que e a propria base —
@@ -1669,11 +1682,15 @@ func _pvp_bot_hunt_position(bot: Node) -> Vector3:
 	return next_waypoint if next_waypoint != position else _pvp_team_base(enemy_team)
 
 
-func _reversed_route() -> Array:
-	var route: Array = []
-	for index in range(PVP_STREET_ROUTE.size() - 1, -1, -1):
-		route.append(PVP_STREET_ROUTE[index])
-	return route
+## Rota do time 1 montada UMA vez. Antes `_reversed_route()` criava um Array
+## novo a cada chamada, e ela roda por bot a cada tick (4 bots a 30 Hz = 120
+## alocacoes por segundo so de lixo).
+## Uso: var rota := _reversed_route_cached()
+func _reversed_route_cached() -> Array:
+	if pvp_reversed_route.is_empty():
+		for index in range(PVP_STREET_ROUTE.size() - 1, -1, -1):
+			pvp_reversed_route.append(PVP_STREET_ROUTE[index])
+	return pvp_reversed_route
 
 
 ## Bot compra na fase de compra, na propria base, a arma mais cara que couber.
@@ -1750,9 +1767,9 @@ func _check_pvp_round_end() -> void:
 	if alive[0] > 0 and alive[1] > 0:
 		return
 	if alive[0] == 0 and alive[1] == 0:
-		pvp_match.finish_round(-1)
+		pvp_match.finish_round(-1, "eliminacao")
 		return
-	pvp_match.finish_round(0 if alive[0] > 0 else 1)
+	pvp_match.finish_round(0 if alive[0] > 0 else 1, "eliminacao")
 
 
 ## Vivos por time (usado para decidir a rodada). Uso: var vivos := _pvp_alive_per_team()
@@ -1782,7 +1799,7 @@ func _tick_pvp(delta: float) -> void:
 	var round_before: int = pvp_match.round_index
 	if pvp_match.phase == PvpMatch.Phase.LIVE and _pvp_alive_per_team() == [0, 0]:
 		# Ninguem vivo (rodada travada em 0x0 por morte simultanea/queda).
-		pvp_match.finish_round(-1)
+		pvp_match.finish_round(-1, "sem_vivos")
 	elif pvp_match.phase == PvpMatch.Phase.LIVE and float(pvp_match.phase_left) <= delta:
 		# Tempo estourou: quem tem mais gente viva leva a rodada.
 		pvp_match.finish_round_by_time(_pvp_alive_per_team())
@@ -1803,7 +1820,7 @@ func _tick_pvp(delta: float) -> void:
 			continue
 		player.pvp_respawn_at(_pvp_spawn_position_for(player))
 	if round_before != pvp_match.round_index or (phase_before != pvp_match.phase and pvp_match.phase == PvpMatch.Phase.BUY):
-		print(JSON.stringify({"event": "pvp_round", "round": pvp_match.round_index, "score": pvp_match.team_score_text()}))
+		print(JSON.stringify({"event": "pvp_round", "round": pvp_match.round_index, "score": pvp_match.team_score_text(), "rodada_anterior": pvp_match.last_round_report()}))
 	if pvp_match.is_over() and pvp_restart_left <= 0.0 and phase_before != PvpMatch.Phase.MATCH_END:
 		_pvp_announce_end()
 	if pvp_restart_left <= 0.0:

@@ -26,6 +26,7 @@ func run(test_root: Node) -> void:
 	_test_pvp_gives_huge_reserve_and_no_wear(test_root)
 	_test_frozen_input_zeroes_every_action_key(test_root)
 	_test_death_signal_connected_once(test_root)
+	_test_round_reason_is_recorded(test_root)
 
 
 func _match_with_four() -> PvpMatch:
@@ -247,6 +248,30 @@ func _test_frozen_input_zeroes_every_action_key(test_root: Node) -> void:
 		_fail(test_root, "A entrada original nao pode ser alterada; veio %s." % raw)
 		return
 	print("PASS: Freezetime zera toda chave booleana e preserva olhar/slot.")
+
+
+## O log da rodada nova conta como a anterior fechou: por tempo, por eliminacao
+## ou por queda geral (e quem levou). Sem isso so dava para ver o placar.
+func _test_round_reason_is_recorded(test_root: Node) -> void:
+	print("Testando motivo/vencedor da rodada...")
+	var match_state := PVPMATCH_SCRIPT.new()
+	match_state.register_player("1:0")
+	match_state.register_player("2:0")
+	if str(match_state.last_round_report()["motivo"]) != "":
+		_fail(test_root, "Sem rodada fechada o motivo deveria ser vazio; veio %s." % match_state.last_round_report())
+		return
+	match_state.finish_round_by_time([1, 0])
+	var report: Dictionary = match_state.last_round_report()
+	if str(report["motivo"]) != "tempo" or int(report["vencedor"]) != 0:
+		_fail(test_root, "Rodada por tempo deveria marcar motivo 'tempo' e vencedor 0; veio %s." % report)
+		return
+	match_state.tick(PVPMATCH_SCRIPT.BUY_SECONDS + 1.0)
+	match_state.finish_round(-1, "eliminacao")
+	report = match_state.last_round_report()
+	if str(report["motivo"]) != "eliminacao" or int(report["vencedor"]) != -1:
+		_fail(test_root, "Empate por eliminacao deveria marcar 'eliminacao' e -1; veio %s." % report)
+		return
+	print("PASS: motivo e vencedor da rodada registrados.")
 
 
 ## Regressao: o handler de morte era conectado de novo a cada registro porque a
