@@ -212,7 +212,7 @@ aparece como **Mata-mata PVP** e o HUD nao mostra nada de zumbi (sem contador de
 horda, sem sonar).
 
 ```bash
-GAME_SERVER_GAME_MODE=--pvp GAME_SERVER_PVP_BOTS=--pvp-bots=4 docker compose up --build -d
+GAME_SERVER_GAME_MODE=--pvp docker compose up --build -d
 
 # cliente (mesmo build do servidor):
 godot --path . -- --join=127.0.0.1 --server-port=27015
