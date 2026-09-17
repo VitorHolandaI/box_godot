@@ -1,41 +1,50 @@
 class_name PvpMatch
 extends RefCounted
 
-## Mata-mata estilo CS, autoritativo no servidor. Guarda economia e placar por
-## jogador (chave "peer:slot"), valida compras e decide o fim da partida.
+## Mata-mata por times, autoritativo no servidor, com rodadas no estilo CS.
 ##
-## Regras desta primeira versao:
-## - todo mundo comeca com MONEY_START e so pistola+faca (loadout resetado ao
-##   morrer, como no CS: quem morre perde as armas compradas);
-## - abate da MONEY_PER_KILL para quem matou; morte nao da dinheiro;
-## - respawn em RESPAWN_SECONDS num ponto longe dos vivos;
-## - compra liberada nos primeiros BUY_SECONDS depois de (re)nascer;
-## - fim: KILLS_TO_WIN abates de alguem ou MATCH_SECONDS de partida.
+## Estrutura: 2 times, melhor de ROUNDS (3) com ROUNDS_TO_WIN (2) vitorias por
+## rodada. Cada rodada tem FASE DE COMPRA (todo mundo na base pode comprar) e
+## FASE DE COMBATE (so tiro); a rodada acaba quando um time inteiro cai ou
+## quando o tempo estoura (vence quem tem mais gente viva; empate no 0x0).
+##
+## Economia: comeca com MONEY_START e so pistola+faca; abate da MONEY_PER_KILL;
+## quem morre perde as armas compradas. Nao ha bonus de derrota (simples nesta
+## primeira versao).
 ## Uso:
 ##   var match := PvpMatch.new()
 ##   match.register_player("123:0")
-##   var erro := match.buy_rejection("123:0", 1200, false)
+##   var erro := match.buy_rejection("123:0", 1200)
 
+const TEAM_COUNT := 2
+const ROUNDS := 3
+const ROUNDS_TO_WIN := 2
 const MONEY_START := 800
 const MONEY_PER_KILL := 300
 const MONEY_MAX := 16000
 const RESPAWN_SECONDS := 3.0
+const ROUND_SECONDS := 180.0
 const BUY_SECONDS := 15.0
-const KILLS_TO_WIN := 20
-const MATCH_SECONDS := 600.0
+const ROUND_END_SECONDS := 6.0
 
-var elapsed := 0.0
-var over := false
-## chave -> {"kills": int, "deaths": int, "money": int}
+enum Phase { BUY, LIVE, ROUND_END, MATCH_END }
+
+var phase: Phase = Phase.BUY
+## Segundos restantes da fase atual.
+var phase_left := BUY_SECONDS
+var round_index := 1
+var round_wins: Array[int] = [0, 0]
+## chave -> {"kills": int, "deaths": int, "money": int, "team": int}
 var scores: Dictionary = {}
 
 
-## Entra na partida com a economia inicial (quem ja estava nao perde nada).
+## Entra na partida na fase de compra, com a economia inicial. Time escolhido
+## para equilibrar (menos gente primeiro); quem ja estava nao muda de time.
 ## Uso: match.register_player("123:0")
 func register_player(key: String) -> void:
 	if scores.has(key):
 		return
-	scores[key] = {"kills": 0, "deaths": 0, "money": MONEY_START}
+	scores[key] = {"kills": 0, "deaths": 0, "money": MONEY_START, "team": _smallest_team()}
 
 
 func remove_player(key: String) -> void:
@@ -44,6 +53,12 @@ func remove_player(key: String) -> void:
 
 func has_player(key: String) -> bool:
 	return scores.has(key)
+
+
+## Time (0/1) do jogador; -1 quando nao esta na partida.
+## Uso: var time := match.team_of("123:0")
+func team_of(key: String) -> int:
+	return int((scores.get(key, {}) as Dictionary).get("team", -1))
 
 
 func money_of(key: String) -> int:
@@ -58,7 +73,7 @@ func deaths_of(key: String) -> int:
 	return int((scores.get(key, {}) as Dictionary).get("deaths", 0))
 
 
-## Credita (respeitando MONEY_MAX) e devolve o total depois do credito.
+## Creditos de dinheiro do abate (respeita MONEY_MAX).
 ## Uso: var total := match.add_money("123:0", PvpMatch.MONEY_PER_KILL)
 func add_money(key: String, amount: int) -> int:
 	if not scores.has(key):
@@ -80,16 +95,14 @@ func spend(key: String, amount: int) -> bool:
 	return true
 
 
-## Motivo da recusa de uma compra, ou "" quando pode comprar. Puro para testar
-## as regras sem cena: o chamador passa o preco da arma e o tempo de compra.
-## Uso: var erro := match.buy_rejection(key, 1200, tem_arma)
-func buy_rejection(key: String, price: int, buy_seconds_left: float) -> String:
+## Motivo da recusa de uma compra, ou "" quando pode comprar. A posicao (base)
+## e checada por quem chama, que conhece o mapa; aqui vale fase/dinheiro/preco.
+## Uso: var erro := match.buy_rejection(key, 1200)
+func buy_rejection(key: String, price: int) -> String:
 	if not scores.has(key):
 		return "Jogador fora da partida."
-	if over:
-		return "A partida acabou."
-	if buy_seconds_left <= 0.0:
-		return "Fora do tempo de compra."
+	if phase != Phase.BUY:
+		return "So da para comprar na fase de compra (inicio da rodada)."
 	if price <= 0:
 		return "Arma sem preco definido."
 	if money_of(key) < price:
@@ -97,80 +110,136 @@ func buy_rejection(key: String, price: int, buy_seconds_left: float) -> String:
 	return ""
 
 
-## Registra um abate: credita o matador e conta a morte da vitima. Sem matador
-## (morte por queda, suicidio) so conta a morte. Devolve true quando a partida
-## terminou com esse abate.
-## Uso: if match.register_kill(killer_key, victim_key): anunciar_fim()
-func register_kill(killer_key: String, victim_key: String) -> bool:
+## Registra um abate: credita o matador e conta a morte. Nao decide rodada
+## (quem decide e o time sem vivos, reportado pelo main).
+## Uso: match.register_kill(killer_key, victim_key)
+func register_kill(killer_key: String, victim_key: String) -> void:
 	if scores.has(victim_key):
 		var victim_entry: Dictionary = scores[victim_key]
 		victim_entry["deaths"] = int(victim_entry["deaths"]) + 1
-	if not killer_key.is_empty() and killer_key != victim_key and scores.has(killer_key):
-		var killer_entry: Dictionary = scores[killer_key]
-		killer_entry["kills"] = int(killer_entry["kills"]) + 1
-		add_money(killer_key, MONEY_PER_KILL)
-		if int(killer_entry["kills"]) >= KILLS_TO_WIN:
-			over = true
-	return over
+	if killer_key.is_empty() or killer_key == victim_key or not scores.has(killer_key):
+		return
+	var killer_entry: Dictionary = scores[killer_key]
+	killer_entry["kills"] = int(killer_entry["kills"]) + 1
+	add_money(killer_key, MONEY_PER_KILL)
 
 
-## Chave de quem venceu, ou "" (partida em andamento / empate no tempo).
-## Uso: var vencedor := match.winner_key()
-func winner_key() -> String:
-	var best_key := ""
-	var best_kills := 0
-	for key in scores:
-		var kills := kills_of(String(key))
-		if kills > best_kills:
-			best_kills = kills
-			best_key = String(key)
-	return best_key if over and best_kills > 0 else ""
+## Fecha a rodada para `winner_team` (ou empate com -1), soma a vitoria e
+## entra na fase de fim de rodada.
+## Uso: match.finish_round(1)
+func finish_round(winner_team: int) -> void:
+	if phase != Phase.LIVE and phase != Phase.BUY:
+		return
+	if winner_team >= 0 and winner_team < TEAM_COUNT:
+		round_wins[winner_team] += 1
+	phase = Phase.ROUND_END
+	phase_left = ROUND_END_SECONDS
 
 
-## Partida encerrada (por abates ou por tempo).
-## Uso: if match.is_over(): mostrar_fim()
+## Time com mais gente viva vale a rodada quando o tempo estoura; empate quando
+## os dois lados tem o mesmo numero. Uso: match.finish_round_by_time(alive_a, alive_b)
+func finish_round_by_time(alive_per_team: Array) -> void:
+	var first := int(alive_per_team[0]) if alive_per_team.size() > 0 else 0
+	var second := int(alive_per_team[1]) if alive_per_team.size() > 1 else 0
+	if first == second:
+		finish_round(-1)
+		return
+	finish_round(0 if first > second else 1)
+
+
+## Time vencedor da partida, ou -1 (em andamento / empate).
+## Uso: var campeao := match.match_winner()
+func match_winner() -> int:
+	if phase != Phase.MATCH_END:
+		return -1
+	for team in TEAM_COUNT:
+		if round_wins[team] >= ROUNDS_TO_WIN:
+			return team
+	return -1
+
+
+## Placar da partida por time, para o HUD. Uso: match.team_score_text()
+func team_score_text() -> String:
+	return "Time A %d x %d Time B" % [round_wins[0], round_wins[1]]
+
+
+## Rodada atual do total. Uso: var texto := match.round_text()
+func round_text() -> String:
+	return "Rodada %d/%d" % [round_index, ROUNDS]
+
+
 func is_over() -> bool:
-	return over
+	return phase == Phase.MATCH_END
 
 
-## Segundos restantes de partida (0 quando ja era).
-## Uso: var faltam := match.time_left()
 func time_left() -> float:
-	return maxf(MATCH_SECONDS - elapsed, 0.0)
+	return phase_left if phase != Phase.MATCH_END else 0.0
 
 
-## Avanca o relogio; a partida acaba ao bater MATCH_SECONDS.
+## Avanca a maquina de fases: compra -> combate (o fim da rodada vem do main,
+## que conta os vivos) -> fim de rodada -> proxima rodada ou fim da partida.
 ## Uso: match.tick(delta)
 func tick(delta: float) -> void:
-	if over:
+	if phase == Phase.MATCH_END:
 		return
-	elapsed += maxf(delta, 0.0)
-	if elapsed >= MATCH_SECONDS:
-		over = true
+	phase_left = maxf(phase_left - maxf(delta, 0.0), 0.0)
+	match phase:
+		Phase.BUY:
+			if phase_left <= 0.0:
+				phase = Phase.LIVE
+				phase_left = ROUND_SECONDS
+		Phase.LIVE:
+			if phase_left <= 0.0:
+				phase = Phase.ROUND_END
+				phase_left = ROUND_END_SECONDS
+		Phase.ROUND_END:
+			if phase_left > 0.0:
+				return
+			if round_wins[0] >= ROUNDS_TO_WIN or round_wins[1] >= ROUNDS_TO_WIN or round_index >= ROUNDS:
+				phase = Phase.MATCH_END
+				phase_left = 0.0
+				return
+			round_index += 1
+			phase = Phase.BUY
+			phase_left = BUY_SECONDS
 
 
-## Placar ordenado por abates, para HUD/placar. Uso:
-##   for linha in match.standings(): print(linha["key"], linha["kills"])
+## Placar ordenado por abates (para placar/HUD). Uso: for linha in match.standings()
 func standings() -> Array:
 	var rows: Array = []
 	for key in scores:
 		var entry: Dictionary = scores[key]
-		rows.append({"key": String(key), "kills": int(entry["kills"]), "deaths": int(entry["deaths"]), "money": int(entry["money"])})
+		rows.append({
+			"key": String(key),
+			"kills": int(entry["kills"]),
+			"deaths": int(entry["deaths"]),
+			"money": int(entry["money"]),
+			"team": int(entry["team"]),
+		})
 	rows.sort_custom(func(first: Dictionary, second: Dictionary) -> bool: return int(first["kills"]) > int(second["kills"]))
 	return rows
 
 
-## Linha unica de HUD: tempo, lider e fim de partida.
+## Linha unica de HUD: fase/relogio + placar dos times.
 ## Uso: var texto := match.hud_text()
 func hud_text() -> String:
-	if over:
-		var winner := winner_key()
-		return "FIM | vencedor: %s | %s" % [winner if not winner.is_empty() else "empate", _score_line()]
-	return "%02d:%02d | %s" % [int(time_left()) / 60, int(time_left()) % 60, _score_line()]
+	var clock := "%02d:%02d" % [int(phase_left) / 60, int(phase_left) % 60]
+	match phase:
+		Phase.BUY:
+			return "COMPRA %s | %s | %s" % [clock, round_text(), team_score_text()]
+		Phase.LIVE:
+			return "%s | %s | %s" % [clock, round_text(), team_score_text()]
+		Phase.ROUND_END:
+			return "FIM DA RODADA | %s | %s" % [round_text(), team_score_text()]
+		_:
+			var winner := match_winner()
+			return "FIM | vencedor: %s | %s" % ["Time A" if winner == 0 else ("Time B" if winner == 1 else "empate"), team_score_text()]
 
 
-func _score_line() -> String:
-	var parts: Array[String] = []
-	for row in standings():
-		parts.append("%s %d/%d" % [row["key"], int(row["kills"]), int(row["deaths"])])
-	return " | ".join(parts)
+func _smallest_team() -> int:
+	var counts: Array[int] = [0, 0]
+	for key in scores:
+		var team := int((scores[key] as Dictionary)["team"])
+		if team >= 0 and team < TEAM_COUNT:
+			counts[team] += 1
+	return 0 if counts[0] <= counts[1] else 1
