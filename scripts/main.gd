@@ -145,15 +145,20 @@ var pvp_state_elapsed := 0.0
 var last_purchase_rejection := ""
 ## Menu de compra do cliente (tecla B), criado quando o jogador local existe.
 var buy_menu: BuyMenu = null
+## Gira os marcadores fixos de spawn de cada time (nao empilha os 4 no mesmo).
+var pvp_spawn_counters: Array[int] = [0, 0]
 const PVP_RESTART_SECONDS := 10.0
-## Bases dos dois times: cantos opostos do mapa, em cima da rua (a grade de
-## lotes tem centros em -60..60 e ruas em -48, -24, 0, 24, 48). Vale como zona
-## de compra: so da para comprar perto da propria base, na fase de compra.
-const PVP_TEAM_BASES := [Vector3(-48.0, 1.3, -48.0), Vector3(48.0, 1.3, 48.0)]
-## Rota pelas ruas entre as duas bases (a grade tem rua em -48/0/48): o bot sem
+## Bases dos dois times: as DUAS safehouses do mapa (a central e a do PVP, no
+## lote oposto, ~97 m uma da outra). Cada time nasce nos marcadores fixos
+## PlayerSpawn1..4 da sua casa e so compra DENTRO dela.
+const PVP_TEAM_SAFEHOUSES := ["CentralSafehouse", "PvpSafehouse"]
+## Fallback quando a cidade nao tem a casa (modo legacy/teste).
+const PVP_TEAM_BASE_FALLBACK := [Vector3(-10.5, 1.18, 10.5), Vector3(58.5, 1.18, -58.5)]
+## Raio da zona de compra em volta da casa (a casa tem 12,8 m de lado).
+const PVP_BASE_RADIUS := 7.0
+## Rota pelas ruas entre as duas casas (ruas em -72/-48/-24/24/48/72): o bot sem
 ## pathfinding segue de esquina em esquina em vez de atravessar predio.
-const PVP_STREET_ROUTE := [Vector3(-48.0, 1.3, -48.0), Vector3(0.0, 1.3, -48.0), Vector3(0.0, 1.3, 0.0), Vector3(48.0, 1.3, 0.0), Vector3(48.0, 1.3, 48.0)]
-const PVP_BASE_RADIUS := 12.0
+const PVP_STREET_ROUTE := [Vector3(-10.5, 1.3, 10.5), Vector3(24.0, 1.3, 24.0), Vector3(24.0, 1.3, -24.0), Vector3(48.0, 1.3, -48.0), Vector3(58.5, 1.3, -58.5)]
 var loot_rng := RandomNumberGenerator.new()
 ## Armas soltas por zumbis ainda no chao, da mais antiga para a mais nova.
 var zombie_weapon_drops: Array[Node] = []
@@ -218,7 +223,7 @@ func _ready() -> void:
 		door_state_replicator.watch(get_tree())
 		_prespawn_load_test_zombies(LOAD_TEST_OPTIONS_SCRIPT.prespawn_zombie_count(OS.get_cmdline_user_args()))
 		if NetworkSession.pvp_mode:
-			_spawn_pvp_bots(LOAD_TEST_OPTIONS_SCRIPT.pvp_bot_count(OS.get_cmdline_user_args()))
+			_spawn_pvp_bots_when_ready.call_deferred(LOAD_TEST_OPTIONS_SCRIPT.pvp_bot_count(OS.get_cmdline_user_args()))
 	_notify_scene_loaded.call_deferred()
 
 
@@ -1549,6 +1554,15 @@ func get_survival_hud_text() -> String:
 ## servidor, cacando os outros (mesma IA de PVP dos clientes bot). O cliente
 ## ve eles como qualquer jogador, pelo snapshot.
 ## Uso: godot --headless --path . -- --server --pvp --pvp-bots=4
+## Espera a cidade montar (as safehouses nascem na montagem em etapas) para
+## criar os bots ja nos marcadores fixos da casa do time deles.
+## Uso: _spawn_pvp_bots_when_ready.call_deferred(count)
+func _spawn_pvp_bots_when_ready(count: int) -> void:
+	while not _procedural_city_ready():
+		await get_tree().create_timer(0.1).timeout
+	_spawn_pvp_bots(count)
+
+
 func _spawn_pvp_bots(count: int) -> void:
 	if not NetworkSession.pvp_mode or count <= 0:
 		return
@@ -1596,6 +1610,9 @@ func _create_pvp_bot(index: int, simulate: bool) -> void:
 	pvp_bot_keys[key] = true
 	if simulate:
 		_register_pvp_player(bot)
+		# O time so existe depois do register: e ele que decide a casa/marcador.
+		bot.global_position = _pvp_spawn_position_for(bot)
+		bot.set_spawn_position(bot.global_position)
 
 
 ## Alimenta a IA dos bots de PVP (servidor simula; o cliente so ve o snapshot).
@@ -1622,7 +1639,7 @@ func _tick_pvp_bots(delta: float) -> void:
 ## Uso: var rumo := _pvp_bot_hunt_position(bot)
 func _pvp_bot_hunt_position(bot: Node) -> Vector3:
 	if pvp_match == null or not is_instance_valid(bot):
-		return PVP_TEAM_BASES[1]
+		return _pvp_team_base(1)
 	var team: int = pvp_match.team_of(_key_for_player(bot))
 	var enemy_team := 0 if team == 1 else 1
 	var route: Array = PVP_STREET_ROUTE if team == 0 else _reversed_route()
@@ -1639,7 +1656,7 @@ func _pvp_bot_hunt_position(bot: Node) -> Vector3:
 	if team == 1:
 		# Rota invertida termina na base do time 0; ultimo alvo e a base inimiga.
 		pass
-	return next_waypoint if next_waypoint != position else PVP_TEAM_BASES[enemy_team]
+	return next_waypoint if next_waypoint != position else _pvp_team_base(enemy_team)
 
 
 func _reversed_route() -> Array:
@@ -1835,22 +1852,38 @@ func _pvp_start_new_match() -> void:
 func _pvp_spawn_position_for(player: Node) -> Vector3:
 	var key := _key_for_player(player)
 	var team: int = pvp_match.team_of(key) if not key.is_empty() else 0
-	if team < 0 or team >= PVP_TEAM_BASES.size():
+	if team < 0 or team >= PVP_TEAM_SAFEHOUSES.size():
 		team = 0
-	var base: Vector3 = PVP_TEAM_BASES[team]
-	var index := absi(String(key).hash()) % 8
-	var angle := TAU * float(index) / 8.0
-	return base + Vector3(cos(angle), 0.0, sin(angle)) * PVP_BASE_RADIUS * 0.5
+	# Marcador FIXO da safehouse do time, girando entre os 4 para nao empilhar.
+	pvp_spawn_counters[team] += 1
+	var slot := posmod(pvp_spawn_counters[team], 4) + 1
+	var marker := get_node_or_null("GeneratedCity/%s/PlayerSpawn%d" % [PVP_TEAM_SAFEHOUSES[team], slot]) as Marker3D
+	if marker != null:
+		return marker.global_position
+	return PVP_TEAM_BASE_FALLBACK[team]
 
 
-## Verdadeiro quando o jogador esta na zona de compra (perto da propria base).
+## Centro (no chao) da safehouse do time; fallback se a casa nao existir.
+## Uso: var centro := _pvp_team_base(team)
+func _pvp_team_base(team: int) -> Vector3:
+	if team < 0 or team >= PVP_TEAM_SAFEHOUSES.size():
+		return PVP_TEAM_BASE_FALLBACK[0]
+	var house := get_node_or_null("GeneratedCity/" + PVP_TEAM_SAFEHOUSES[team]) as Node3D
+	if house != null:
+		return house.global_position
+	return PVP_TEAM_BASE_FALLBACK[team]
+
+
+## Verdadeiro quando o jogador esta DENTRO da propria safehouse (zona de compra).
 ## Uso: if _pvp_in_buy_zone(player): ...
 func _pvp_in_buy_zone(player: Node) -> bool:
 	var key := _key_for_player(player)
 	var team: int = pvp_match.team_of(key) if not key.is_empty() else -1
-	if team < 0 or team >= PVP_TEAM_BASES.size():
+	if team < 0:
 		return false
-	return (player as Node3D).global_position.distance_to(PVP_TEAM_BASES[team]) <= PVP_BASE_RADIUS
+	var position := (player as Node3D).global_position
+	var base := _pvp_team_base(team)
+	return Vector2(position.x - base.x, position.z - base.z).length() <= PVP_BASE_RADIUS
 
 
 ## Compra pedida pelo cliente: valida fase, base, dinheiro e arma; desconta e
