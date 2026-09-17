@@ -11,6 +11,11 @@ const SQUAD_TARGET_INTERVAL := 0.25
 ## bot mira num zumbi atras da parede e fura o cenario (medido no smoke: 253 de
 ## 258 tiros acertaram o Safehouse).
 const SQUAD_LOS_CANDIDATES := 5
+## Distancia maxima para perseguir o inimigo em linha reta no PVP. Acima disso
+## (ou sem linha de visao) o bot segue a ROTA pelas ruas: perseguir em linha reta
+## entre as duas bases atravessa quarteirao, prende o bot na parede e era a causa
+## de 4 abates em 330 s com a rodada fechando sempre por tempo.
+const PVP_DIRECT_CHASE_RANGE := 28.0
 
 const PATROL_POINTS: Array[Vector3] = [
 	Vector3(0.0, 0.12, 0.0),
@@ -215,11 +220,17 @@ func _nearest_enemy_player(player: Node3D, tree: SceneTree) -> Node3D:
 ## Movimento do bot em PVP: cerco (foge de 2+ inimigos colados), aproxima de
 ## longe, recua de perto e ciranda na faixa de tiro; sem alvo, patrulha.
 func _pvp_movement(player: Node3D, slot: int, target: Node3D, target_offset: Vector3, target_dist: float, delta: float, hunt_position: Vector3 = Vector3.ZERO) -> Vector2:
-	_update_unstuck_logic(player, slot, delta)
+	var travel_dir := Vector2(hunt_position.x - player.global_position.x, hunt_position.z - player.global_position.z)
+	_update_unstuck_logic(player, slot, delta, travel_dir)
 	var unstuck_duration: float = unstuck_durations.get(slot, 0.0)
 	if unstuck_duration > 0.0:
 		unstuck_durations[slot] = unstuck_duration - delta
 		return unstuck_dirs.get(slot, Vector2.UP)
+	if target != null and target_dist > PVP_DIRECT_CHASE_RANGE and not _has_shot_line(player, target):
+		# Sem linha: anda pela rota (o caminho das ruas) em vez de furar parede.
+		target = null
+		target_offset = Vector3.ZERO
+		target_dist = 0.0
 	_strafe_bootstrap(slot, slot)
 	var strafe_time: float = strafe_timers.get(slot, 0.0) + delta
 	strafe_timers[slot] = strafe_time
@@ -234,14 +245,40 @@ func _pvp_movement(player: Node3D, slot: int, target: Node3D, target_offset: Vec
 		to_hunt.y = 0.0
 		if to_hunt.length() < 4.0:
 			return Vector2.ZERO
-		return Vector2(to_hunt.x, to_hunt.z).normalized()
+		return _avoid_obstacles(player, Vector2(to_hunt.x, to_hunt.z).normalized())
 	var dir := Vector2(target_offset.x, target_offset.z).normalized()
 	var perpendicular := Vector2(-dir.y, dir.x) * strafe_dir
 	if target_dist > 12.0:
-		return dir
+		return _avoid_obstacles(player, dir)
 	if target_dist < 4.0:
 		return (-dir * 0.9 + perpendicular * 0.3).normalized()
 	return (dir * 0.1 + perpendicular * 0.95).normalized()
+
+
+## Corrige a direcao desejada com uma sonda curta (raycast) a frente: sem isso
+## o bot anda reto contra a parede e trava, porque o projeto nao tem navmesh.
+## Uso: var dir := _avoid_obstacles(bot, Vector2(4.0, -2.0))
+func _avoid_obstacles(player: Node3D, desired: Vector2) -> Vector2:
+	if desired.length() < 0.001:
+		return Vector2.ZERO
+	var world := player.get_world_3d()
+	if world == null:
+		return desired
+	var origin := player.global_position + Vector3.UP * PvpNavigation.PROBE_HEIGHT
+	var query := PhysicsRayQueryParameters3D.create(origin, origin)
+	# So cenario estatico (camada 1): jogador/zumbi/limite do mapa ficam de fora,
+	# senao o bot desvia de aliado e treme no meio da rua.
+	query.collision_mask = 1
+	var distances: Array = []
+	for angle in PvpNavigation.PROBE_ANGLES_DEG:
+		var dir := desired.normalized().rotated(deg_to_rad(angle))
+		query.to = origin + Vector3(dir.x, 0.0, dir.y) * PvpNavigation.PROBE_LENGTH
+		var hit := world.direct_space_state.intersect_ray(query)
+		if hit.is_empty():
+			distances.append(PvpNavigation.PROBE_LENGTH)
+		else:
+			distances.append(origin.distance_to(hit["position"]))
+	return PvpNavigation.choose_direction(desired, distances)
 
 
 ## Entrada de um soldado do esquadrao SWAT: caca o zumbi mais perto dentro do
@@ -533,7 +570,7 @@ func _swarm_flee_direction(origin: Vector3, zombies_node: Node) -> Vector2:
 	return flee_dir
 
 
-func _update_unstuck_logic(player: Node3D, slot: int, delta: float) -> void:
+func _update_unstuck_logic(player: Node3D, slot: int, delta: float, fallback_dir: Vector2 = Vector2.ZERO) -> void:
 	var last_pos: Vector3 = last_positions.get(slot, player.global_position)
 	var dist := player.global_position.distance_to(last_pos)
 	last_positions[slot] = player.global_position
@@ -543,8 +580,13 @@ func _update_unstuck_logic(player: Node3D, slot: int, delta: float) -> void:
 		if stuck_t > 0.45:
 			stuck_t = 0.0
 			unstuck_durations[slot] = 0.7
-			var angle := randf() * TAU
-			unstuck_dirs[slot] = Vector2(cos(angle), sin(angle))
+			if fallback_dir.length() > 0.001:
+				# PVP: sai de lado em relacao a rota. Direcao aleatoria fazia o bot
+				# voltar para dentro da casa e oscilar no mesmo canto.
+				unstuck_dirs[slot] = PvpNavigation.side_step(fallback_dir, slot)
+			else:
+				var angle := randf() * TAU
+				unstuck_dirs[slot] = Vector2(cos(angle), sin(angle))
 	else:
 		stuck_t = maxf(stuck_t - delta * 1.5, 0.0)
 	stuck_timers[slot] = stuck_t
