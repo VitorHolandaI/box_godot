@@ -23,7 +23,9 @@ const MONEY_START := 800
 const MONEY_PER_KILL := 300
 const MONEY_MAX := 16000
 const RESPAWN_SECONDS := 3.0
-const ROUND_SECONDS := 180.0
+## 90 s por rodada: o mapa e grande e sem pathfinding a rodada arrastava ate o
+## limite; o tempo serve de rede de seguranca, nao de ritmo.
+const ROUND_SECONDS := 90.0
 const BUY_SECONDS := 15.0
 const ROUND_END_SECONDS := 6.0
 

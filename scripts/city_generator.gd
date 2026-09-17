@@ -7,6 +7,11 @@ const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/ge
 const PROCEDURAL_CITY_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/city_assembler.gd")
 const STREET_LIGHT_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/street_light_assembler.gd")
 const SAFEHOUSE_LOT_AREA := Rect2(-17.5, 3.5, 14.0, 14.0)
+## Segunda safehouse do mata-mata: lote oposto (canto sudeste do mapa), a ~97 m
+## da central. Cada time nasce nos marcadores fixos da sua casa e so compra
+## dentro dela. Uso: var casa := _pvp_safehouse_node()
+const PVP_SAFEHOUSE_NAME := "PvpSafehouse"
+const PVP_SAFEHOUSE_POSITION := Vector3(58.5, 0.12, -58.5)
 const TREE_SCENES := [
 	preload("res://scenes/tree.tscn"),
 	preload("res://scenes/tree_pine.tscn"),
@@ -85,7 +90,7 @@ func _build_procedural_city() -> void:
 	_create_materials()
 	_hide_legacy_center_roads()
 	_create_procedural_safehouse()
-	var city = await _generate_blueprint_async(NetworkSession.world_seed, NetworkSession.survival_mode)
+	var city = await _generate_blueprint_async(NetworkSession.world_seed, NetworkSession.survival_mode, NetworkSession.pvp_mode)
 	PROCEDURAL_CITY_ASSEMBLER.assemble_roads(city, self)
 	var safehouse_area: Array[Rect2] = [SAFEHOUSE_LOT_AREA]
 	STREET_LIGHT_ASSEMBLER.assemble(city, self, safehouse_area)
@@ -108,9 +113,9 @@ func _build_procedural_city() -> void:
 ## Roda generate_world na WorkerThreadPool: a geracao e dado puro (blueprints
 ## RefCounted, RNG) sem tocar a arvore de cena.
 ## Uso: var city = await _generate_blueprint_async(seed, survival)
-func _generate_blueprint_async(world_seed: int, survival_mode: bool) -> Variant:
+func _generate_blueprint_async(world_seed: int, survival_mode: bool, pvp_mode: bool = false) -> Variant:
 	var slot := {"city": null}
-	var task_id := WorkerThreadPool.add_task(func() -> void: slot["city"] = PROCEDURAL_CITY_GENERATOR.generate_world(world_seed, survival_mode))
+	var task_id := WorkerThreadPool.add_task(func() -> void: slot["city"] = PROCEDURAL_CITY_GENERATOR.generate_world(world_seed, survival_mode, pvp_mode))
 	while slot["city"] == null:
 		await get_tree().process_frame
 	WorkerThreadPool.wait_for_task_completion(task_id)
@@ -138,15 +143,29 @@ func _hide_legacy_center_roads() -> void:
 
 
 func _create_procedural_safehouse() -> void:
+	_build_safehouse("CentralSafehouse", Vector3(-10.5, 0.12, 10.5))
+	# PVP: a segunda casa e a base do outro time, no lote oposto do mapa.
+	if NetworkSession.pvp_mode:
+		_build_safehouse(PVP_SAFEHOUSE_NAME, PVP_SAFEHOUSE_POSITION)
+
+
+## Constroi uma safehouse (com os marcadores PlayerSpawn1..4 dela) e configura o
+## recorte na cidade. Uso: _build_safehouse("PvpSafehouse", PVP_SAFEHOUSE_POSITION)
+func _build_safehouse(house_name: String, house_position: Vector3) -> void:
 	var safehouse: StaticBody3D = SafehouseBuilder.build_safehouse()
-	safehouse.name = "CentralSafehouse"
-	safehouse.position = Vector3(-10.5, 0.12, 10.5)
+	safehouse.name = house_name
+	safehouse.position = house_position
 	add_child(safehouse)
 	var safehouse_min := safehouse.global_position + Vector3(-6.4, 0.0, -6.4)
 	# Ate o topo da mureta do telhado (6.47 + 1.0).
 	var safehouse_max := safehouse.global_position + Vector3(6.4, 7.6, 6.4)
 	PROCEDURAL_CITY_ASSEMBLER.configure_cutout_bounds(safehouse, safehouse_min, safehouse_max)
 	PROCEDURAL_CITY_ASSEMBLER.MESH_BATCHER.merge_static_meshes(safehouse)
+
+
+## No da segunda safehouse (null fora do PVP). Uso: var casa := _pvp_safehouse_node()
+func _pvp_safehouse_node() -> Node3D:
+	return get_node_or_null("GeneratedCity/" + PVP_SAFEHOUSE_NAME) as Node3D
 
 
 func _create_roads() -> void:
