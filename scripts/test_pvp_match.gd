@@ -24,6 +24,8 @@ func run(test_root: Node) -> void:
 	_test_prices_are_defined(test_root)
 	_test_frozen_input_keeps_only_aim(test_root)
 	_test_pvp_gives_huge_reserve_and_no_wear(test_root)
+	_test_frozen_input_zeroes_every_action_key(test_root)
+	_test_death_signal_connected_once(test_root)
 
 
 func _match_with_four() -> PvpMatch:
@@ -219,6 +221,63 @@ func _test_frozen_input_keeps_only_aim(test_root: Node) -> void:
 	print("PASS: Freezetime deixa so olhar e slot.")
 
 
+## O freezetime tem que zerar QUALQUER booleano do estado, inclusive uma acao
+## nova: a lista fixa de antes usava `drop`/`cycle` (chaves do input) enquanto o
+## GameConfig chama as acoes de `drop_weapon`/`cycle_weapon`, e uma acao nova
+## entrava sem ser congelada.
+func _test_frozen_input_zeroes_every_action_key(test_root: Node) -> void:
+	print("Testando freezetime em qualquer chave booleana...")
+	var raw := {
+		"slot": 2, "move": Vector2(0.7, -0.2), "aim": Vector2(0.1, 0.4),
+		"drop": true, "cycle": true, "swat": true, "buy": true,
+		"acao_nova_de_amanha": true, "recarga_segundos": 1.5,
+	}
+	var frozen: Dictionary = PVPMATCH_SCRIPT.frozen_input(raw)
+	for key in ["drop", "cycle", "swat", "buy", "acao_nova_de_amanha"]:
+		if bool(frozen[key]):
+			_fail(test_root, "Chave booleana '%s' deveria ficar falsa no freezetime." % key)
+			return
+	if frozen["move"] != Vector2.ZERO:
+		_fail(test_root, "Movimento deveria ser zerado; veio %s." % frozen["move"])
+		return
+	if frozen["aim"] != raw["aim"] or int(frozen["slot"]) != 2 or frozen["recarga_segundos"] != 1.5:
+		_fail(test_root, "Olhar/slot/valores nao booleanos devem passar; veio %s." % frozen)
+		return
+	if not bool(raw["drop"]) or raw["move"] != Vector2(0.7, -0.2):
+		_fail(test_root, "A entrada original nao pode ser alterada; veio %s." % raw)
+		return
+	print("PASS: Freezetime zera toda chave booleana e preserva olhar/slot.")
+
+
+## Regressao: o handler de morte era conectado de novo a cada registro porque a
+## checagem usava o Callable SEM bind contra o Callable COM bind conectado
+## (is_connected compara os argumentos atados) -> cada morte contava em dobro.
+func _test_death_signal_connected_once(test_root: Node) -> void:
+	print("Testando conexao unica do sinal de morte...")
+	var player := FakePvpPlayer.new()
+	var host := FakePvpHost.new()
+	if not PvpDeathWiring.connect_once(player, host):
+		_fail(test_root, "A primeira conexao deveria acontecer; veio false.")
+		player.free()
+		return
+	if PvpDeathWiring.connect_once(player, host):
+		_fail(test_root, "A segunda conexao deveria ser recusada; veio true.")
+		player.free()
+		return
+	var connections: Array = player.pvp_died.get_connections()
+	if connections.size() != 1:
+		_fail(test_root, "pvp_died deveria ter 1 conexao; tem %d." % connections.size())
+		player.free()
+		return
+	player.pvp_died.emit(player)
+	if host.deaths != 1:
+		_fail(test_root, "Uma morte deveria chamar o handler 1 vez; chamou %d." % host.deaths)
+		player.free()
+		return
+	player.free()
+	print("PASS: sinal de morte conectado uma unica vez.")
+
+
 ## Mata-mata: arma comprada vem com reserva multiplicada e o tiro NAO desgasta.
 ## Tambem garante que o survival continua desgastando normalmente.
 func _test_pvp_gives_huge_reserve_and_no_wear(test_root: Node) -> void:
@@ -262,6 +321,20 @@ func _test_pvp_gives_huge_reserve_and_no_wear(test_root: Node) -> void:
 		return
 	NetworkSession.pvp_mode = pvp_before
 	print("PASS: PVP com reserva %d (base %d) e sem desgaste." % [expected_reserve, base_reserve])
+
+
+## Falsos do teste de conexao do sinal: o jogador so precisa do sinal, o host do
+## metodo com a assinatura de `_on_pvp_died`.
+class FakePvpPlayer:
+	extends Node
+	signal pvp_died(killer: Node)
+
+
+class FakePvpHost:
+	extends RefCounted
+	var deaths := 0
+	func _on_pvp_died(_killer: Node, _victim: Node) -> void:
+		deaths += 1
 
 
 func _fail(test_root: Node, message: String) -> void:
