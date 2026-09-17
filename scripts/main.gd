@@ -140,6 +140,7 @@ var pvp_restart_left := 0.0
 ## Estado replicado do mata-mata para o cliente (linha de HUD e dica de compra).
 var pvp_state_text := ""
 var pvp_buy_open := false
+var pvp_buy_seconds_left := 0.0
 var pvp_state_elapsed := 0.0
 ## Ultimo motivo de recusa de compra (mostrado no menu de compra do cliente).
 var last_purchase_rejection := ""
@@ -148,17 +149,17 @@ var buy_menu: BuyMenu = null
 ## Gira os marcadores fixos de spawn de cada time (nao empilha os 4 no mesmo).
 var pvp_spawn_counters: Array[int] = [0, 0]
 const PVP_RESTART_SECONDS := 10.0
-## Bases dos dois times: as DUAS safehouses do mapa (a central e a do PVP, no
-## lote oposto, ~97 m uma da outra). Cada time nasce nos marcadores fixos
-## PlayerSpawn1..4 da sua casa e so compra DENTRO dela.
-const PVP_TEAM_SAFEHOUSES := ["CentralSafehouse", "PvpSafehouse"]
-## Fallback quando a cidade nao tem a casa (modo legacy/teste).
-const PVP_TEAM_BASE_FALLBACK := [Vector3(-10.5, 1.18, 10.5), Vector3(58.5, 1.18, -58.5)]
+## Bases dos dois times: uma safehouse por canto OPOSTO do mapa (~165 m entre
+## elas). Cada time nasce nos marcadores fixos PlayerSpawn1..4 da sua casa e so
+## compra DENTRO dela. A casa central continua sendo a da sobrevivencia.
+const PVP_TEAM_SAFEHOUSES := ["PvpSafehouseA", "PvpSafehouseB"]
+## Fallback quando a cidade nao tem as casas (modo legacy/teste).
+const PVP_TEAM_BASE_FALLBACK := [Vector3(-58.5, 1.18, -58.5), Vector3(58.5, 1.18, 58.5)]
 ## Raio da zona de compra em volta da casa (a casa tem 12,8 m de lado).
 const PVP_BASE_RADIUS := 7.0
 ## Rota pelas ruas entre as duas casas (ruas em -72/-48/-24/24/48/72): o bot sem
 ## pathfinding segue de esquina em esquina em vez de atravessar predio.
-const PVP_STREET_ROUTE := [Vector3(-10.5, 1.3, 10.5), Vector3(24.0, 1.3, 24.0), Vector3(24.0, 1.3, -24.0), Vector3(48.0, 1.3, -48.0), Vector3(58.5, 1.3, -58.5)]
+const PVP_STREET_ROUTE := [Vector3(-58.5, 1.3, -58.5), Vector3(-24.0, 1.3, -24.0), Vector3(24.0, 1.3, 24.0), Vector3(58.5, 1.3, 58.5)]
 var loot_rng := RandomNumberGenerator.new()
 ## Armas soltas por zumbis ainda no chao, da mais antiga para a mais nova.
 var zombie_weapon_drops: Array[Node] = []
@@ -1209,8 +1210,14 @@ func _submit_inputs(states: Array) -> void:
 		if slot < 0 or slot >= allowed_slots:
 			continue
 		var player = network_players.get(_player_key(sender_id, slot))
-		if player != null:
-			player.apply_network_input(state)
+		if player == null:
+			continue
+		if pvp_match != null and pvp_match.phase == PvpMatch.Phase.BUY:
+			# Freezetime: ninguem anda enquanto escolhe arma (comprar vai por RPC
+			# proprio, entao continua funcionando).
+			player.apply_network_input(PvpMatch.frozen_input(state))
+			continue
+		player.apply_network_input(state)
 
 
 func _collect_player_states() -> Array:
@@ -1629,6 +1636,9 @@ func _tick_pvp_bots(delta: float) -> void:
 		if bool(bot.get("is_eliminated")):
 			continue
 		_pvp_bot_try_buy(bot)
+		if pvp_match.phase == PvpMatch.Phase.BUY:
+			bot.apply_network_input(PvpMatch.frozen_input({}))
+			continue
 		var rumo := _pvp_bot_hunt_position(bot)
 		bot.apply_network_input(bot_ai.collect_pvp_input(bot, get_tree(), slot, delta, rumo))
 		slot += 1
@@ -1820,15 +1830,16 @@ func _pvp_broadcast_state() -> void:
 	var text := pvp_match.hud_text()
 	var in_buy := pvp_match.phase == PvpMatch.Phase.BUY
 	for peer_id in NetworkSession.loaded_peers:
-		_pvp_state.rpc_id(int(peer_id), text, in_buy)
+		_pvp_state.rpc_id(int(peer_id), text, in_buy, pvp_match.phase_left if in_buy else 0.0)
 
 
 @rpc("authority", "call_remote", "reliable")
-func _pvp_state(text: String, in_buy: bool) -> void:
+func _pvp_state(text: String, in_buy: bool, buy_seconds_left: float) -> void:
 	if not NetworkSession.is_client():
 		return
 	pvp_state_text = text
 	pvp_buy_open = in_buy
+	pvp_buy_seconds_left = buy_seconds_left
 
 
 ## Partida nova: economia zerada, placar limpo e todo mundo na base.
