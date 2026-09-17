@@ -1714,8 +1714,7 @@ func _register_pvp_player(player: Node) -> void:
 		return
 	pvp_match.register_player(key)
 	player.set("pvp_money", pvp_match.money_of(key))
-	if not player.pvp_died.is_connected(_on_pvp_died):
-		player.pvp_died.connect(_on_pvp_died.bind(player))
+	PvpDeathWiring.connect_once(player, self)
 
 
 ## Chave de rede do jogador ("" quando nao esta no dicionario).

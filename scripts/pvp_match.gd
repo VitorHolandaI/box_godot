@@ -124,12 +124,16 @@ func spend(key: String, amount: int) -> bool:
 ## Entrada congelada do freezetime: so olhar (aim) e o slot do jogador passam;
 ## movimento, pulo, tiro e itens ficam zerados. E o "tempo de compra" do CS:
 ## o servidor ignora o movimento nessa fase, entao o cliente nao anda mesmo que
-## mande input. Funcao pura para testar.
+## mande input. Zera TODO booleano do estado, sem lista fixa: as chaves de acao
+## do input (`drop`/`cycle`) nao sao iguais as acoes do GameConfig
+## (`drop_weapon`/`cycle_weapon`), entao uma lista escrita a mao envelhecia
+## calada a cada acao nova. Funcao pura para testar.
 ## Uso: var congelado := PvpMatch.frozen_input(estado)
 static func frozen_input(state: Dictionary) -> Dictionary:
 	var frozen := state.duplicate()
-	for action in ["jump", "sprint", "attack", "knife", "pistol", "reload", "interact", "shotgun", "uzi", "magnum", "double_barrel", "carbine", "drop", "cycle", "grenade", "throw_knife", "air_strike", "swat", "buy"]:
-		frozen[action] = false
+	for key in frozen.keys():
+		if frozen[key] is bool:
+			frozen[key] = false
 	frozen["move"] = Vector2.ZERO
 	return frozen
 
