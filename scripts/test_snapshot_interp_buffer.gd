@@ -21,6 +21,7 @@ func run(test_root: Node) -> void:
 	_test_jitter_grows_delay_within_bounds(test_root)
 	_test_rotation_takes_shortest_path(test_root)
 	_test_sample_history_is_bounded(test_root)
+	_test_fast_snapshots_do_not_freeze(test_root)
 
 
 ## O teste que faltava: acompanha o proxy por varios snapshots e exige que a
@@ -154,6 +155,43 @@ func _test_sample_history_is_bounded(test_root: Node) -> void:
 		_fail(test_root, "Historico deveria ficar entre 2 e %d amostras; veio %d." % [SnapshotInterpBuffer.MAX_SAMPLES, buffer.sample_count()])
 		return
 	print("PASS: Historico de amostras limitado (%d)." % buffer.sample_count())
+
+
+## Servidor mais rapido (15-30 Hz) nao pode reintroduzir o congelamento: o
+## atraso tem que caber no historico guardado, senao o render time cai antes da
+## amostra mais antiga e o peso trava em 0 de novo.
+func _test_fast_snapshots_do_not_freeze(test_root: Node) -> void:
+	print("Testando snapshots rapidos (30 Hz) sem congelar...")
+	var buffer := SnapshotInterpBuffer.new()
+	# 20 ms (servidor a 50 Hz): e onde o piso de MIN_DELAY_MS estourava o
+	# historico SEM o teto por amostras guardadas.
+	var snapshot_ms := 20.0
+	buffer.reset(0.0, Vector3.ZERO, 0.0)
+	var next_push_ms := snapshot_ms
+	var pushed := 0
+	var previous := Vector3.ZERO
+	var frozen_frames := 0
+	for frame in 90:
+		var now_ms := float(frame) * FRAME_MS
+		while now_ms >= next_push_ms:
+			pushed += 1
+			buffer.push(now_ms, Vector3(0.25 * float(pushed), 0.0, 0.0), 0.0, buffer.position, 0.0)
+			next_push_ms += snapshot_ms
+		buffer.sample(now_ms)
+		if now_ms >= 400.0:
+			if absf(buffer.position.x - previous.x) < 0.002:
+				frozen_frames += 1
+		previous = buffer.position
+	if buffer.delay_ms > float(SnapshotInterpBuffer.MAX_SAMPLES - 2) * buffer.interval_ms() + 0.001:
+		_fail(test_root, "Atraso (%s ms) passou do historico (%s amostras x %s ms)." % [buffer.delay_ms, SnapshotInterpBuffer.MAX_SAMPLES, buffer.interval_ms()])
+		return
+	if frozen_frames > 2:
+		_fail(test_root, "Com snapshots de 33 ms o proxy congelou em %d frames; atraso=%s ms intervalo=%s ms." % [frozen_frames, buffer.delay_ms, buffer.interval_ms()])
+		return
+	if buffer.delay_ms >= SnapshotInterpBuffer.MIN_DELAY_MS:
+		_fail(test_root, "Com snapshots de 20 ms o atraso deveria ficar abaixo do piso fixo (%s ms) para caber no historico; veio %s ms." % [SnapshotInterpBuffer.MIN_DELAY_MS, buffer.delay_ms])
+		return
+	print("PASS: Snapshots rapidos interpolam sem congelar (atraso %s ms)." % buffer.delay_ms)
 
 
 func _fail(test_root: Node, message: String) -> void:
