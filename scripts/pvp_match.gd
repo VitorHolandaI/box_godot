@@ -23,9 +23,10 @@ const MONEY_START := 800
 const MONEY_PER_KILL := 300
 const MONEY_MAX := 16000
 const RESPAWN_SECONDS := 3.0
-## 90 s por rodada: o mapa e grande e sem pathfinding a rodada arrastava ate o
-## limite; o tempo serve de rede de seguranca, nao de ritmo.
-const ROUND_SECONDS := 90.0
+## 150 s por rodada: as bases ficam nos cantos opostos (~165 m) e o encontro
+## leva a maior parte disso, entao o tempo e rede de seguranca — nao o ritmo que
+## decide as rodadas.
+const ROUND_SECONDS := 150.0
 const BUY_SECONDS := 15.0
 const ROUND_END_SECONDS := 6.0
 
@@ -167,12 +168,27 @@ func register_kill(killer_key: String, victim_key: String) -> void:
 	add_money(killer_key, MONEY_PER_KILL)
 
 
-## Fecha a rodada para `winner_team` (ou empate com -1), soma a vitoria e
-## entra na fase de fim de rodada.
-## Uso: match.finish_round(1)
-func finish_round(winner_team: int) -> void:
+## Como a rodada anterior fechou ("tempo", "eliminacao", "sem_vivos", "manual")
+## e quem levou (-1 empate). O evento `pvp_round` da rodada nova conta isso:
+## antes so dava para ver o placar, nao o motivo do fim.
+var last_round_end := ""
+var last_round_winner := -1
+
+
+## Resumo da rodada anterior para o log de evento.
+## Uso: var resumo := match.last_round_report()
+func last_round_report() -> Dictionary:
+	return {"motivo": last_round_end, "vencedor": last_round_winner}
+
+
+## Fecha a rodada para `winner_team` (ou empate com -1), soma a vitoria e entra
+## na fase de fim de rodada. `reason` so alimenta o log da proxima rodada.
+## Uso: match.finish_round(1, "eliminacao")
+func finish_round(winner_team: int, reason: String = "manual") -> void:
 	if phase != Phase.LIVE and phase != Phase.BUY:
 		return
+	last_round_end = reason
+	last_round_winner = winner_team if winner_team >= 0 and winner_team < TEAM_COUNT else -1
 	if winner_team >= 0 and winner_team < TEAM_COUNT:
 		round_wins[winner_team] += 1
 	phase = Phase.ROUND_END
@@ -185,9 +201,9 @@ func finish_round_by_time(alive_per_team: Array) -> void:
 	var first := int(alive_per_team[0]) if alive_per_team.size() > 0 else 0
 	var second := int(alive_per_team[1]) if alive_per_team.size() > 1 else 0
 	if first == second:
-		finish_round(-1)
+		finish_round(-1, "tempo")
 		return
-	finish_round(0 if first > second else 1)
+	finish_round(0 if first > second else 1, "tempo")
 
 
 ## Time vencedor da partida, ou -1 (em andamento / empate).
