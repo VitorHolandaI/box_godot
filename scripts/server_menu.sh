@@ -12,7 +12,7 @@
 #   scripts/server_menu.sh stop               # derruba
 #   scripts/server_menu.sh logs               # segue o log
 #   scripts/server_menu.sh status             # o que esta no ar
-#   PVP_BOTS=0 scripts/server_menu.sh pvp up  # mata-mata sem bots
+#   PVP_BOTS=4 scripts/server_menu.sh pvp up  # mata-mata com 4 bots (teste)
 #   PORT=32000 scripts/server_menu.sh pvp up  # outra porta (2o servidor)
 #   DRY_RUN=1 scripts/server_menu.sh pvp up   # so mostra o comando
 #   scripts/server_menu.sh self-test          # testa o script (sem docker)
@@ -22,7 +22,8 @@ project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_dir"
 
 godot_server_bin="dist/box-godot-linux.x86_64"
-default_pvp_bots="${PVP_BOTS:-4}"
+## PVP sem bots por padrao (jogo de verdade). PVP_BOTS=N pede bots de teste.
+default_pvp_bots="${PVP_BOTS:-0}"
 
 usage() {
 	cat <<'TXT'
@@ -167,7 +168,11 @@ announce() {
 	port="$(port_in_use)"
 	local label="sobrevivencia (zumbis, hordas)"
 	if [[ "$mode" == "pvp" ]]; then
-		label="mata-mata PVP (${default_pvp_bots} bots, best-of-3)"
+		if [[ "$default_pvp_bots" == "0" ]]; then
+			label="mata-mata PVP (sem bots, best-of-3)"
+		else
+			label="mata-mata PVP (${default_pvp_bots} bots, best-of-3)"
+		fi
 	fi
 	echo
 	echo "no ar: $label | porta $port"
@@ -194,12 +199,12 @@ self_test() {
 	}
 
 	output="$(DRY_RUN=1 "$0" pvp up)"
-	check_contains "$output" "--pvp-bots=4" "pvp up liga os 4 bots"
+	check_contains "$output" "--pvp-bots=0" "pvp up sobe SEM bots por padrao"
 	check_contains "$output" "--build" "pvp up rebuilda a imagem"
 	check_contains "$output" "server-port=27015" "cliente na porta padrao"
 
-	output="$(DRY_RUN=1 PVP_BOTS=0 "$0" pvp start)"
-	check_contains "$output" "--pvp-bots=0" "PVP_BOTS=0 respeitado"
+	output="$(DRY_RUN=1 PVP_BOTS=4 "$0" pvp start)"
+	check_contains "$output" "--pvp-bots=4" "PVP_BOTS=4 pede bots de teste"
 	if [[ "$output" == *"--build"* ]]; then
 		echo "FALHA: pvp start nao pode rebuildar"
 		failures=$((failures + 1))
@@ -242,7 +247,11 @@ interactive_menu() {
 		echo
 		echo "=== servidor local (box_godot) ==="
 		echo "1) sobrevivencia  - rebuild + subir"
-		echo "2) mata-mata PVP  - rebuild + subir (${default_pvp_bots} bots)"
+		if [[ "$default_pvp_bots" == "0" ]]; then
+			echo "2) mata-mata PVP  - rebuild + subir (sem bots)"
+		else
+			echo "2) mata-mata PVP  - rebuild + subir (${default_pvp_bots} bots)"
+		fi
 		echo "3) sobrevivencia  - subir sem rebuild"
 		echo "4) mata-mata PVP  - subir sem rebuild"
 		echo "5) parar servidor"
