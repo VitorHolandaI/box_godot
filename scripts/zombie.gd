@@ -48,6 +48,12 @@ const TITAN_SLAM_COLOR := Color(1.0, 0.45, 0.1)
 const STUCK_LOG_SECONDS := 15.0
 const STRANDED_SECONDS := 40.0
 const STRANDED_MIN_TARGET_DISTANCE := 30.0
+# Maior que qualquer passo entre snapshots: salto assim e realocacao, nao corrida.
+const NETWORK_SNAP_DISTANCE := 8.0
+## Atraso proposital da renderizacao dos zumbis em relacao aos snapshots:
+## o buffer de 100 ms suaviza jitter de rede (padrao Quake/CS).
+const NETWORK_INTERP_DELAY_MS := 100.0
+const NETWORK_SNAPSHOT_INTERVAL_MS := 100.0
 
 @export var speed := 2.2
 @export var gravity := 22.0
@@ -127,11 +133,19 @@ var _pose_nodes: Dictionary = {}
 var death_velocity := Vector3.ZERO
 var is_dead := false
 var simulation_enabled := true
-## Buffer de interpolacao: os 2 ultimos snapshots do servidor e seus horarios
-## de chegada; o proxy renderiza com atraso controlado (2 intervalos) entre eles
-## (padrao de snapshot interpolation) em vez de perseguir o ultimo snapshot —
-## mata os micro-teleportes em ping alto.
-var snapshot_buffer := SnapshotInterpBuffer.new()
+var network_target_position := Vector3.ZERO
+var network_target_rotation := 0.0
+## Buffer de interpolacao: os 2 ultimos snapshots do servidor e seus
+## horarios de chegada; o proxy renderiza com ~100 ms de atraso controlado
+## interpolando entre eles (padrao de snapshot interpolation) em vez de
+## perseguir o ultimo snapshot — mata os micro-teleportes em ping alto.
+var _snapshot_prev_position := Vector3.ZERO
+var _snapshot_next_position := Vector3.ZERO
+var _snapshot_prev_rotation := 0.0
+var _snapshot_next_rotation := 0.0
+var _snapshot_prev_time_ms := 0.0
+var _snapshot_next_time_ms := 0.0
+var _snapshot_has_buffer := false
 var sound_investigate_position := Vector3.ZERO
 var sound_investigate_timer := 0.0
 var is_investigating_sound := false
@@ -179,7 +193,15 @@ func _ready() -> void:
 	# 3 em vez de 6: na horda amontoada cada deslize extra e outra consulta de
 	# colisao; move_and_slide era ~60% da IA medida no servidor (sonda de frame).
 	max_slides = 3
-	snapshot_buffer.reset(float(Time.get_ticks_msec()), global_position, rotation.y)
+	network_target_position = global_position
+	network_target_rotation = rotation.y
+	_snapshot_prev_position = global_position
+	_snapshot_next_position = global_position
+	_snapshot_prev_rotation = rotation.y
+	_snapshot_next_rotation = rotation.y
+	var now_ms := float(Time.get_ticks_msec())
+	_snapshot_prev_time_ms = now_ms
+	_snapshot_next_time_ms = now_ms
 	health_label.visible = false
 	_refresh_health_label()
 	_collect_fade_meshes()
@@ -198,25 +220,24 @@ func _run_physics_tick(delta: float) -> void:
 		var fade_start := FramePerfProbe.begin()
 		_update_visual_fade(delta)
 		FramePerfProbe.end("sub:zombie_visual_fade", fade_start)
-		# So quem esta fora do raio de visao compartilhada (35 m) pode atualizar
-		# a 15 Hz. MID (22-50 m) aparecia na tela e pulava 3 de 4 frames de
-		# fisica: a posicao mudava a 15 Hz e o jogador via zumbi teleportando
-		# (relato da onda 1-3). MID fica a 30 Hz, NEAR todo frame.
 		if lod_level != LodLevel.NEAR:
-			var proxy_stride := 2 if lod_level == LodLevel.MID else 4
-			lod_tick_skip_counter = (lod_tick_skip_counter + 1) % proxy_stride
+			lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
 			if lod_tick_skip_counter != 0:
 				return
-		var now_ms := float(Time.get_ticks_msec())
-		snapshot_buffer.sample(now_ms)
-		var target_pos := snapshot_buffer.position
+		var render_time := float(Time.get_ticks_msec()) - NETWORK_INTERP_DELAY_MS
+		var snapshot_span := _snapshot_next_time_ms - _snapshot_prev_time_ms
+		var snapshot_t := 1.0
+		if snapshot_span > 0.001:
+			snapshot_t = clampf((render_time - _snapshot_prev_time_ms) / snapshot_span, 0.0, 1.0)
+		var target_pos := _snapshot_prev_position.lerp(_snapshot_next_position, snapshot_t)
+		var target_rotation := lerp_angle(_snapshot_prev_rotation, _snapshot_next_rotation, snapshot_t)
 		var motion := target_pos - global_position
 		if motion.length_squared() > 0.00001:
 			# Posicao ja validada pelo servidor: segue direto. move_and_collide
 			# no proxy custava ate 4 ms/frame e a fisica do client 8-10 ms com a
 			# horda de 200 na tela (teste na VPS, ec6aee7).
 			global_position = target_pos
-		rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 14.0, 1.0))
+		rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
 		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
 		hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
 		if not is_dead:
@@ -1108,12 +1129,18 @@ func apply_network_state(state: Dictionary) -> void:
 	var position_value: Variant = state.get("position")
 	if position_value is Vector3:
 		var next_position: Vector3 = position_value
-		var next_rotation := float(state.get("rotation", snapshot_buffer.rotation))
-		# O buffer decide: salto grande e realocacao do servidor (spawn, unstuck)
-		# e reinicia em vez de o proxy deslizar pelo mapa batendo em paredes.
-		if snapshot_buffer.push(float(Time.get_ticks_msec()), next_position, next_rotation, global_position, rotation.y):
-			global_position = snapshot_buffer.position
-			rotation.y = snapshot_buffer.rotation
+		# Realocado pelo servidor: teleporta e reinicia o buffer, senao o
+		# proxy deslizaria pelo mapa batendo em paredes no caminho.
+		if global_position.distance_to(next_position) > NETWORK_SNAP_DISTANCE:
+			global_position = next_position
+			_snapshot_prev_position = next_position
+			_snapshot_next_position = next_position
+			_snapshot_prev_time_ms = float(Time.get_ticks_msec())
+			_snapshot_next_time_ms = _snapshot_prev_time_ms
+			_snapshot_has_buffer = true
+		else:
+			_push_snapshot_sample(next_position, float(state.get("rotation", _snapshot_next_rotation)))
+	network_target_rotation = float(state.get("rotation", network_target_rotation))
 	health = clampi(int(state.get("health", health)), 0, max_health)
 	_refresh_health_label()
 	if state.has("zombie_type"):
@@ -1149,3 +1176,24 @@ func apply_network_state(state: Dictionary) -> void:
 		_spawn_ragdoll()
 		if int(zombie_type) == ZombieType.BLOATER:
 			_play_bloater_burst()
+
+
+## Empurra o snapshot novo para o buffer de interpolacao: o anterior vira
+## prev, o novo vira next, com os horarios de chegada para interpolar no
+## render time (agora - 100 ms).
+## Uso: chamado por apply_network_state; nao chamar manualmente.
+func _push_snapshot_sample(next_position: Vector3, next_rotation: float) -> void:
+	var now_ms := float(Time.get_ticks_msec())
+	if not _snapshot_has_buffer:
+		# Primeiro snapshot: interpola ja a partir da posicao atual do no.
+		_snapshot_prev_position = global_position
+		_snapshot_prev_rotation = rotation.y
+		_snapshot_prev_time_ms = now_ms - NETWORK_SNAPSHOT_INTERVAL_MS
+		_snapshot_has_buffer = true
+	else:
+		_snapshot_prev_position = _snapshot_next_position
+		_snapshot_prev_rotation = _snapshot_next_rotation
+		_snapshot_prev_time_ms = _snapshot_next_time_ms
+	_snapshot_next_position = next_position
+	_snapshot_next_rotation = next_rotation
+	_snapshot_next_time_ms = now_ms
