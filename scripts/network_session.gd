@@ -143,8 +143,12 @@ func _exit_tree() -> void:
 
 func start_server(port: int = DEFAULT_PORT) -> Error:
 	leave_session()
+	var channel_error := NetworkChannels.validate()
+	if not channel_error.is_empty():
+		push_error("Plano de canais do ENet invalido: %s" % channel_error)
+		return ERR_INVALID_PARAMETER
 	var peer := ENetMultiplayerPeer.new()
-	var error := peer.create_server(port, max_players)
+	var error := peer.create_server(port, max_players, NetworkChannels.COUNT)
 	if error != OK:
 		return error
 	mode = Mode.SERVER
@@ -163,7 +167,9 @@ func join_server(address: String, local_slots: int, port: int = DEFAULT_PORT) ->
 		return ERR_INVALID_PARAMETER
 	leave_session()
 	var peer := ENetMultiplayerPeer.new()
-	var error := peer.create_client(address, port)
+	# Mesmo numero de canais do servidor: o host ENet do cliente precisa alocar
+	# os canais em que o servidor manda (snapshot/input/efeitos).
+	var error := peer.create_client(address, port, NetworkChannels.COUNT)
 	if error != OK:
 		return error
 	mode = Mode.CLIENT
