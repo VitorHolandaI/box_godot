@@ -6,7 +6,7 @@ extends RefCounted
 ## snapshots a cada 100 ms; intervalos maiores indicam que o tick de fisica do
 ## servidor esta estourando o orcamento (lag de simulacao, nao de rede).
 ## Uso:
-##   godot --headless --path . -- --bot-player=195.35.42.208 --lag-probe=30
+##   godot --headless --path . -- --bot-player=203.0.113.10 --lag-probe=30
 
 const EXPECTED_SNAPSHOT_INTERVAL_MS := 100.0
 const WARMUP_SECONDS := 3.0
