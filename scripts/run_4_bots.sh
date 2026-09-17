@@ -1,8 +1,14 @@
 #!/usr/bin/env bash
+# Abre 4 janelas de bots jogando sozinhos. Sem alvo, sobe um servidor dedicado
+# local; com alvo (ex.: o VPS), os bots entram nele e nenhum servidor local sobe.
+# Uso:
+#   scripts/run_4_bots.sh [porta] [ip_do_servidor]
+#   scripts/run_4_bots.sh 27015 195.35.42.208
 set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 port="${1:-7070}"
+target_ip="${2:-127.0.0.1}"
 server_pid=""
 bot_pids=()
 
@@ -67,10 +73,14 @@ bot_names=(
 	"Bot Delta"
 )
 
-printf '%s\n' "Iniciando servidor dedicado local em UDP $port..."
-godot --headless --path "$project_dir" -- --server "--server-port=$port" >/dev/null 2>&1 &
-server_pid=$!
-sleep 1.2
+if [[ "$target_ip" == "127.0.0.1" ]]; then
+	printf '%s\n' "Iniciando servidor dedicado local em UDP $port..."
+	godot --headless --path "$project_dir" -- --server "--server-port=$port" >/dev/null 2>&1 &
+	server_pid=$!
+	sleep 1.2
+else
+	printf '%s\n' "Servidor remoto: $target_ip:$port (nenhum servidor local sobe)."
+fi
 
 bot_fps="${BOT_FPS:-60}"
 bot_quality="${BOT_QUALITY:-medium}"
@@ -81,7 +91,7 @@ for i in {0..3}; do
 	name="${bot_names[$i]}"
 	printf '  - Janela %d: %-12s na posicao %s\n' "$((i + 1))" "$name" "$pos"
 	godot --windowed --resolution "${win_w}x${win_h}" --position "$pos" --path "$project_dir" \
-		-- "--bot-player=127.0.0.1" "--server-port=$port" "--bot-name=$name" \
+		-- "--bot-player=$target_ip" "--server-port=$port" "--bot-name=$name" \
 		"--max-fps=$bot_fps" "--quality=$bot_quality" &
 	bot_pids+=($!)
 	sleep 0.35
@@ -89,7 +99,7 @@ done
 
 printf '\n%s\n' "============================================================"
 printf '%s\n' " 4 Jogadores Bots jogando sozinhos em 4 janelas simultaneas!"
-printf '%s\n' " Servidor: 127.0.0.1:$port"
+printf '%s\n' " Servidor: $target_ip:$port"
 printf '%s\n' " Pressione Ctrl+C para fechar todos os bots e o servidor."
 printf '%s\n\n' "============================================================"
 

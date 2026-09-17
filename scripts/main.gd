@@ -565,8 +565,13 @@ func _update_swat_squads(delta: float) -> void:
 
 ## O reconcile nao mexe nas chaves do esquadrao: elas nao vem do roster de
 ## peers reais, quem cria e libera e _enlist_swat_squad/_retire_swat_squad.
+## A checagem e por pertencimento, nao por faixa de id: o ENet sorteia id de
+## peer de 32 bits e um jogador de verdade pode cair no mesmo valor reservado.
 func _is_swat_player_key(key: String) -> bool:
-	return SwatSquadBot.is_swat_key(key)
+	for squad_value in swat_squads.values():
+		if (squad_value as Dictionary)["keys"].has(key):
+			return true
+	return false
 
 
 ## Teste rapido da chamada de SWAT: espera a cidade, spawna zumbis em volta do
