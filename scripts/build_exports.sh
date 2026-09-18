@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Exporta clientes release para Linux e Windows e seus checksums.
+# Exporta clientes release para Linux, Windows e macOS e seus checksums.
+# O macOS usa o template universal oficial, que nao vem no pacote enxuto do
+# projeto: baixe so ele com scripts/fetch_macos_template.py (o .tpz inteiro tem
+# >1 GB). Sem o template, o macOS e pulado com aviso.
 # Templates customizados (scripts/build_custom_templates.sh) sao opcionais:
 #   LINUX_TEMPLATE=~/tinker_git/godot-4.7.2-src/bin/godot.linuxbsd.template_release.x86_64 \
 #   WINDOWS_TEMPLATE=~/tinker_git/godot-4.7.2-src/bin/godot.windows.template_release.x86_64.exe \
@@ -79,6 +82,7 @@ PY
 
 set_release_template 0 "${LINUX_TEMPLATE:-}"
 set_release_template 1 "${WINDOWS_TEMPLATE:-}"
+set_release_template 2 "${MACOS_TEMPLATE:-}"
 write_build_info
 
 mkdir -p "$dist_dir"
@@ -86,6 +90,17 @@ godot --headless --path "$project_dir" --export-release Linux "$dist_dir/box-god
 godot --headless --path "$project_dir" --export-release Windows "$dist_dir/box-godot-windows.exe"
 chmod +x "$dist_dir/box-godot-linux.x86_64"
 
+# macOS so quando o template universal estiver instalado (ver o cabecalho).
+macos_template="$HOME/.local/share/godot/export_templates/4.7.2.stable/macos.zip"
+exported_files=(box-godot-linux.x86_64 box-godot-windows.exe)
+if [[ -f "$macos_template" ]]; then
+	godot --headless --path "$project_dir" --export-release macOS "$dist_dir/box-godot-macos.zip"
+	exported_files+=(box-godot-macos.zip)
+else
+	printf 'aviso: template de macOS ausente (%s); pulando o macOS.\n' "$macos_template" >&2
+	printf '       baixe com: python3 scripts/fetch_macos_template.py\n' >&2
+fi
+
 cd "$dist_dir"
-sha256sum box-godot-linux.x86_64 box-godot-windows.exe > SHA256SUMS
+sha256sum "${exported_files[@]}" > SHA256SUMS
 printf '%s\n' "Exports disponiveis em $dist_dir"
