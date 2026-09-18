@@ -34,7 +34,7 @@ func _ready() -> void:
 	var to_end := end_position - start_position
 	if to_end.length_squared() > 0.01:
 		drop_progress = clampf(to_drop.dot(to_end) / to_end.length_squared(), 0.0, 1.0)
-		rotation.y = atan2(-to_end.x, -to_end.z)
+		rotation.y = heading_for(to_end)
 	_build_plane()
 
 
@@ -47,6 +47,14 @@ func _physics_process(delta: float) -> void:
 	if not dropped and flight_progress >= drop_progress:
 		dropped = true
 		reached_drop_point.emit()
+
+
+## Yaw que aponta o nariz do modelo para a direcao do voo. O nariz fica em +Z
+## (a cauda e o estabilizador em -Z), entao o sinal e o direto: com
+## atan2(-x, -z) o aviao cruzava o mapa de rabo pra frente.
+## Uso: rotation.y = heading_for(to_end)
+static func heading_for(direction: Vector3) -> float:
+	return atan2(direction.x, direction.z)
 
 
 ## Modelo voxel: fuselagem, asas fixas e cauda. Sem fisica.
