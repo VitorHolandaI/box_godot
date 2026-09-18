@@ -18,7 +18,7 @@
 set -euo pipefail
 
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-public_remote="${PUBLIC_REMOTE:-git@github.com:VitorHolandaI/box-godot.git}"
+public_remote="${PUBLIC_REMOTE:-git@github.com:VitorHolandaI/box_godot.git}"
 ip_map_file="${PUBLISH_IP_MAP:-$project_dir/.publish-ip-map.txt}"
 filter_repo="${FILTER_REPO_BIN:-git-filter-repo}"
 dry_run=0
