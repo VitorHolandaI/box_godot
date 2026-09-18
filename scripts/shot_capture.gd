@@ -189,19 +189,42 @@ func _ready() -> void:
 	_run()
 
 
+## Distancia de spawn das variantes com habilidade de alcance: nascer colado
+## esconde o arranque da investida/pulo/cuspe. CHARGE 5-14 m, JUMP 4-12 m,
+## SPIT 4-12 m (o spitter mantem 8).
+const VARIANT_LONG_RANGE_DISTANCE := {
+	15: 12.0,
+	16: 13.0,
+	17: 12.0,
+	18: 12.0,
+	# O stalker e quase invisivel ate chegar perto: nascer colado esconde isso.
+	20: 16.0,
+}
+const VARIANT_DEFAULT_DISTANCE := 7.0
+
+
 ## Receita de GIF por variante de zumbi: um bicho so, camera perto, o jogador
 ## aguenta os golpes (pose_health) e a cena segue viva depois do PNG para o
 ## --write-movie gravar o ataque (o GIF e cortado do fim do video).
 func _variant_recipe(index: int) -> Dictionary:
+	var distance := float(VARIANT_LONG_RANGE_DISTANCE.get(index, VARIANT_DEFAULT_DISTANCE))
+	# O curandeiro levanta cadaveres recentes: sem corpo na cena nao ha o que
+	# mostrar, entao a receita dele planta vitimas e mata logo depois.
+	var corpses := {"count": 3, "radius": 6.0, "kill_after": 0.7} if index == ZombieMutator.Type.HEALER else {}
+	# Quem nasce longe precisa de camera mais alta para caber no quadro.
+	# Quem nasce longe precisa de camera mais alta para ENTRAR no quadro desde o
+	# comeco (12,5 m deixava o spawn de 13 m acima da borda).
+	var offset := Vector3(0.0, 16.0, 13.5) if distance > 10.0 else Vector3(0.0, 9.0, 7.5)
 	return {
 		"hud": true,
 		"players": 1,
 		"player_pos": Vector3(24.0, 1.0, 24.0),
-		"camera": {"offset": Vector3(0.0, 9.0, 7.5), "fov": 72.0},
-		"zombies": {"count": 1, "variant": index, "pattern": "cross", "radius_min": 7.0, "radius_max": 7.0, "lane": 1.0},
+		"camera": {"offset": offset, "fov": 72.0},
+		"zombies": {"count": 1, "variant": index, "pattern": "ring", "radius_min": distance, "radius_max": distance, "lane": 1.0, "start_angle_degrees": -90.0},
+		"corpses": corpses,
 		"pose_health": true,
 		"warmup": 1.2,
-		"movie_seconds": 3.4,
+		"movie_seconds": 4.4,
 	}
 
 
@@ -238,6 +261,7 @@ func _run() -> void:
 	_apply_atmosphere(main, recipe)
 	_apply_camera(main, players, recipe)
 	_plant_horde(main, players, recipe, shot)
+	await _plant_corpses(main, players, recipe, shot)
 	var keep_alive := bool(recipe.get("pose_health", false))
 	var actions_after := bool(recipe.get("actions_after_moment", false))
 	if not actions_after:
@@ -655,6 +679,37 @@ func _request_airdrop(main: Node, player: Node3D) -> void:
 	main.call("_launch_airdrop", drop_position, WeaponStats.crate_kinds())
 
 
+## Vitimas para as variantes que usam cadaver (curandeiro levanta os recentes):
+## planta zumbis na rua e mata por dano logo depois, deixando os ragdolls.
+func _plant_corpses(main: Node, players: Array, recipe: Dictionary, shot: String) -> void:
+	var settings: Dictionary = recipe.get("corpses", {})
+	var count := int(settings.get("count", 0))
+	if count <= 0:
+		return
+	var zombies_node := main.get("zombies") as Node3D
+	if zombies_node == null:
+		push_warning("shot_capture: receita pede cadaveres mas nao achei o no de zumbis")
+		return
+	var radius := float(settings.get("radius", 6.0))
+	var rng := RandomNumberGenerator.new()
+	rng.seed = hash(shot + "corpses") + NetworkSession.world_seed
+	var player := players[0] as Node3D
+	var victims: Array[Node] = []
+	for slot in count:
+		var angle := TAU * (float(slot) / float(count)) + rng.randf_range(-0.15, 0.15)
+		var position := player.global_position + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
+		position.y = player.global_position.y
+		var result: Variant = main.call("_spawn_zombie", position, 0)
+		if result is bool and bool(result) and zombies_node.get_child_count() > 0:
+			victims.append(zombies_node.get_child(-1))
+	# Deixa os bichos aparecerem antes do golpe (o ragdoll nasce da morte).
+	await _wait_seconds(float(settings.get("kill_after", 0.7)))
+	for victim: Node in victims:
+		if is_instance_valid(victim):
+			victim.call("take_damage", 99999, Vector3.ZERO, "knife")
+	print(JSON.stringify({"event": "shot_corpses_planted", "shot": shot, "victims": victims.size()}))
+
+
 ## Planta a horda da receita em volta de cada jogador local, com jitter
 ## deterministico (semente derivada do nome da receita) e espalhando os spawns
 ## em alguns frames para nao empilhar corpos no mesmo lugar.
@@ -669,12 +724,15 @@ func _plant_horde(main: Node, players: Array, recipe: Dictionary, shot: String) 
 	var radius_min := float(zombie_settings.get("radius_min", 6.0))
 	var radius_max := float(zombie_settings.get("radius_max", 20.0))
 	var lane := float(zombie_settings.get("lane", 3.0))
+	# Angulo inicial do anel: -90 graus poe o bicho em -Z, que e o lado OPOSTO a
+	# camera (a camera fica em +Z) = na frente do boneco, vindo de frente.
+	var start_angle := deg_to_rad(float(zombie_settings.get("start_angle_degrees", 0.0)))
 	var spawned := 0
 	var planted := 0
 	for player_variant: Variant in players:
 		var player: Node3D = player_variant as Node3D
 		for slot in count:
-			var position := _horde_position(player.global_position, pattern, radius_min, radius_max, lane, slot, count, rng)
+			var position := _horde_position(player.global_position, pattern, radius_min, radius_max, lane, slot, count, rng, start_angle)
 			var variant := int(zombie_settings.get("variant", -1))
 			var result: Variant = main.call("_spawn_zombie", position, variant) if variant >= 0 else main.call("_spawn_zombie", position)
 			if result is bool and bool(result):
@@ -688,10 +746,10 @@ func _plant_horde(main: Node, players: Array, recipe: Dictionary, shot: String) 
 ## Faixa de rua: distribui a horda pelas 4 direcoes cardinais (norte/sul/leste/
 ## oeste) a partir do jogador, para os zumbis caírem em asfalto e nao dentro de
 ## parede. "ring" espalha num anel completo.
-func _horde_position(origin: Vector3, pattern: String, radius_min: float, radius_max: float, lane: float, slot: int, count: int, rng: RandomNumberGenerator) -> Vector3:
+func _horde_position(origin: Vector3, pattern: String, radius_min: float, radius_max: float, lane: float, slot: int, count: int, rng: RandomNumberGenerator, start_angle: float = 0.0) -> Vector3:
 	var position := origin
 	if pattern == "ring":
-		var angle := TAU * (float(slot) / maxf(float(count), 1.0)) + rng.randf_range(-0.15, 0.15)
+		var angle := start_angle + TAU * (float(slot) / maxf(float(count), 1.0)) + rng.randf_range(-0.15, 0.15)
 		var radius := rng.randf_range(radius_min, radius_max)
 		position += Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
 	else:
