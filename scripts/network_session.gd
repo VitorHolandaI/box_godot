@@ -18,6 +18,7 @@ const PING_INTERVAL := 1.0
 const DEFAULT_WORLD_SEED := 240912
 const DISCOVERY_PROTOCOL := "box_godot_server_discovery_v1"
 const DISCOVERY_BROADCAST_ADDRESS := "255.255.255.255"
+const SHOT_CAPTURE_SCRIPT := preload("res://scripts/shot_capture.gd")
 const SERVER_PING_PROBE_SCRIPT := preload("res://scripts/server_ping_probe.gd")
 
 enum Mode { OFFLINE, SERVER, CLIENT }
@@ -135,6 +136,12 @@ func _ready() -> void:
 				push_error("Falha ao conectar: %s" % error_string(error))
 				get_tree().quit(2)
 			return
+
+	if SHOT_CAPTURE_SCRIPT.is_requested():
+		# Dev (--capture): entra direto numa partida offline, sem passar pelo menu.
+		leave_session()
+		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
+		return
 
 
 func _process(delta: float) -> void:
