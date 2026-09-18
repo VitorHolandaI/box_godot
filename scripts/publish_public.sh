@@ -29,13 +29,33 @@ die() {
 	exit 1
 }
 
-require_tools() {
-	command -v git >/dev/null 2>&1 || die "git nao encontrado no PATH (esperado o binario 'git')"
+# Sem git-filter-repo instalado, baixa o script oficial (arquivo unico, sem
+# instalacao) para o cache do usuario. FILTER_REPO_BIN sempre manda.
+ensure_filter_repo() {
 	if [[ "$filter_repo" == */* ]]; then
 		[[ -x "$filter_repo" ]] || die "FILTER_REPO_BIN nao e executavel: '$filter_repo'"
-	elif ! command -v "$filter_repo" >/dev/null 2>&1; then
-		die "git-filter-repo nao encontrado (esperado no PATH ou em FILTER_REPO_BIN): '$filter_repo'"
+		return
 	fi
+	if command -v "$filter_repo" >/dev/null 2>&1; then
+		return
+	fi
+	[[ "$filter_repo" == "git-filter-repo" ]] || die "git-filter-repo nao encontrado (esperado no PATH ou em FILTER_REPO_BIN): '$filter_repo'"
+	local cache_dir="${XDG_CACHE_HOME:-$HOME/.cache}/box-godot"
+	local cached="$cache_dir/git-filter-repo"
+	if [[ ! -x "$cached" ]]; then
+		command -v curl >/dev/null 2>&1 || die "curl nao encontrado para baixar o git-filter-repo (instale com 'pacman -S git-filter-repo' ou defina FILTER_REPO_BIN)"
+		mkdir -p "$cache_dir"
+		echo ">> baixando git-filter-repo (nao instalado) para $cached"
+		curl -fsSL -o "$cached" "https://raw.githubusercontent.com/newren/git-filter-repo/main/git-filter-repo" \
+			|| die "falhou o download do git-filter-repo"
+		chmod +x "$cached"
+	fi
+	filter_repo="$cached"
+}
+
+require_tools() {
+	command -v git >/dev/null 2>&1 || die "git nao encontrado no PATH (esperado o binario 'git')"
+	ensure_filter_repo
 }
 
 require_ip_map() {
