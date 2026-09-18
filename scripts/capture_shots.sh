@@ -86,7 +86,7 @@ encode_variant_gif() {
 		return 1
 	fi
 	mkdir -p "$GIF_DIR"
-	if ! ffmpeg -y -sseof -4.2 -i "$avi" \
+	if ! ffmpeg -y -sseof -4.8 -i "$avi" \
 		-vf "fps=14,scale=560:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3" \
 		-loop 0 "$gif" > /dev/null 2>&1; then
 		echo "   FALHOU: ffmpeg nao gerou $gif" >&2
