@@ -14,6 +14,9 @@ const DEFAULT_DIR := "dist/capturas"
 const READY_TIMEOUT := 45.0
 const RENDER_SETTLE_DRAWS := 3
 const MOMENT_TIMEOUT := 16.0
+const ZOMBIE_SHOT_PREFIX := "zumbi-"
+# Contagem vem do enum de variantes para nao drifar (zombie_mutator.gd).
+const ZOMBIE_VARIANT_COUNT := ZombieMutator.TYPE_COUNT
 const PERF_HUD_PATH := "Interface/PerformanceHUD"
 const ENVIRONMENT_PATH := "Environment"
 
@@ -176,6 +179,8 @@ static func recipe_names() -> Array[String]:
 	var names: Array[String] = []
 	for key: Variant in RECIPES.keys():
 		names.append(String(key))
+	for index in ZOMBIE_VARIANT_COUNT:
+		names.append("%s%02d" % [ZOMBIE_SHOT_PREFIX, index])
 	names.sort()
 	return names
 
@@ -184,15 +189,43 @@ func _ready() -> void:
 	_run()
 
 
+## Receita de GIF por variante de zumbi: um bicho so, camera perto, o jogador
+## aguenta os golpes (pose_health) e a cena segue viva depois do PNG para o
+## --write-movie gravar o ataque (o GIF e cortado do fim do video).
+func _variant_recipe(index: int) -> Dictionary:
+	return {
+		"hud": true,
+		"players": 1,
+		"player_pos": Vector3(24.0, 1.0, 24.0),
+		"camera": {"offset": Vector3(0.0, 9.0, 7.5), "fov": 72.0},
+		"zombies": {"count": 1, "variant": index, "pattern": "cross", "radius_min": 7.0, "radius_max": 7.0, "lane": 1.0},
+		"pose_health": true,
+		"warmup": 1.2,
+		"movie_seconds": 3.4,
+	}
+
+
+## Indice da variante quando o nome da receita e "zumbi-NN" (-1 caso contrario).
+func _variant_index_from_shot(shot: String) -> int:
+	if not shot.begins_with(ZOMBIE_SHOT_PREFIX):
+		return -1
+	var raw := shot.trim_prefix(ZOMBIE_SHOT_PREFIX)
+	if not raw.is_valid_int():
+		return -1
+	var index := int(raw)
+	return index if index >= 0 and index < ZOMBIE_VARIANT_COUNT else -1
+
+
 func _run() -> void:
 	var main := get_parent()
 	var output_directory := capture_directory()
 	var shot := shot_name()
 	if DisplayServer.get_name() == "headless":
 		_abort("captura precisa de janela; '--headless' nao renderiza (use --resolution e um display)")
-	if not RECIPES.has(shot):
+	var variant_index := _variant_index_from_shot(shot)
+	if not RECIPES.has(shot) and variant_index < 0:
 		_abort("receita desconhecida '%s'; validas: %s" % [shot, ", ".join(recipe_names())])
-	var recipe: Dictionary = RECIPES[shot]
+	var recipe: Dictionary = _variant_recipe(variant_index) if variant_index >= 0 else RECIPES[shot]
 	await _force_window_size()
 	if not await _wait_for_world(main):
 		_abort("mundo nao ficou pronto em %.0fs (seed, modo ou cidade falhou)" % READY_TIMEOUT)
@@ -231,6 +264,11 @@ func _run() -> void:
 	var save_error := image.save_png(file_path)
 	if save_error != OK:
 		_abort("falha ao salvar '%s': erro %d" % [file_path, save_error])
+	var movie_seconds := float(recipe.get("movie_seconds", 0.0))
+	if movie_seconds > 0.0:
+		# O video (--write-movie) grava do inicio ao fim do processo: manter a
+		# cena viva aqui da ao ffmpeg (-sseof) o trecho do ataque para cortar.
+		await _warmup_seconds(movie_seconds, players[0] as Node3D, keep_alive)
 	print(JSON.stringify({
 		"event": "shot_saved",
 		"shot": shot,
@@ -637,7 +675,8 @@ func _plant_horde(main: Node, players: Array, recipe: Dictionary, shot: String) 
 		var player: Node3D = player_variant as Node3D
 		for slot in count:
 			var position := _horde_position(player.global_position, pattern, radius_min, radius_max, lane, slot, count, rng)
-			var result: Variant = main.call("_spawn_zombie", position)
+			var variant := int(zombie_settings.get("variant", -1))
+			var result: Variant = main.call("_spawn_zombie", position, variant) if variant >= 0 else main.call("_spawn_zombie", position)
 			if result is bool and bool(result):
 				spawned += 1
 			planted += 1
