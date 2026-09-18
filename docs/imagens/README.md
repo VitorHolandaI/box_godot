@@ -16,7 +16,7 @@ imagem.
 | `cidade-ampla.jpg` | cidade procedural vista de cima (sem nevoa nesta receita) |
 | `aereo-na-horda.jpg` | ataque aereo marcado no chao, bombas caindo em linha |
 | `granada-na-horda.jpg` | granada explodindo no meio da horda |
-| `swat-aliado.jpg` | esquadrao SWAT aliado com fumaca, segurando a rua |
+| `swat-aliado.jpg` | esquadrao SWAT aliado entrando na rua (sem fumaca: o jogo nao tem esse efeito) |
 | `airdrop-aviao.jpg` | aviao de suprimentos cruzando a cidade (sobrevoo) |
 | `airdrop.jpg` | crate de armas descendo de paraquedas |
 | `pvp-freezetime.jpg` | tempo de compra na base, com banner e placar |
