@@ -9,4 +9,4 @@ essencial (o que e, como rodar, controles) e aponta para ca.
 | `mecanicas.md` | safehouse e sistema de vidas, propagacao sonora de tiros e ecolocalizacao dos zumbis |
 | `multiplayer.md` | multiplayer local, servidor dedicado (ENet, portas), descoberta de salas e deploy/release na VPS |
 | `pvp.md` | modo mata-mata: bases, freezetime, compra, melhor de 3 rodadas, bots e HUD |
-| `desenvolvimento.md` | builds Linux/Windows, `build_exports.sh` e testes automatizados |
+| `desenvolvimento.md` | builds Linux/Windows/macOS, `build_exports.sh`, template de macOS, assinatura e testes automatizados |
