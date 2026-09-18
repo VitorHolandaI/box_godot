@@ -9,10 +9,56 @@ Autor: Vitor Holanda.
 
 ## Imagens
 
-![Onda de zumbis cercando o jogador numa esquina da cidade](docs/imagens/sobrevivencia-cidade.jpg)
+![Sobrevivencia: horda cercando o jogador num cruzamento da cidade](docs/imagens/hero-horda.jpg)
 
-Onda de sobrevivencia vista de cima, com HUD (vidas, munição, abates, sonar) e
-minimapa. Mais imagens em [`docs/imagens/`](docs/imagens/).
+Vista de cima durante o jogo, com o HUD (vidas, munição, abates, sonar) e o minimapa.
+
+![Onda alta: variantes maiores e o cerco fechando](docs/imagens/horda-onda-alta.jpg)
+
+Onda alta: o mix de zumbis muda, aparecem variantes maiores e o HUD mostra hora, onda e restantes.
+
+![Ataque aereo marcado no chao, com a horda em volta](docs/imagens/aereo-na-horda.jpg)
+
+Ataque aereo: o alvo e marcado no chao e as bombas caem em linha sobre a horda.
+
+![Granada explodindo no meio da horda](docs/imagens/granada-na-horda.jpg)
+
+Granada: explosao em area, com dano e ruido que atrai mais zumbis.
+
+![Esquadrao SWAT ajudando a segurar a rua](docs/imagens/swat-aliado.jpg)
+
+SWAT: um esquadrao aliado desce com fumaca e segura a rua por 20 segundos.
+
+![Aviao de suprimentos cruzando a cidade](docs/imagens/airdrop-aviao.jpg)
+
+Airdrop: o aviao cruza baixo sobre as ruas e marca o ponto de soltura.
+
+![Crate de armas descendo de paraquedas](docs/imagens/airdrop.jpg)
+
+...e o crate de armas desce de paraquedas no ponto marcado.
+
+![Sonar ativo revelando zumbis no minimapa](docs/imagens/sonar.jpg)
+
+Sonar ativo: os zumbis por perto viram pontos no minimapa, inclusive atras de parede.
+
+![Mata-mata PVP: tempo de compra na base](docs/imagens/pvp-freezetime.jpg)
+
+Mata-mata PVP: tempo de compra na base, com o placar `Time A x Time B` no HUD.
+
+![Fim de rodada no mata-mata](docs/imagens/pvp-fim-de-rodada.jpg)
+
+Fim de rodada por eliminacao, com o placar atualizado.
+
+![Tela dividida com 4 jogadores locais](docs/imagens/tela-dividida.jpg)
+
+Tela dividida 2x2, com um HUD por jogador: ate 4 pessoas no mesmo teclado.
+
+![Cidade procedural vista de cima](docs/imagens/cidade-ampla.jpg)
+
+Cidade procedural: quadras, ruas, muralha e a borda da floresta.
+
+As imagens sao geradas pelo proprio jogo (`scripts/capture_shots.sh`); todas em
+[`docs/imagens/`](docs/imagens/).
 
 ## Requisitos
 
