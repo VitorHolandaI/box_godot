@@ -15,6 +15,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `build_exports.sh`: gera clientes release autocontidos para Linux e Windows e checksums; aceita templates customizados e `DIST_DIR`.
 - `build_custom_templates.sh`: compila templates release do Godot otimizados para tamanho (sem Vulkan/XR/modulos nao usados).
 - `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis e do hitscan com esfera de tolerancia ao atraso de rede, mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
+- `capture_shots.sh`: captura os frames de divulgacao do README pelo modo `--capture` do jogo e otimiza para `docs/imagens/` (`--shot=NOME`, `--list`, `--no-optimize`; brutos em `dist/capturas/`).
 - `corpse_cleanup_policy.gd`: escolhe quais ragdolls somem: so os longe de todos os jogadores, com teto que remove o mais distante.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
 - `crate_weapon_model_builder.gd`: modelos em caixas das armas de crate na mao do jogador (escopetas, fuzis, sniper, bazuca e armas futuristas com faixas brilhando).
@@ -43,8 +44,10 @@ Logica de jogo, rede, interface e testes automatizados.
 - `player_slots_replication.gd`: decide quando os slots de arma entram no snapshot (3 snapshots apos cada mudanca e refresh a cada 20 com fase por jogador).
 - `player_snapshot_codec.gd`: snapshot binario de jogadores (47 bytes sem slots de arma), varios por pacote abaixo do MTU e codificado uma vez para todos os peers; o id de peer vai como int32 COM sinal (o ENet sorteia ids negativos e o esquadrao SWAT usa reservados: em u32 o cliente nao achava o no e descartava o estado).
 - `player_throwables.gd`: uso dos itens na autoridade: granada em arco, faca de arremesso silenciosa que atravessa 2 e pedido de ataque aereo/SWAT a cena.
+- `preview_shots.sh`: monta o album local dos frames (CSS do GitHub) e serve em `http://localhost:8765`; `--grip` abre o README renderizado pela API do GitHub e `--stop` derruba os servidores. Nada disso publica nada.
 - `safehouse_roof_builder.gd`: telhado da casa segura com rampa da passarela ao alcapao, mureta com vao nos fundos e marquise para sair por cima.
 - `shared_vision.gd`: visao compartilhada por raio: zumbi a ate 35 m de qualquer jogador (local ou aliado) fica visivel para todos; sem cone e sem raios de oclusao.
+- `shot_capture.gd`: receitas de captura (`--shot=NOME`) usadas pelo `capture_shots.sh`: espera a cidade, posiciona jogadores, planta horda nas ruas, dispara calls (aereo, granada, SWAT, airdrop), espera o evento da cena e salva o PNG a 1920x1080 sem o overlay de debug. Inerte sem `--capture`.
 - `snapshot_interp_buffer.gd`: buffer de interpolacao dos proxies no client (zumbi e jogador): guarda varias amostras, procura o par que envolve o tempo de render (agora - atraso de 2 intervalos, ajustado ao jitter, 150-450 ms) e reinicia em realocacao do servidor.
 - `server_tick_policy.gd`: servidor dedicado roda fisica a 30 Hz com no maximo 2 passos por frame (corta a bola de neve de ticks medida na VPS) e pula o fade visual dos zumbis.
 - `swat_squad_bot.gd`: esquadrao SWAT como 4 jogadores de verdade simulados no servidor (IA do bot de teste em modo esquadrao, Uzi com municao infinita, invulneraveis e fora do grupo "player", presos a 40 m do dono), replicados pelo snapshot de jogadores.
