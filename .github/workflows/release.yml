@@ -1,12 +1,12 @@
 name: release
 
-## Gera os clientes Linux/Windows/macOS e publica a Release.
-## Dispara na mao (Actions -> release -> Run workflow) ou empurrando uma tag build-*.
+# Gera os clientes Linux/Windows/macOS e publica a Release.
+# Dispara na mao (Actions -> release -> Run workflow) ou empurrando uma tag build-*.
 on:
   workflow_dispatch:
     inputs:
       tag:
-        description: Tag da release (ex.: build-2026-09-18)
+        description: "Tag da release, por exemplo build-2026-09-18"
         required: true
   push:
     tags:
@@ -33,7 +33,7 @@ jobs:
           sudo ln -sf "$HOME/godot/Godot_v${VERSION}-stable_linux.x86_64" /usr/local/bin/godot
           TEMPLATES="$HOME/.local/share/godot/export_templates/${VERSION}.stable"
           mkdir -p "$TEMPLATES"
-          # O pacote oficial tem >1 GB: baixa so os 3 trechos necessarios.
+          # O pacote oficial tem mais de 1 GB: baixa so os 3 trechos necessarios.
           python3 scripts/fetch_macos_template.py --version "$VERSION" \
             --entry templates/linux_release.x86_64 --output "$TEMPLATES/linux_release.x86_64"
           python3 scripts/fetch_macos_template.py --version "$VERSION" \
@@ -61,16 +61,17 @@ jobs:
       - name: Publicar ou atualizar a Release
         env:
           GH_TOKEN: ${{ github.token }}
+          TAG_INPUT: ${{ github.event.inputs.tag }}
         run: |
           set -euo pipefail
-          TAG="${{ github.event.inputs.tag || github.ref_name }}"
+          TAG="${TAG_INPUT:-${GITHUB_REF_NAME}}"
           echo "tag: $TAG"
           gh release view "$TAG" >/dev/null 2>&1 \
             || gh release create "$TAG" --title "Box Godot $TAG" \
-                 --notes "Clientes Linux, Windows e macOS gerados pelo Actions. Os servidores continuam recusando build diferente: confira o build no nome/notes."
+                 --notes "Clientes Linux, Windows e macOS gerados pelo Actions."
           gh release upload "$TAG" \
             dist/box-godot-linux.x86_64 dist/box-godot-windows.exe \
             dist/box-godot-macos.zip dist/SHA256SUMS --clobber
+
       - name: Resumo
-        run: |
-          cat dist/SHA256SUMS
+        run: cat dist/SHA256SUMS
