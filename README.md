@@ -23,11 +23,12 @@ Ataque aereo: o alvo e marcado no chao e as bombas caem em linha sobre a horda.
 
 ![Granada explodindo no meio da horda](docs/imagens/granada-na-horda.jpg)
 
-Granada: explosao em area, com dano e ruido que atrai mais zumbis.
+Granada: uma sequencia de granadas no meio da horda (a explosao em area dura
+ menos de um segundo, entao a serie e o que garante o flagra).
 
 ![Esquadrao SWAT ajudando a segurar a rua](docs/imagens/swat-aliado.jpg)
 
-SWAT: um esquadrao aliado desce com fumaca e segura a rua por 20 segundos.
+SWAT: um esquadrao aliado entra na rua e segura o cerco por 20 segundos.
 
 ![Aviao de suprimentos cruzando a cidade](docs/imagens/airdrop-aviao.jpg)
 
@@ -51,7 +52,8 @@ Fim de rodada por eliminacao, com o placar atualizado.
 
 ![Tela dividida com 4 jogadores locais](docs/imagens/tela-dividida.jpg)
 
-Tela dividida 2x2, com um HUD por jogador: ate 4 pessoas no mesmo teclado.
+Tela dividida 2x2, com um HUD por jogador: ate 4 jogadores locais na mesma tela,
+ cada um com seu dispositivo (teclado ou controle).
 
 ![Cidade procedural vista de cima](docs/imagens/cidade-ampla.jpg)
 
