@@ -82,6 +82,16 @@ verify_clean() {
 	binarios="$(cd "$mirror" && git rev-list --objects --all | grep -cE '\.(x86_64|exe|pck)$' || true)"
 	[[ "$binarios" == "0" ]] || die "ainda ha $binarios binario(s) no historico reescrito"
 
+	local mencoes_claude
+	mencoes_claude="$(cd "$mirror" && git log --all --format='%B' | grep -ci 'claude' || true)"
+	[[ "$mencoes_claude" == "0" ]] || die "historico reescrito ainda cita Claude em $mencoes_claude linha(s)"
+	echo "   ok: nenhuma mencao a Claude nas mensagens"
+
+	local arquivo_claude
+	arquivo_claude="$(cd "$mirror" && git rev-list --objects --all | grep -c 'CLAUDE.md' || true)"
+	[[ "$arquivo_claude" == "0" ]] || die "CLAUDE.md ainda existe no historico reescrito"
+	echo "   ok: CLAUDE.md fora do historico"
+
 	local mensagens
 	mensagens="$(cd "$mirror" && git log --all --format='%B')"
 	local linha ip hits
@@ -108,8 +118,14 @@ publish() {
 		cd "$mirror"
 		"$filter_repo" --force \
 			--invert-paths --path-glob '*.x86_64' --path-glob '*.exe' --path-glob '*.pck' \
+			--path CLAUDE.md \
 			--replace-text "$ip_map_file" \
-			--replace-message "$ip_map_file" >/dev/null
+			--replace-message "$ip_map_file" \
+			--message-callback '
+lines = [line for line in message.decode("utf-8", "replace").splitlines()
+         if "claude" not in line.lower()]
+return ("\n".join(lines).rstrip() + "\n").encode("utf-8")
+' >/dev/null
 	)
 
 	echo ">> conferindo o resultado"
