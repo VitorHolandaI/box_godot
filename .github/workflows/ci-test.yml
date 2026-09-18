@@ -1,0 +1,15 @@
+name: ci-test
+
+## Workflow minimo: se ISTO nao agendar job, o problema e do repo/plataforma e
+## nao do release.yml. Dispara por tag build-test-* ou na mao.
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'build-test-*'
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "workflow agendou ok"
