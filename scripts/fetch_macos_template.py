@@ -184,7 +184,9 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Baixa so o template macOS dos export templates do Godot")
     parser.add_argument("--version", default="4.7.2", help="versao do Godot (padrao 4.7.2)")
     parser.add_argument("--list", action="store_true", help="lista as entradas do pacote e sai")
-    parser.add_argument("--output", help="caminho do macos.zip (padrao: pasta de templates do Godot)")
+    parser.add_argument("--output", help="caminho de saida (padrao: pasta de templates do Godot)")
+    parser.add_argument("--entry", default="templates/macos.zip",
+                        help="entrada do pacote a extrair (padrao: templates/macos.zip)")
     args = parser.parse_args()
 
     url = asset_url(args.version)
@@ -196,9 +198,10 @@ def main() -> None:
             print(f"   {name} ({compressed / 1048576:.1f} MB)")
         return
 
-    destination = pathlib.Path(args.output) if args.output else template_dir(args.version) / "macos.zip"
+    default_name = pathlib.PurePosixPath(args.entry).name
+    destination = pathlib.Path(args.output) if args.output else template_dir(args.version) / default_name
     destination.parent.mkdir(parents=True, exist_ok=True)
-    extract_entry(url, "templates/macos.zip", total, destination)
+    extract_entry(url, args.entry, total, destination)
 
 
 if __name__ == "__main__":
