@@ -3,9 +3,16 @@
 Jogo de zumbis em Godot 4 com dois modos: **sobrevivência** (ondas de zumbis,
 loot, safehouse) e **mata-mata PVP** (dois times, compra de armas, melhor de 3
 rodadas). Roda em janela única ou tela dividida (até 4 jogadores locais), com
-servidor dedicado e cliente para Linux e Windows.
+servidor dedicado e cliente para Linux, Windows e macOS.
 
 Autor: Vitor Holanda.
+
+## Imagens
+
+![Onda de zumbis cercando o jogador numa esquina da cidade](docs/imagens/sobrevivencia-cidade.jpg)
+
+Onda de sobrevivencia vista de cima, com HUD (vidas, munição, abates, sonar) e
+minimapa. Mais imagens em [`docs/imagens/`](docs/imagens/).
 
 ## Requisitos
 
