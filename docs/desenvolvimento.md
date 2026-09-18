@@ -2,7 +2,7 @@
 
 # Desenvolvimento: builds, export e testes
 
-## Builds Linux e Windows
+## Builds Linux, Windows e macOS
 
 
 Com os export templates do Godot 4.7.2 instalados, gere os dois clientes com:
@@ -60,3 +60,45 @@ O mapa `.publish-ip-map.txt` fica fora do repositorio (gitignored) porque contem
 os valores reais; o `.example` mostra o formato. O script recusa mapa malformado
 e falha se ainda sobrar binario ou IP no historico reescrito.
 
+### macOS
+
+`bash scripts/build_exports.sh` gera tambem `dist/box-godot-macos.zip`, com um
+`.app` **universal** (x86_64 + arm64) sem assinatura. Duas coisas precisam estar
+no lugar:
+
+1. **Template universal do Godot.** O pacote oficial de export templates tem
+   >1 GB porque traz todas as plataformas. Baixe so o do macOS (HTTP range, na
+   faixa de 120 MB):
+   ```bash
+   python3 scripts/fetch_macos_template.py          # Godot 4.7.2
+   python3 scripts/fetch_macos_template.py --list   # so lista o pacote
+   ```
+   Ele instala em `~/.local/share/godot/export_templates/4.7.2.stable/macos.zip`
+   e exige a versao do engine igual a do editor (4.7.2). Sem o arquivo, o export
+   pula o macOS com aviso, sem quebrar Linux/Windows.
+2. **ETC2 ASTC habilitado no projeto** (`rendering/textures/vram_compression/
+   import_etc2_astc=true` em `project.godot`): o export recusa universal/arm64
+   sem isso, porque GPUs da Apple usam esse formato. Ja vem ligado no projeto.
+
+### Assinatura e notarizacao (macOS)
+
+O `.app` sai **sem assinatura**. No Mac de quem for jogar, o Gatekeeper bloqueia
+o primeiro abrir: use botao direito -> Abrir, ou remova a quarentena:
+
+```bash
+xattr -dr com.apple.quarantine "Box Godot.app"
+```
+
+Para distribuir fora da App Store, o fluxo oficial e Developer ID + `codesign` +
+notarizacao com `notarytool` (conta Apple Developer paga). Essas ferramentas
+existem **apenas no macOS**, entao essa etapa roda numa maquina Mac: no preset
+`macOS` de `export_presets.cfg`, preencha `codesign/codesign` (identidade),
+`codesign/identity`, `codesign/apple_team_id`, `codesign/provisioning_profile`,
+`notarization/notarization` e as credenciais (`apple_id_name`/`apple_id_password`
+ou `api_key`/`api_key_id`) e exporte de la. Do Linux o Godot so gera o app sem
+assinatura.
+
+Observacao: o cliente macOS sai com o template **oficial** (completo), enquanto
+Linux/Windows usam o engine custom enxuto do projeto. O handshake do jogo compara
+o `GAME_BUILD`, nao a versao do engine, entao o cliente de macOS conecta nos
+servidores normalmente.
