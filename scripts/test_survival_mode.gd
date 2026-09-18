@@ -19,6 +19,7 @@ const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state
 func run(test_root: Node) -> void:
 	_test_wave_schedule(test_root)
 	_test_airdrop_schedule(test_root)
+	_test_airdrop_plane_heading(test_root)
 	_test_airdrop_drop_and_pickup(test_root)
 	_test_ground_weapon_sync(test_root)
 	_test_crate_expires(test_root)
@@ -57,6 +58,22 @@ func _test_wave_schedule(test_root: Node) -> void:
 		_fail(test_root, "A ultima onda deveria terminar em 600 zumbis.")
 		return
 	print("PASS: Progressao de ondas validada.")
+
+
+## O aviao precisa voar de nariz: o modelo tem o nariz em +Z e a cauda em -Z,
+## e antes ele cruzava o mapa de rabo pra frente (yaw invertido).
+func _test_airdrop_plane_heading(test_root: Node) -> void:
+	print("Testando orientacao do aviao de airdrop...")
+	var to_plus_z := AirdropPlane.heading_for(Vector3(0.0, 0.0, 1.0))
+	if not is_equal_approx(to_plus_z, 0.0):
+		_fail(test_root, "Aviao indo para +Z deveria ter yaw 0 (nariz +Z); veio %.4f" % to_plus_z)
+	var to_plus_x := AirdropPlane.heading_for(Vector3(1.0, 0.0, 0.0))
+	if not is_equal_approx(to_plus_x, PI * 0.5):
+		_fail(test_root, "Aviao indo para +X deveria ter yaw PI/2; veio %.4f" % to_plus_x)
+	var to_minus_z := absf(AirdropPlane.heading_for(Vector3(0.0, 0.0, -1.0)))
+	if not is_equal_approx(to_minus_z, PI):
+		_fail(test_root, "Aviao indo para -Z deveria ter yaw PI; veio %.4f" % to_minus_z)
+	print("PASS: Orientacao do aviao de airdrop validada.")
 
 
 ## Ondas de airdrop e conteudo deterministico do crate.
