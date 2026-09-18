@@ -74,19 +74,19 @@ const RECIPES := {
 		"camera": {"offset": Vector3(0.0, 21.0, 18.5), "fov": 72.0},
 		"zombies": {"count": 24, "pattern": "cross", "radius_min": 6.0, "radius_max": 16.0, "lane": 3.0},
 		"pose_health": true,
-		"actions": [{"name": "grenade", "delay": 1.0}],
-		"wait_for": "grenade_exploded",
+		"actions": [{"name": "grenade_volley", "count": 3, "spacing": 1.0, "delay": 1.0}],
+		"wait_for": "grenade_explosion",
 		"settle": 0.05,
 	},
 	"swat-aliado": {
 		"hud": true,
 		"players": 1,
 		"player_pos": Vector3(24.0, 1.0, -24.0),
-		"camera": {"offset": Vector3(0.0, 22.0, 19.0), "fov": 72.0},
+		"camera": {"offset": Vector3(0.0, 25.0, 22.0), "fov": 72.0},
 		"zombies": {"count": 30, "pattern": "cross", "radius_min": 6.0, "radius_max": 17.0, "lane": 3.0},
 		"pose_health": true,
 		"actions": [{"name": "swat", "delay": 0.3}],
-		"warmup": 3.2,
+		"warmup": 1.1,
 	},
 	"airdrop": {
 		"hud": true,
@@ -441,16 +441,19 @@ func _apply_actions(main: Node, players: Array, recipe: Dictionary) -> void:
 	for entry_variant: Variant in actions:
 		var entry: Dictionary = entry_variant if entry_variant is Dictionary else {"name": String(entry_variant)}
 		await _wait_seconds(float(entry.get("delay", 0.0)))
-		await _run_action(main, player, String(entry.get("name", "")))
+		await _run_action(main, player, entry)
 
 
-func _run_action(main: Node, player: Node3D, action: String) -> void:
+func _run_action(main: Node, player: Node3D, entry: Dictionary) -> void:
+	var action := String(entry.get("name", ""))
 	match action:
 		"sonar":
 			if player.has_method("trigger_sonar"):
 				player.call("trigger_sonar")
 		"grenade":
 			await _press_player_action(player, "grenade")
+		"grenade_volley":
+			await _throw_grenade_volley(player, int(entry.get("count", 3)), float(entry.get("spacing", 1.0)))
 		"air_strike":
 			# A call so existe se o jogador tiver a carga; a onda da 1 a cada 3.
 			_grant_item(player, PlayerEquipment.Item.AIR_STRIKE, 2)
@@ -464,6 +467,16 @@ func _run_action(main: Node, player: Node3D, action: String) -> void:
 			_open_buy_menu(main)
 		_:
 			push_warning("shot_capture: acao desconhecida '%s'" % action)
+
+
+## Serie de granadas no mesmo alvo. A explosao dura so 0,55 s (BloaterBurstEffect),
+## entao uma granada unica quase nunca cai no frame; em serie sempre tem uma
+## explodindo enquanto as outras estao no ar.
+func _throw_grenade_volley(player: Node3D, count: int, spacing: float) -> void:
+	_grant_item(player, PlayerEquipment.Item.GRENADE, count)
+	for _index in count:
+		await _press_player_action(player, "grenade")
+		await _wait_seconds(spacing)
 
 
 ## O BuyMenu reage a evento de input (nao a polling de acao), entao
@@ -524,6 +537,8 @@ func _moment_reached(main: Node, moment: String, elapsed: float) -> bool:
 				if progress >= drop_at - 0.06:
 					return true
 			return false
+		"grenade_explosion":
+			return not _find_with_script(main, "bloater_burst_effect.gd").is_empty()
 		"pvp_buy_open":
 			return bool(main.get("pvp_buy_open"))
 		"pvp_live":
@@ -544,6 +559,21 @@ func _moment_reached(main: Node, moment: String, elapsed: float) -> bool:
 		_:
 			push_warning("shot_capture: momento desconhecido '%s'" % moment)
 			return true
+
+
+## Procura o script em toda a arvore: a explosao nasce dentro do no de efeitos,
+## nao como filho direto da cena.
+func _find_with_script(root: Node, script_file: String) -> Array[Node]:
+	var found: Array[Node] = []
+	var pending: Array[Node] = [root]
+	while not pending.is_empty():
+		var node: Node = pending.pop_back()
+		var attached: Script = node.get_script() as Script
+		if attached != null and attached.resource_path.ends_with(script_file):
+			found.append(node)
+		for child: Node in node.get_children():
+			pending.append(child)
+	return found
 
 
 ## Filhos diretos da cena principal cujo script e o arquivo indicado.
