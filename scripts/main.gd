@@ -17,6 +17,7 @@ const AIRDROP_PLANE_SCRIPT := preload("res://scripts/airdrop_plane.gd")
 const CORPSE_CLEANUP_POLICY_SCRIPT := preload("res://scripts/corpse_cleanup_policy.gd")
 const ZOMBIE_SNAPSHOT_CODEC_SCRIPT := preload("res://scripts/zombie_snapshot_codec.gd")
 const LOAD_TEST_OPTIONS_SCRIPT := preload("res://scripts/load_test_options.gd")
+const SHOT_CAPTURE_SCRIPT := preload("res://scripts/shot_capture.gd")
 const CORPSE_CLEANUP_INTERVAL := 1.0
 const MAX_LOCAL_PLAYERS := 4
 const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
@@ -219,6 +220,10 @@ func _ready() -> void:
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
 	coordinator.name = "ZombieFlockCoordinator"
 	add_child(coordinator)
+
+	if SHOT_CAPTURE_SCRIPT.is_requested():
+		# Captura de frames para docs/README (dev-only): inerte sem --capture.
+		add_child(SHOT_CAPTURE_SCRIPT.new())
 
 	if not NetworkSession.bot_name.is_empty():
 		DisplayServer.window_set_title("Box Godot - %s" % NetworkSession.bot_name)
