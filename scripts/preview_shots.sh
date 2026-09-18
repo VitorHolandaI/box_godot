@@ -80,6 +80,20 @@ def card(name: str) -> str:
 cards = "\n".join(card(name) for name in found + extra)
 total_kb = sum((img_dir / f"{name}.jpg").stat().st_size for name in found + extra) // 1024
 
+gifs = sorted((img_dir / "zumbis").glob("*.gif"))
+if gifs:
+    gif_kb = sum(gif.stat().st_size for gif in gifs) // 1024
+    tiles = "\n".join(
+        f'<figure><img src="../docs/imagens/zumbis/{gif.name}" alt="{gif.stem}">'
+        f'<figcaption>{gif.name} &middot; {gif.stat().st_size // 1024} KB</figcaption></figure>'
+        for gif in gifs
+    )
+    cards += (f'<section class="card"><h2>Zumbis por variante (GIF)</h2>'
+              f'<p class="caption">{len(gifs)} variantes atacando; descricoes em '
+              f'<a href="../../docs/zumbis.md">docs/zumbis.md</a>.</p>'
+              f'<div class="gifs">{tiles}</div>'
+              f'<p class="meta">{gif_kb} KB no total (media de ~{gif_kb // len(gifs)} KB por GIF)</p></section>')
+
 document = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -93,6 +107,10 @@ document = f"""<!DOCTYPE html>
   .caption {{ margin: 4px 0 12px; }}
   .meta {{ font-size: 13px; color: #57606a; }}
   .summary {{ background: #f6f8fa; border: 1px solid #d0d7de; border-radius: 6px; padding: 12px 16px; }}
+  .gifs {{ display: flex; flex-wrap: wrap; gap: 12px; }}
+  .gifs figure {{ margin: 0; width: 300px; }}
+  .gifs img {{ width: 100%; height: auto; border: 1px solid #d0d7de; border-radius: 6px; }}
+  .gifs figcaption {{ font-size: 12px; color: #57606a; }}
   @media (prefers-color-scheme: dark) {{
     body {{ background: #0d1117; }}
     .card {{ border-color: #30363d; }}
