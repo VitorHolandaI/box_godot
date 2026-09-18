@@ -12,8 +12,17 @@ bash scripts/capture_shots.sh --gif             # as 21
 ```
 
 O runner roda o jogo com `--write-movie` (Movie Maker, 15 fps fixos), recorta os
-ultimos 4,2 s do AVI (que e o trecho do ataque) e converte com `ffmpeg`
-(paleta em 2 passos). Os artefatos intermediarios (PNG e AVI) ficam em
+ultimos 4,8 s do AVI (que e o trecho do ataque) e converte com `ffmpeg`
+(paleta em 2 passos).
+
+Detalhes das receitas que existem por causa de comportamento de variante:
+
+- quem tem habilidade de alcance nasce mais longe, senao o arranque nao cabe no
+  GIF: charger 13 m (investe entre 5 e 14 m), jumper 12 m (pula entre 4 e 12 m),
+  spitter 12 m (cospe ate 12 m e mantem 8 m), smoker 12 m, stalker 16 m (so fica
+  visivel perto);
+- o **curandeiro** nasce com 3 vitimas plantadas na rua, mortas logo depois: sem
+  cadaver recente nao ha o que ele levantar. Os artefatos intermediarios (PNG e AVI) ficam em
 `dist/capturas/`, fora do repo.
 
 A descricao de cada variante esta em [`../../zumbis.md`](../../zumbis.md).

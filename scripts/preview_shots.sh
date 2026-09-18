@@ -73,7 +73,7 @@ def card(name: str) -> str:
     return f"""<section class="card">
   <h2>{html.escape(name)}</h2>
   <p class="caption">{html.escape(captions.get(name, ""))}</p>
-  <img src="../docs/imagens/{image.name}" alt="{html.escape(name)}">
+  <img src="../../docs/imagens/{image.name}" alt="{html.escape(name)}">
   <p class="meta">{image.name} &middot; {size_kb} KB no README &middot; {link}</p>
 </section>"""
 
@@ -84,20 +84,26 @@ gifs = sorted((img_dir / "zumbis").glob("*.gif"))
 if gifs:
     gif_kb = sum(gif.stat().st_size for gif in gifs) // 1024
     tiles = "\n".join(
-        f'<figure><img src="../docs/imagens/zumbis/{gif.name}" alt="{gif.stem}">'
+        f'<figure><a href="../../docs/imagens/zumbis/{gif.name}">'
+        f'<img src="../../docs/imagens/zumbis/{gif.name}" alt="{gif.stem}"></a>'
         f'<figcaption>{gif.name} &middot; {gif.stat().st_size // 1024} KB</figcaption></figure>'
         for gif in gifs
     )
-    cards += (f'<section class="card"><h2>Zumbis por variante (GIF)</h2>'
-              f'<p class="caption">{len(gifs)} variantes atacando; descricoes em '
-              f'<a href="../../docs/zumbis.md">docs/zumbis.md</a>.</p>'
-              f'<div class="gifs">{tiles}</div>'
-              f'<p class="meta">{gif_kb} KB no total (media de ~{gif_kb // len(gifs)} KB por GIF)</p></section>')
+    gif_section = (f'<section class="card" id="zumbis"><h2>Zumbis por variante (GIF)</h2>'
+                   f'<p class="caption">{len(gifs)} variantes atacando; descricoes em '
+                   f'<a href="../../docs/zumbis.md">docs/zumbis.md</a>. '
+                   f'Os GIFs animam sozinhos (sem play): se aparecerem parados, e cache do '
+                   f'navegador, use Ctrl+Shift+R.</p>'
+                   f'<div class="gifs">{tiles}</div>'
+                   f'<p class="meta">{gif_kb} KB no total (media de ~{gif_kb // len(gifs)} KB por GIF)</p></section>')
+else:
+    gif_section = ""
 
 document = f"""<!DOCTYPE html>
 <html lang="pt-BR">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Cache-Control" content="no-store">
 <title>Box Godot - frames do README (preview local)</title>
 <link rel="stylesheet" href="github-markdown.css">
 <style>
@@ -121,15 +127,40 @@ document = f"""<!DOCTYPE html>
 </style>
 </head>
 <body class="markdown-body">
-<p class="summary">Preview local dos frames do README - {len(found) + len(extra)} imagens, {total_kb} KB no total.
+<p class="summary">Preview local - {len(found) + len(extra)} frames + {len(gifs)} GIFs de zumbi.
 Os PNG brutos 1920x1080 estao no mesmo servidor. Nada aqui foi publicado: o repo publico so muda
-quando <code>scripts/publish_public.sh</code> roda.</p>
+quando <code>scripts/publish_public.sh</code> roda. <a href="#zumbis">Ir para os GIFs</a>.</p>
+{gif_section}
 {cards}
 </body>
 </html>
 """
 (out_dir / "preview.html").write_text(document, encoding="utf-8")
-print(f"album gerado: {out_dir / 'preview.html'} ({len(found) + len(extra)} imagens)")
+print(f"album gerado: {out_dir / 'preview.html'} ({len(found) + len(extra)} frames + "
+      f"{len(gifs)} gifs)")
+
+# Verificacao: resolve cada src relativo contra a URL do album (como o navegador
+# faz) e confere que existe. Sem isso um ../ errado passa batido.
+import re
+from urllib.parse import urljoin, urlparse, unquote
+from urllib.request import urlopen
+base = "http://localhost:8765/dist/capturas/preview.html"
+flags = re.findall(r'(?:src|href)="([^"#]+)"', document)
+suite_dir = out_dir.parent.parent
+broken = []
+for flag in sorted(set(flags)):
+    if flag.startswith("http"):
+        continue
+    resolved = urljoin(base, flag)
+    path = unquote(urlparse(resolved).path).lstrip("/")
+    if not (suite_dir / path).exists():
+        broken.append(flag)
+if broken:
+    print(f"ATENCAO: {len(broken)} links quebrados no album:")
+    for flag in broken[:10]:
+        print(f"  {flag}")
+else:
+    print(f"links ok: {len(set(flags))} referencias resolvidas")
 PY
 
 if tmux has-session -t "$SESSION" 2>/dev/null; then
