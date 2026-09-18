@@ -165,11 +165,16 @@ def extract_entry(url: str, name: str, total: int, destination: pathlib.Path) ->
     entries = list_entries(url)
     method = [entry for entry in entries if entry[0] == name][0][3]
     data = zlib.decompress(raw, -zlib.MAX_WBITS) if method == 8 else raw
-    with zipfile.ZipFile(io.BytesIO(data)) as template_zip:
-        broken = template_zip.testzip()
-        if broken is not None:
-            die(f"template corrompido: {broken}")
-        names = template_zip.namelist()
+    # macos.zip e um zip aninhado; linux_release.x86_64 e o .exe do Windows sao
+    # binarios crus: so valida (e lista) quando for zip de verdade.
+    if data[:4] == b"PK\x03\x04":
+        with zipfile.ZipFile(io.BytesIO(data)) as template_zip:
+            broken = template_zip.testzip()
+            if broken is not None:
+                die(f"template corrompido: {broken}")
+            names = template_zip.namelist()
+    else:
+        names = [f"{name} (binario cru)"]
     destination.write_bytes(data)
     print(f">> salvo em {destination} ({len(data) / 1048576:.0f} MB)")
     print(f"   conteudo: {', '.join(names[:6])}")
