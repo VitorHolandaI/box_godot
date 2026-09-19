@@ -8,7 +8,8 @@ extends Node3D
 ## Uso: abra `scenes/zumbi_lab.tscn` e aperte F6.
 ##
 ## Teclas (nao conflitam com as do player, que sao WASD/F/R/E/1-7):
-##   [ ]  escolhe a variante          - =  quantidade (1,2,5,10,25,50,100)
+##   [ ] ou setas <- ->  escolhe a variante
+##   - = ou setas baixo/cima  quantidade (1,2,5,10,25,50,100)
 ##   K    spawna a quantidade na frente do player
 ##   L    mata todos                  M    limpa a cena
 
@@ -93,14 +94,23 @@ func _unhandled_input(event: InputEvent) -> void:
 	var key_event := event as InputEventKey
 	if key_event == null or not key_event.pressed or key_event.echo:
 		return
+	_handle_lab_key(key_event)
+
+
+## physical_keycode segue a POSICAO da tecla, e no teclado ABNT2 o ']' nao cai em
+## KEY_BRACKETRIGHT (so o '[' funcionava); o unicode e o caractere que a tecla
+## realmente digita, entao cobre o mesmo atalho em qualquer layout. As setas
+## ficam como caminho que nunca depende de layout.
+## Uso: _handle_lab_key(evento de tecla pressionada)
+func _handle_lab_key(key_event: InputEventKey) -> void:
 	match key_event.physical_keycode:
-		KEY_BRACKETLEFT:
+		KEY_LEFT:
 			_cycle_variant(-1)
-		KEY_BRACKETRIGHT:
+		KEY_RIGHT:
 			_cycle_variant(1)
-		KEY_MINUS:
+		KEY_DOWN:
 			_step_count(-1)
-		KEY_EQUAL:
+		KEY_UP:
 			_step_count(1)
 		KEY_K:
 			_spawn_batch()
@@ -108,6 +118,21 @@ func _unhandled_input(event: InputEvent) -> void:
 			_kill_all()
 		KEY_M:
 			_clear_all()
+		_:
+			_handle_lab_key_by_unicode(key_event.unicode)
+
+
+## Fallback por caractere digitado: 91='[' 93=']' 45='-' 61='='.
+func _handle_lab_key_by_unicode(character: int) -> void:
+	match character:
+		91:
+			_cycle_variant(-1)
+		93:
+			_cycle_variant(1)
+		45:
+			_step_count(-1)
+		61:
+			_step_count(1)
 
 
 ## Troca a variante pela lista de ZombieMutator.Type, dando a volta no fim.
@@ -209,7 +234,7 @@ func _build_hud() -> void:
 func _update_hud() -> void:
 	if _hud == null:
 		return
-	_hud.text = "variante [ ]: %s (%d)   quantidade - =: %d   K spawna   L mata   M limpa" % [
+	_hud.text = "variante [ ] ou <- ->: %s (%d)   quantidade - = ou baixo/cima: %d   K spawna   L mata   M limpa" % [
 		String(ZombieMutator.Type.find_key(spawn_variant_index)),
 		spawn_variant_index,
 		spawn_count,
