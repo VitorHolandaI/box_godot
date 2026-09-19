@@ -11,12 +11,16 @@ extends Node3D
 ##   [ ] ou setas <- ->  escolhe a variante
 ##   - = ou setas baixo/cima  quantidade (1,2,5,10,25,50,100)
 ##   K    spawna a quantidade na frente do player
+##   N    spawna cadaveres (para o coletor absorver)
+##   O    mata so a variante escolhida (faz cadaver sem matar o coletor)
 ##   L    mata todos                  M    limpa a cena
 
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const REPORT_INTERVAL_SECONDS := 2.0
 const COUNT_STEPS: Array[int] = [1, 2, 5, 10, 25, 50, 100]
 const MAX_SPAWN_BATCH := 200
+## Mesmo teto do main: cadaver antigo sai para a lista nao crescer sem fim.
+const MAX_CORPSES := 20
 const SPAWN_DISTANCE := 6.0
 const ARC_STEP_DEGREES := 12.0
 const HUD_MARGIN := Vector2(16.0, 12.0)
@@ -39,6 +43,8 @@ const HUD_MARGIN := Vector2(16.0, 12.0)
 var _bot_ai := PlayerBotAI.new()
 var _report_timer := 0.0
 var _hud: Label
+## Cadaveres registrados como no main, para o coletor ter o que absorver aqui.
+var corpses: Array[Node] = []
 
 
 func _ready() -> void:
@@ -60,7 +66,7 @@ func _ready() -> void:
 	# sem depender de input local nem de servidor.
 	NetworkSession.bot_mode = drive_player_with_bot
 	_build_hud()
-	_startup_spawn_from_arguments()
+	_apply_lab_arguments()
 	_update_hud()
 	print(JSON.stringify({
 		"event": "zombie_lab_started",
@@ -114,6 +120,10 @@ func _handle_lab_key(key_event: InputEventKey) -> void:
 			_step_count(1)
 		KEY_K:
 			_spawn_batch()
+		KEY_N:
+			_spawn_batch(true)
+		KEY_O:
+			_kill_selected_variant()
 		KEY_L:
 			_kill_all()
 		KEY_M:
@@ -152,7 +162,8 @@ func _step_count(step: int) -> void:
 
 
 ## Cria spawn_count zumbis da variante escolhida em arco na frente do player.
-func _spawn_batch() -> void:
+## as_corpse cria o zumbi ja morto, para o coletor ter o que absorver.
+func _spawn_batch(as_corpse: bool = false) -> void:
 	if zombies_parent == null or not is_instance_valid(player):
 		return
 	var total := clampi(spawn_count, 1, MAX_SPAWN_BATCH)
@@ -164,7 +175,21 @@ func _spawn_batch() -> void:
 		zombie.set("forced_variant", spawn_variant_index)
 		zombie.position = _spawn_position_in_front(index, total)
 		zombies_parent.add_child(zombie)
+		if as_corpse:
+			# Morte de verdade (passa por _die): registra o cadaver e solta o
+			# ragdoll, que e o que o coletor procura.
+			zombie.call("take_damage", 999999, Vector3.ZERO)
 	_update_hud()
+
+
+## Mata so a variante escolhida: faz cadaver util sem matar o coletor junto.
+func _kill_selected_variant() -> void:
+	if zombies_parent == null:
+		return
+	for child in zombies_parent.get_children():
+		if int(child.get("zombie_type")) != spawn_variant_index or bool(child.get("is_dead")):
+			continue
+		child.call("take_damage", 999999, Vector3.ZERO)
 
 
 ## Ponto de spawn: arco centrado na frente do player, para um lote nao nascer
@@ -202,20 +227,59 @@ func _clear_all() -> void:
 	_update_hud()
 
 
-## Atalho de linha de comando para testar sem teclado (e checar em headless):
-##   godot --headless --path . --fixed-fps 60 --quit-after 240 \
-##     res://scenes/zumbi_lab.tscn -- --lab-spawn=8
-func _startup_spawn_from_arguments() -> void:
-	for argument in OS.get_cmdline_user_args():
-		if not argument.begins_with("--lab-spawn="):
-			continue
-		var raw_value := argument.trim_prefix("--lab-spawn=")
-		if not raw_value.is_valid_int() or int(raw_value) <= 0 or int(raw_value) > MAX_SPAWN_BATCH:
-			push_error("Valor invalido para --lab-spawn: '%s'; esperado inteiro de 1 a %d." % [raw_value, MAX_SPAWN_BATCH])
-			return
-		spawn_count = int(raw_value)
-		_spawn_batch()
+## Hospeda a lista de cadaveres como o main faz: zombie.gd so chama
+## register_corpse quando a cena tem o metodo, e sem isso o coletor nao acha
+## nada para absorver no lab.
+func register_corpse(corpse: Node) -> void:
+	if not is_instance_valid(corpse):
 		return
+	corpses.append(corpse)
+	if corpses.size() > MAX_CORPSES:
+		var oldest_corpse = corpses.pop_front()
+		if is_instance_valid(oldest_corpse):
+			oldest_corpse.queue_free()
+
+
+## Uso: chamado por ZombieCollector.try_absorb_nearby.
+func consume_zombie_corpse(corpse: Node) -> bool:
+	if not is_instance_valid(corpse) or not corpses.has(corpse):
+		return false
+	corpses.erase(corpse)
+	corpse.queue_free()
+	return true
+
+
+## Atalhos de linha de comando, processados na ordem em que aparecem:
+##   --lab-variant=NN  escolhe a variante (indice de ZombieMutator.Type)
+##   --lab-spawn=N     spawna N zumbis vivos
+##   --lab-corpse=N    spawna N cadaveres
+## Uso: godot --headless --path . --fixed-fps 60 --quit-after 300 \
+##   res://scenes/zumbi_lab.tscn -- --lab-variant=10 --lab-corpse=1 \
+##   --lab-variant=15 --lab-corpse=1 --lab-variant=21 --lab-spawn=1
+func _apply_lab_arguments() -> void:
+	for argument in OS.get_cmdline_user_args():
+		if argument.begins_with("--lab-variant="):
+			_set_variant_from_argument(argument.trim_prefix("--lab-variant="))
+		elif argument.begins_with("--lab-spawn="):
+			_set_count_from_argument(argument.trim_prefix("--lab-spawn="), false)
+		elif argument.begins_with("--lab-corpse="):
+			_set_count_from_argument(argument.trim_prefix("--lab-corpse="), true)
+
+
+func _set_variant_from_argument(raw_value: String) -> void:
+	if not raw_value.is_valid_int() or int(raw_value) < 0 or int(raw_value) >= ZombieMutator.TYPE_COUNT:
+		push_error("Valor invalido para --lab-variant: '%s'; esperado inteiro de 0 a %d." % [raw_value, ZombieMutator.TYPE_COUNT - 1])
+		return
+	spawn_variant_index = int(raw_value)
+	_update_hud()
+
+
+func _set_count_from_argument(raw_value: String, as_corpse: bool) -> void:
+	if not raw_value.is_valid_int() or int(raw_value) <= 0 or int(raw_value) > MAX_SPAWN_BATCH:
+		push_error("Valor invalido para --lab-spawn/--lab-corpse: '%s'; esperado inteiro de 1 a %d." % [raw_value, MAX_SPAWN_BATCH])
+		return
+	spawn_count = int(raw_value)
+	_spawn_batch(as_corpse)
 
 
 func _build_hud() -> void:
@@ -234,7 +298,7 @@ func _build_hud() -> void:
 func _update_hud() -> void:
 	if _hud == null:
 		return
-	_hud.text = "variante [ ] ou <- ->: %s (%d)   quantidade - = ou baixo/cima: %d   K spawna   L mata   M limpa" % [
+	_hud.text = "variante [ ] ou <- ->: %s (%d)   quantidade - = ou baixo/cima: %d   K vivos   N cadaveres   O mata variante   L mata tudo   M limpa" % [
 		String(ZombieMutator.Type.find_key(spawn_variant_index)),
 		spawn_variant_index,
 		spawn_count,
