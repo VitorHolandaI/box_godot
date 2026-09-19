@@ -60,6 +60,13 @@ const MAX_CAPSULE_RADIUS := 0.95
 const MAX_CAPSULE_HEIGHT := 2.6
 ## Patas extras da aranha (nomeadas SpiderLimb0..3 na montagem).
 const SPIDER_LIMB_COUNT := 4
+## Camada procedural: balanco vertical da cabeca no ritmo do passo (2x a
+## passada). Barato e vale para qualquer variante.
+const HEAD_BOB_AMPLITUDE := 0.05
+## Altura de repouso da cabeca no zombie.tscn (position y do no Model/Head).
+## Constante de proposito: guardar no cache de nos capturava a cabeca ja
+## balancando quando o cache era novo, e ela nunca voltava ao repouso.
+const HEAD_REST_Y := 1.14
 const BODY_SCALES: Dictionary = {
 	Type.BRUTE: Vector3(1.35, 1.25, 1.35),
 	Type.TITAN: Vector3(2.3, 2.3, 2.3),
@@ -555,6 +562,17 @@ static func _create_split_head(zombie: CharacterBody3D) -> void:
 	_add_box(head, Vector3(0.04, 0.38, 0.44), Vector3(0.02, 0.10, -0.02), Color(0.84, 0.82, 0.76))
 
 
+## Balanco secundario da cabeca: sobe e desce no ritmo do passo e volta ao
+## repouso quando o zumbi para. Usa a altura de repouso do cenario como base, em
+## vez do valor atual, para o offset nao acumular nem depender de estado.
+## Uso: chamado por animate_variant_pose.
+static func _apply_head_bob(head: Node3D, is_walking: bool, walk_time: float, delta: float) -> void:
+	if head == null:
+		return
+	var bob := sin(walk_time * 2.0) * HEAD_BOB_AMPLITUDE if is_walking else 0.0
+	head.position.y = lerpf(head.position.y, HEAD_REST_Y + bob, minf(delta * 12.0, 1.0))
+
+
 static func _add_box(parent: Node3D, box_size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
 	mesh.size = box_size
@@ -599,6 +617,11 @@ static func animate_variant_pose(
 		return
 
 	var swing := sin(walk_time) * 0.52 if is_walking else 0.0
+
+	# Camada procedural somada por cima da pose da variante. Fica aqui, antes do
+	# match, porque so mexe em head.position.y - canal que nenhuma pose escreve
+	# (elas mexem em rotacao e em model.position.y).
+	_apply_head_bob(head, is_walking, walk_time, delta)
 
 	match z_type:
 		Type.CRAWLER:
