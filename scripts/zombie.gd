@@ -17,6 +17,10 @@ const ATTACK_ANIMATION_DURATION := 0.5
 ## Bit da camada 4 (zumbis): desligado durante o voo do leaper/saltador para
 ## o bote nao pousar na cabeca da horda (scenes/zombie.tscn: collision_layer=4).
 const ZOMBIE_MASK_BIT := 4
+## Camada do jogador (player.tscn: collision_layer = 2). No voo o bote ignora
+## ela tambem: o saltador aterrissava EM CIMA do boneco e ficava empoleirado na
+## cabeca, sem conseguir sair.
+const PLAYER_MASK_BIT := 2
 const VISION_RANGE := 24.0
 const VISION_HALF_ANGLE := deg_to_rad(70.0)
 const SMELL_RANGE := 10.0
@@ -293,7 +297,7 @@ func _run_physics_tick(delta: float) -> void:
 	# pousava/atolava em cabecas de zumbi e ficava perched no ar. O colisor
 	# de zumbis volta no tick seguinte ao aterrissar.
 	if leaping:
-		collision_mask = _ground_collision_mask & ~ZOMBIE_MASK_BIT
+		collision_mask = flight_collision_mask(_ground_collision_mask)
 	elif collision_mask != _ground_collision_mask:
 		collision_mask = _ground_collision_mask
 
@@ -410,6 +414,13 @@ func _run_physics_tick(delta: float) -> void:
 	_slide_or_hold(delta, planted)
 	_animate_pose(delta, is_walking and (is_on_floor() or leaping))
 	_update_groan_audio(delta)
+
+
+## Mascara de colisao durante o voo do bote: fora a horda e o jogador. Sem isso
+## o saltador aterrissa em cima do jogador e fica preso na cabeca dele.
+## Uso: collision_mask = flight_collision_mask(_ground_collision_mask)
+static func flight_collision_mask(ground_mask: int) -> int:
+	return ground_mask & ~ZOMBIE_MASK_BIT & ~PLAYER_MASK_BIT
 
 
 ## Parado batendo: zera o horizontal e nao desliza. Senao move_and_slide com
