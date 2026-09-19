@@ -647,6 +647,13 @@ func _dash_for_type() -> RefCounted:
 		return high_jump_state
 	if int(zombie_type) == ZombieType.BLOATER:
 		return bloater_lunge_state
+	if int(zombie_type) == ZombieType.COLLECTOR:
+		# Arrancada emprestada pelo pedaco; recarga zerada quando a investida
+		# herdada termina, senao o primeiro acerto travaria os proximos.
+		var borrowed_charge := collector.dash_state_for(ZombieMutator.Type.CHARGER)
+		if borrowed_charge != null and not bool(borrowed_charge.call("is_leaping")):
+			_charge_hit_done = false
+		return collector.pick_dash_state()
 	return null
 
 
@@ -662,7 +669,7 @@ func _bloater_detonates_on(target: CharacterBody3D) -> bool:
 
 ## Charger correndo: o primeiro jogador no caminho leva dano e e arremessado.
 func _check_charge_hit(target: CharacterBody3D, direction: Vector3) -> void:
-	if int(zombie_type) != ZombieType.CHARGER or _charge_hit_done:
+	if not has_ability(ZombieType.CHARGER) or _charge_hit_done:
 		return
 	if global_position.distance_to(target.global_position) > VARIANT_ABILITIES_SCRIPT.CHARGE_HIT_RADIUS:
 		return
