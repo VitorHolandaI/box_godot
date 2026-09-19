@@ -24,6 +24,15 @@ const COUNT_STEPS: Array[int] = [1, 2, 5, 10, 25, 50, 100]
 const MAX_SPAWN_BATCH := 200
 ## Mesmo teto do main: cadaver antigo sai para a lista nao crescer sem fim.
 const MAX_CORPSES := 20
+## Demo: corredor de cadaveres na frente do player e a fila de coletores que
+## entra andando. Um coletor so carrega 3 pedacos (MAX_ABILITIES), por isso sao
+## quatro: assim os 11 pedacos aparecem distribuidos.
+const DEMO_CORPSE_NEAR := 4.0
+const DEMO_CORPSE_FAR := 16.0
+const DEMO_CORPSE_SIDE := 1.2
+const DEMO_COLLECTOR_DISTANCE := 19.0
+const DEMO_COLLECTOR_COUNT := 4
+const DEMO_COLLECTOR_GAP := 2.5
 ## Tempo deitado antes de levantar sozinho quando o modo deus esta desligado.
 const RESPAWN_DELAY_SECONDS := 1.0
 const SPAWN_DISTANCE := 6.0
@@ -42,6 +51,10 @@ const HUD_MARGIN := Vector2(16.0, 12.0)
 @export var drive_player_with_bot := true
 ## Vida cheia a cada tick: o lab existe para ver interacao, nao para sobreviver.
 @export var player_god_mode := true
+## Demo pronta do coletor: limpa a cena, poe um cadaver de cada variante com
+## habilidade em anel e o coletor do lado de fora, vindo comer um por um.
+## Ligue aqui no Inspector ou use --lab-coletor.
+@export var coletor_demo := false
 ## Variante que a tecla K cria (indice de ZombieMutator.Type, 0 a 20).
 @export var spawn_variant_index := 0
 ## Quantidade que a tecla K cria por vez.
@@ -50,6 +63,7 @@ const HUD_MARGIN := Vector2(16.0, 12.0)
 var _bot_ai := PlayerBotAI.new()
 var _report_timer := 0.0
 var _respawn_delay := 0.0
+var _demo_started := false
 var _hud: Label
 ## Cadaveres registrados como no main, para o coletor ter o que absorver aqui.
 var corpses: Array[Node] = []
@@ -79,6 +93,8 @@ func _ready() -> void:
 	_build_hud()
 	_connect_spit_signals()
 	_apply_lab_arguments()
+	if coletor_demo:
+		start_collector_demo()
 	_update_hud()
 	print(JSON.stringify({
 		"event": "zombie_lab_started",
@@ -197,6 +213,52 @@ func _spawn_batch(as_corpse: bool = false) -> void:
 			zombie.call("take_damage", 999999, Vector3.ZERO)
 	_update_hud()
 	_connect_spit_signals()
+
+
+## Demo do coletor: um cadaver de cada uma das 11 variantes com habilidade, num
+## corredor na frente do player, e quatro coletores entrando em fila - cada um
+## come ate 3 e sai com anatomia e habilidades diferentes. Camera puxada.
+## Uso: ligue Coletor Demo no Inspector do ZumbiLab ou --lab-coletor.
+func start_collector_demo() -> void:
+	if _demo_started:
+		return
+	_demo_started = true
+	_clear_all()
+	camera_offset = Vector3(0.0, 11.0, 18.0)
+	var origin := Vector3.ZERO
+	if is_instance_valid(player):
+		origin = (player as Node3D).global_position
+	var total := ZombieCollector.ABSORBABLE_TYPES.size()
+	for index in total:
+		_spawn_at(int(ZombieCollector.ABSORBABLE_TYPES[index]), _corridor_position(origin, index, total), true)
+	for index in DEMO_COLLECTOR_COUNT:
+		var distance := DEMO_COLLECTOR_DISTANCE + float(index) * DEMO_COLLECTOR_GAP
+		_spawn_at(ZombieMutator.Type.COLLECTOR, origin + Vector3(0.0, 0.2, -distance), false)
+	_update_hud()
+
+
+## Cadaver do corredor: na frente do player (-Z, onde a camera enxerga), de
+## DEMO_CORPSE_NEAR a DEMO_CORPSE_FAR, alternando de lado para o coletor nao
+## passar reto sem encostar.
+func _corridor_position(origin: Vector3, index: int, total: int) -> Vector3:
+	var t := float(index) / float(maxi(total - 1, 1))
+	var distance := lerpf(DEMO_CORPSE_NEAR, DEMO_CORPSE_FAR, t)
+	var side := DEMO_CORPSE_SIDE if index % 2 == 0 else -DEMO_CORPSE_SIDE
+	return origin + Vector3(side, 0.0, -distance) + Vector3.UP * 0.2
+
+
+## Cria um zumbi (ou cadaver) de uma variante num ponto exato.
+func _spawn_at(kind: int, position: Vector3, as_corpse: bool) -> void:
+	if zombies_parent == null:
+		return
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	if zombie == null:
+		return
+	zombie.set("forced_variant", kind)
+	zombie.position = position
+	zombies_parent.add_child(zombie)
+	if as_corpse:
+		zombie.call("take_damage", 999999, Vector3.ZERO)
 
 
 ## Mata so a variante escolhida: faz cadaver util sem matar o coletor junto.
@@ -351,6 +413,8 @@ func _apply_lab_arguments() -> void:
 			_set_count_from_argument(argument.trim_prefix("--lab-spawn="), false)
 		elif argument.begins_with("--lab-corpse="):
 			_set_count_from_argument(argument.trim_prefix("--lab-corpse="), true)
+		elif argument == "--lab-coletor":
+			start_collector_demo()
 
 
 func _set_variant_from_argument(raw_value: String) -> void:
