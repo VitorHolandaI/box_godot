@@ -27,3 +27,4 @@ Cenas reutilizaveis e composicao principal do jogo.
 - `tree_sequoia.tscn`: sequoia alta com copa conica em camadas.
 - `zombie.tscn`: inimigo voxel com vida, membros animados e colisao que contem o modelo visual.
 - `zombie_ragdoll.tscn`: ragdoll articulado com pescoco fisicamente limitado.
+- `zumbi_lab.tscn`: cena de teste para abrir no editor e rodar com F6: um player dirigido por bot e zumbis de variantes escolhidas no Inspector, sem partida nem servidor.

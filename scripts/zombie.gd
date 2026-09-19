@@ -118,7 +118,31 @@ var hit_direction := Vector3.ZERO
 var hit_kind := ""
 var walk_time := 0.0
 ## Variante forçada pela onda (mix percentual); -1 = hash aleatorio original.
-var forced_variant := -1
+## Exportado para montar cena de teste no editor: arraste um Zombie, escolha a
+## variante no Inspector e rode com F6 (a IA simula sozinha, sem servidor).
+@export_enum(
+	"Walker",
+	"One Arm",
+	"Crawler",
+	"Limper",
+	"Sprinter",
+	"Half Arm",
+	"One Leg",
+	"Half Leg",
+	"Half Head",
+	"Brute",
+	"Screamer",
+	"Bloater",
+	"Leaper",
+	"Armored",
+	"Titan",
+	"Spitter",
+	"Charger",
+	"Jumper",
+	"Smoker",
+	"Healer",
+	"Stalker"
+) var forced_variant := -1
 ## Grito do screamer: intervalo aleatorio entre gritos.
 var scream_cooldown := 0.0
 ## Cache dos nos de pose (Model/bracos/pernas): 1 lookup de Dictionary no
