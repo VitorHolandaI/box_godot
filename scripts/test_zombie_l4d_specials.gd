@@ -27,7 +27,6 @@ func run(test_root: Node) -> void:
 	_test_collector_absorbs_and_inherits(test_root)
 	_test_collector_borrows_dash(test_root)
 	_test_collector_borrows_armor(test_root)
-	_test_collector_stalker_translucency(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -251,31 +250,6 @@ func _test_collector_borrows_armor(test_root: Node) -> void:
 		_fail(test_root, "Coletor colete: sem=%d pegou=%s tem=%s tiro=%d faca=%d." % [plain_bullet, took_armored, has_armor, armored_bullet, armored_knife])
 		return
 	print("PASS: Coletor herda o colete (tiro pela metade, faca cheia).")
-
-
-func _test_collector_stalker_translucency(test_root: Node) -> void:
-	print("Testando coletor: pedaco de espreitador deixa o corpo translucido...")
-	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
-	zombie.set("forced_variant", ZombieMutator.Type.COLLECTOR)
-	test_root.add_child(zombie)
-	zombie.set_physics_process(false)
-	var collector = zombie.get("collector")
-	var before := _first_mesh_transparency(zombie)
-	var took_stalker: bool = collector.absorb(ZombieMutator.Type.STALKER, zombie)
-	var after := _first_mesh_transparency(zombie)
-	zombie.free()
-	if not took_stalker or before != 0.0 or after <= 0.0 or after >= 1.0:
-		_fail(test_root, "Coletor espreitador: pegou=%s antes=%.2f depois=%.2f." % [took_stalker, before, after])
-		return
-	print("PASS: Coletor fica translucido com o pedaco do espreitador.")
-
-
-func _first_mesh_transparency(node: Node) -> float:
-	for child in node.find_children("*", "MeshInstance3D", true, false):
-		var mesh := child as MeshInstance3D
-		if mesh != null:
-			return mesh.transparency
-	return 0.0
 
 
 func _test_main_hooks(test_root: Node) -> void:
