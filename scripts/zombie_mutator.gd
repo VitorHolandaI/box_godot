@@ -67,6 +67,10 @@ const HEAD_BOB_AMPLITUDE := 0.05
 ## Constante de proposito: guardar no cache de nos capturava a cabeca ja
 ## balancando quando o cache era novo, e ela nunca voltava ao repouso.
 const HEAD_REST_Y := 1.14
+## Inclinacao ao virar (contrapposto): o corpo rola para fora da curva,
+## proporcional a taxa de giro, com teto. Vale para qualquer variante.
+const TURN_LEAN_FACTOR := 0.06
+const TURN_LEAN_MAX := 0.16
 const BODY_SCALES: Dictionary = {
 	Type.BRUTE: Vector3(1.35, 1.25, 1.35),
 	Type.TITAN: Vector3(2.3, 2.3, 2.3),
@@ -562,6 +566,17 @@ static func _create_split_head(zombie: CharacterBody3D) -> void:
 	_add_box(head, Vector3(0.04, 0.38, 0.44), Vector3(0.02, 0.10, -0.02), Color(0.84, 0.82, 0.76))
 
 
+## Inclinacao ao virar: o corpo rola para fora da curva na proporcao da taxa de
+## giro (contrapposto). Escreve model.rotation.z, canal que nenhuma pose de
+## variante usa na animacao (elas escrevem model.rotation.x). Parado nao inclina.
+## Uso: chamado por animate_variant_pose.
+static func _apply_turn_lean(model: Node3D, is_walking: bool, turn_rate: float, delta: float) -> void:
+	var wanted := 0.0
+	if is_walking:
+		wanted = clampf(-turn_rate * TURN_LEAN_FACTOR, -TURN_LEAN_MAX, TURN_LEAN_MAX)
+	model.rotation.z = lerpf(model.rotation.z, wanted, minf(delta * 8.0, 1.0))
+
+
 ## Balanco secundario da cabeca: sobe e desce no ritmo do passo e volta ao
 ## repouso quando o zumbi para. Usa a altura de repouso do cenario como base, em
 ## vez do valor atual, para o offset nao acumular nem depender de estado.
@@ -604,7 +619,8 @@ static func animate_variant_pose(
 	is_walking: bool,
 	attack_w: float,
 	walk_time: float,
-	cached_nodes: Dictionary = {}
+	cached_nodes: Dictionary = {},
+	turn_rate: float = 0.0
 ) -> void:
 	var left_arm := _pose_node(zombie, cached_nodes, "Model/LeftArm")
 	var right_arm := _pose_node(zombie, cached_nodes, "Model/RightArm")
@@ -622,6 +638,7 @@ static func animate_variant_pose(
 	# match, porque so mexe em head.position.y - canal que nenhuma pose escreve
 	# (elas mexem em rotacao e em model.position.y).
 	_apply_head_bob(head, is_walking, walk_time, delta)
+	_apply_turn_lean(model, is_walking, turn_rate, delta)
 
 	match z_type:
 		Type.CRAWLER:
