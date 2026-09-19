@@ -58,7 +58,18 @@ const ABSORBABLE_TYPES: Array[int] = [
 	ZombieMutator.Type.STALKER,
 ]
 
+## Mutacoes: combinacoes de pedacos que viram uma habilidade diferente. Esta
+## tabela e a fonte da verdade; o despacho pergunta por has_mutation(id).
+const MUTATIONS: Array[Dictionary] = [
+	{
+		"id": &"grito_que_cura",
+		"needs": [ZombieMutator.Type.SCREAMER, ZombieMutator.Type.HEALER],
+	},
+]
+
 var inherited_types: Array[int] = []
+## Mutacoes completas depois do ultimo pedaco (id -> true).
+var mutations: Dictionary = {}
 ## Arrancada por pedaco (leaper/charger/jumper), criada no absorb.
 var dash_states: Dictionary = {}
 var _absorb_timer := 0.0
@@ -83,7 +94,28 @@ func absorb(zombie_type: int, owner: Node3D) -> bool:
 	inherited_types.append(zombie_type)
 	_install_dash_state(zombie_type)
 	_change_appearance(owner, zombie_type)
+	_refresh_mutations()
 	return true
+
+
+## Recalcula as mutacoes depois de cada pedaco: uma combinacao passa a valer
+## quando todos os pedacos que ela pede estao na lista.
+## Uso: chamado no fim do absorb.
+func _refresh_mutations() -> void:
+	for rule in MUTATIONS:
+		var needs: Array = rule["needs"]
+		var complete := true
+		for need in needs:
+			if not has_ability(int(need)):
+				complete = false
+				break
+		if complete:
+			mutations[rule["id"]] = true
+
+
+## O coletor completou esta combinacao? Uso: collector.has_mutation(&"grito_que_cura")
+func has_mutation(mutation_id: StringName) -> bool:
+	return mutations.has(mutation_id)
 
 
 ## Arrancada do pedaco: a mesma classe que a variante original usa em zombie.gd,
