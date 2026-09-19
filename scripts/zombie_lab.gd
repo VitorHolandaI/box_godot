@@ -28,11 +28,10 @@ const MAX_CORPSES := 20
 ## entra andando. Um coletor so carrega 3 pedacos (MAX_ABILITIES), por isso sao
 ## quatro: assim os 11 pedacos aparecem distribuidos.
 ## Raio do arco do desfile (um zumbi de cada variante).
-const DEMO_PARADE_RADIUS := 13.0
-## Desfile em ciclo: a cada PARADE_CYCLE_SECONDS todos voltam ao arco e refazem
-## a caminhada, para a passada ficar visivel sem parar no corpo a corpo. Nao
-## cria zumbi nenhum - sao os mesmos nos voltando de posicao.
-const PARADE_CYCLE_SECONDS := 20.0
+## Showroom: tempo de cada variante em cena e a distancia de onde ela vem
+## andando (leva alguns segundos andando antes de chegar no player).
+const SHOWROOM_SECONDS := 20.0
+const SHOWROOM_DISTANCE := 16.0
 const DEMO_CORPSE_NEAR := 4.0
 const DEMO_CORPSE_FAR := 16.0
 const DEMO_CORPSE_SIDE := 1.2
@@ -74,8 +73,9 @@ var _report_timer := 0.0
 var _respawn_delay := 0.0
 var _demo_started := false
 var _parade_active := false
-var _parade_cycles := 0
-var _parade_cycle_left := 0.0
+## Variante da vez no showroom (indice de ZombieMutator.Type).
+var _parade_index := 0
+var _parade_left := 0.0
 var _parade_hud_second := -1
 var _hud: Label
 ## Cadaveres registrados como no main, para o coletor ter o que absorver aqui.
@@ -253,67 +253,50 @@ func start_collector_demo() -> void:
 	_update_hud()
 
 
-## Desfile: um zumbi de cada variante em arco na frente do player, todos vivos e
-## andando, para comparar as passadas. Uso: Desfile no Inspector ou --lab-desfile.
+## Desfile (showroom): UM zumbi por vez, girando pelas variantes. A cada
+## SHOWROOM_SECONDS a variante da vez sai e entra a proxima, na ordem dos tipos,
+## so ela em cena - para olhar a passada e a anatomia de cada uma com calma.
+## Uso: Desfile no Inspector do ZumbiLab ou --lab-desfile.
 func start_parade_demo() -> void:
 	if _demo_started:
 		return
 	_demo_started = true
 	_parade_active = true
-	_parade_cycles = 0
-	_parade_cycle_left = PARADE_CYCLE_SECONDS
+	_parade_index = 0
+	_parade_left = SHOWROOM_SECONDS
 	_parade_hud_second = -1
 	_clear_all()
-	camera_offset = Vector3(0.0, 9.0, 16.0)
-	var origin := Vector3.ZERO
-	if is_instance_valid(player):
-		origin = (player as Node3D).global_position
-	for kind in ZombieMutator.TYPE_COUNT:
-		var walker := _spawn_at(kind, _parade_position(origin, kind, ZombieMutator.TYPE_COUNT), false)
-		if walker != null:
-			walker.set_meta("parade_slot", kind)
-	_update_hud()
+	camera_offset = Vector3(0.0, 7.0, 13.0)
+	_spawn_parade_variant()
 
 
-## Relogio do desfile: a cada PARADE_CYCLE_SECONDS o arco inteiro recomeca. O
-## HUD so e reescrito quando o segundo mostrado muda (evita string por frame).
+## Relogio do showroom: quando o tempo acaba, entra a proxima variante; o HUD e
+## reescrito so quando o segundo mostrado muda (evita string por frame).
 ## Uso: chamado a cada tick de fisica enquanto o desfile esta ativo.
 func _tick_parade_cycle(delta: float) -> void:
 	if not _parade_active:
 		return
-	_parade_cycle_left -= delta
-	if _parade_cycle_left <= 0.0:
-		_parade_cycle_left = PARADE_CYCLE_SECONDS
-		_parade_cycles += 1
-		_return_parade_to_arc()
-	var second := ceili(_parade_cycle_left)
+	_parade_left -= delta
+	if _parade_left <= 0.0:
+		_parade_left = SHOWROOM_SECONDS
+		_parade_index = (_parade_index + 1) % ZombieMutator.TYPE_COUNT
+		_spawn_parade_variant()
+	var second := ceili(_parade_left)
 	if second != _parade_hud_second:
 		_parade_hud_second = second
 		_update_hud()
 
 
-## Poe todos os desfilantes de volta no arco, na ordem das variantes.
-func _return_parade_to_arc() -> void:
+## Poe em cena SO a variante da vez, vindo andando para o player, e tira a
+## anterior (queue_free e adiado, entao por um frame as duas coexistem).
+func _spawn_parade_variant() -> void:
 	if zombies_parent == null or not is_instance_valid(player):
 		return
-	var origin := (player as Node3D).global_position
 	for child in zombies_parent.get_children():
-		var zombie := child as Node3D
-		if zombie == null or bool(zombie.get("is_dead")):
-			continue
-		var slot := int(zombie.get_meta("parade_slot", -1))
-		if slot < 0:
-			continue
-		zombie.global_position = _parade_position(origin, slot, ZombieMutator.TYPE_COUNT) + Vector3.UP * 0.2
-		zombie.set("velocity", Vector3.ZERO)
-
-
-## Arco de N lugares na frente do player (-Z), largo o bastante para os 23
-## caberem sem se empilhar.
-func _parade_position(origin: Vector3, index: int, total: int) -> Vector3:
-	var t := float(index) / float(maxi(total - 1, 1))
-	var angle := lerpf(deg_to_rad(-70.0), deg_to_rad(70.0), t)
-	return origin + Vector3(sin(angle), 0.0, -cos(angle)) * DEMO_PARADE_RADIUS + Vector3.UP * 0.2
+		child.queue_free()
+	var origin := (player as Node3D).global_position
+	_spawn_at(_parade_index, origin + Vector3(0.0, 0.2, -SHOWROOM_DISTANCE), false)
+	_connect_spit_signals()
 
 
 ## Cadaver do corredor: na frente do player (-Z, onde a camera enxerga), de
@@ -551,7 +534,12 @@ func _update_hud() -> void:
 		"ligado" if player_god_mode else "desligado",
 	]
 	if _parade_active:
-		text += "   desfile: proximo ciclo em %ds (ciclos: %d)" % [ceili(_parade_cycle_left), _parade_cycles]
+		text += "   desfile: %s (%d/%d)   proximo em %ds" % [
+			String(ZombieMutator.Type.find_key(_parade_index)),
+			_parade_index + 1,
+			ZombieMutator.TYPE_COUNT,
+			ceili(_parade_left),
+		]
 	_hud.text = text
 
 
@@ -608,6 +596,6 @@ func _report() -> void:
 		"player_health": snappedf(player_health, 0.1),
 		"corpses": corpses.size(),
 		"ragdolls": ragdolls.size(),
-		"parade_cycles": _parade_cycles,
+		"parade_variant": _parade_index,
 		"forced_move_time": snappedf(float(player.get("forced_move_time")), 0.01) if is_instance_valid(player) else 0.0,
 	}))
