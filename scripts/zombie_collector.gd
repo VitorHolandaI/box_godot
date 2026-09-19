@@ -14,22 +14,42 @@ extends RefCounted
 ##   (grito, cuspe e lingua). Bote, pulo e investida dependem do `_dash_for_type`
 ##   e ficam para a proxima fatia, com teste proprio.
 
+const VARIANT_ABILITIES_SCRIPT := preload("res://scripts/zombie_variant_abilities.gd")
 const ABSORB_RADIUS := 1.7
 const ABSORB_INTERVAL := 0.25
 const MAX_ABILITIES := 3
 const PART_MARKER_SIZE := Vector3(0.34, 0.22, 0.30)
 const PART_MARKER_BASE := Vector3(-0.18, 0.72, 0.28)
 const PART_MARKER_STEP := 0.18
+## O corpo cresce um pouco a cada pedaco: leitura de "esta maior" sem arte nova.
+const PART_GROWTH := 1.08
+const PART_MARKER_FALLBACK_COLOR := Color(0.25, 0.25, 0.28)
 
-## Variantes cujo pedaco da uma habilidade ativa que o coletor sabe usar.
-## As arrancadas (leaper/charger/jumper) e as passivas ficam de fora por ora.
+## Cor do bloco de cada habilidade, para dar para ler o que ele ja comeu.
+const PART_COLORS: Dictionary = {
+	ZombieMutator.Type.SCREAMER: Color(0.85, 0.75, 0.20),
+	ZombieMutator.Type.LEAPER: Color(0.30, 0.70, 0.35),
+	ZombieMutator.Type.SPITTER: Color(0.45, 0.80, 0.25),
+	ZombieMutator.Type.CHARGER: Color(0.80, 0.35, 0.20),
+	ZombieMutator.Type.JUMPER: Color(0.35, 0.55, 0.85),
+	ZombieMutator.Type.SMOKER: Color(0.55, 0.40, 0.75),
+}
+
+## Variantes cujo pedaco o coletor ja sabe usar. As outras habilidades (armored,
+## bloater, stalker, healer e o chefe) entram na proxima fatia: cada uma mexe em
+## dano recebido, morte, aura ou cerebro, e pede teste proprio.
 const ABSORBABLE_TYPES: Array[int] = [
 	ZombieMutator.Type.SCREAMER,
+	ZombieMutator.Type.LEAPER,
 	ZombieMutator.Type.SPITTER,
+	ZombieMutator.Type.CHARGER,
+	ZombieMutator.Type.JUMPER,
 	ZombieMutator.Type.SMOKER,
 ]
 
 var inherited_types: Array[int] = []
+## Arrancada por pedaco (leaper/charger/jumper), criada no absorb.
+var dash_states: Dictionary = {}
 var _absorb_timer := 0.0
 
 
@@ -50,8 +70,44 @@ func absorb(zombie_type: int, owner: Node3D) -> bool:
 	if is_full() or has_ability(zombie_type) or not ABSORBABLE_TYPES.has(zombie_type):
 		return false
 	inherited_types.append(zombie_type)
-	_add_part_marker(owner, inherited_types.size() - 1)
+	_install_dash_state(zombie_type)
+	_change_appearance(owner, zombie_type, inherited_types.size() - 1)
 	return true
+
+
+## Arrancada do pedaco: a mesma classe que a variante original usa em zombie.gd,
+## instanciada igual (os _init das subclasses nao pedem parametro).
+func _install_dash_state(zombie_type: int) -> void:
+	match zombie_type:
+		ZombieMutator.Type.LEAPER:
+			dash_states[zombie_type] = VARIANT_ABILITIES_SCRIPT.LeapState.new()
+		ZombieMutator.Type.CHARGER:
+			dash_states[zombie_type] = VARIANT_ABILITIES_SCRIPT.ChargeState.new()
+		ZombieMutator.Type.JUMPER:
+			dash_states[zombie_type] = VARIANT_ABILITIES_SCRIPT.HighJumpState.new()
+
+
+## Estado de arrancada de um pedaco (null quando aquele pedaco nao tem uma).
+## Uso: var charge := collector.dash_state_for(ZombieMutator.Type.CHARGER)
+func dash_state_for(zombie_type: int) -> RefCounted:
+	var state: Variant = dash_states.get(zombie_type)
+	return state as RefCounted
+
+
+## Qual arrancada usar agora: a que ja esta no ar, senao a primeira fora de
+## recarga (o update decide depois se o alcance permite).
+## Uso: chamado por zombie.gd/_dash_for_type.
+func pick_dash_state() -> RefCounted:
+	var ready_state: RefCounted = null
+	for state_value in dash_states.values():
+		var state := state_value as RefCounted
+		if state == null:
+			continue
+		if bool(state.call("is_leaping")):
+			return state
+		if ready_state == null and bool(state.call("is_ready")):
+			ready_state = state
+	return ready_state
 
 
 ## Ve se tem cadaver util encostado e absorve (checa a cada ABSORB_INTERVAL).
@@ -97,17 +153,25 @@ func _nearest_absorbable_corpse(scene: Node, from: Vector3) -> Node:
 	return nearest
 
 
-## Bloco escuro nas costas por pedaco: da para ver o coletor "crescendo" sem
-## precisar de arte nova.
-func _add_part_marker(owner: Node3D, index: int) -> void:
+## Cada pedaco muda o corpo: o modelo cresce um pouco e ganha um bloco na cor
+## da habilidade. Sem arte nova, e o que da leitura imediata de quem ele comeu.
+func _change_appearance(owner: Node3D, zombie_type: int, index: int) -> void:
 	if not is_instance_valid(owner):
 		return
 	var model := owner.get_node_or_null("Model") as Node3D
 	if model == null:
 		return
+	model.scale *= PART_GROWTH
+	_add_part_marker(model, PART_COLORS.get(zombie_type, PART_MARKER_FALLBACK_COLOR) as Color, index)
+
+
+func _add_part_marker(model: Node3D, color: Color, index: int) -> void:
 	var marker := MeshInstance3D.new()
 	var box := BoxMesh.new()
 	box.size = PART_MARKER_SIZE
+	var material := StandardMaterial3D.new()
+	material.albedo_color = color
+	box.material = material
 	marker.mesh = box
 	marker.position = PART_MARKER_BASE + Vector3(PART_MARKER_STEP * float(index), 0.0, 0.0)
 	model.add_child(marker)
