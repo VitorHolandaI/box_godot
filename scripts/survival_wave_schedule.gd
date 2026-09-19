@@ -90,11 +90,15 @@ const VARIANT_MIXES: Array[Dictionary] = [
 		ZombieMutator.Type.CHARGER: 6,
 	},
 	# Hora 11+: screamer atrai a horda de longe; armored exige faca ou mais tiros.
+	# O coletor e especial so daqui, raro (4%): ele junta pedaco dos cadaveres e
+	# vai herdando as habilidades durante a onda, entao precisa de horda morrendo
+	# por perto para virar ameaca. As vagas saem de puxador, curandeiro e
+	# espreitador, que continuam presentes.
 	{
 		ZombieMutator.Type.WALKER: 5,
-		ZombieMutator.Type.SMOKER: 4,
-		ZombieMutator.Type.HEALER: 4,
-		ZombieMutator.Type.STALKER: 4,
+		ZombieMutator.Type.SMOKER: 3,
+		ZombieMutator.Type.HEALER: 3,
+		ZombieMutator.Type.STALKER: 2,
 		ZombieMutator.Type.JUMPER: 5,
 		ZombieMutator.Type.BLOATER: 6,
 		ZombieMutator.Type.LEAPER: 7,
@@ -108,6 +112,7 @@ const VARIANT_MIXES: Array[Dictionary] = [
 		ZombieMutator.Type.ONE_ARM: 6,
 		ZombieMutator.Type.SPITTER: 5,
 		ZombieMutator.Type.CHARGER: 5,
+		ZombieMutator.Type.COLLECTOR: 4,
 	},
 ]
 
