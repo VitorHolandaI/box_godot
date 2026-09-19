@@ -15,6 +15,7 @@ const HEALER_SCRIPT := preload("res://scripts/zombie_healer.gd")
 const STALKER_SCRIPT := preload("res://scripts/zombie_stalker.gd")
 const COLLECTOR_SCRIPT := preload("res://scripts/zombie_collector.gd")
 const ABILITIES_SCRIPT := preload("res://scripts/zombie_variant_abilities.gd")
+const SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator.gd")
 const NEW_TYPES := ["SMOKER", "HEALER", "STALKER"]
 
 
@@ -33,6 +34,7 @@ func run(test_root: Node) -> void:
 	_test_procedural_stride_speed(test_root)
 	_test_procedural_walk_phase(test_root)
 	_test_jump_does_not_land_on_player(test_root)
+	_test_ambush_types_prefer_indoor(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -362,6 +364,18 @@ func _test_jump_does_not_land_on_player(test_root: Node) -> void:
 		_fail(test_root, "Voo: ground=%d flight=%d jogador_limpo=%s horda_limpa=%s chao_ok=%s." % [ground, flight, player_cleared, zombie_cleared, world_kept])
 		return
 	print("PASS: No voo o zumbi nao colide com jogador (nao empoleira) nem com a horda.")
+
+
+func _test_ambush_types_prefer_indoor(test_root: Node) -> void:
+	print("Testando que puxador e espreitador preferem nascer em casa...")
+	var smoker: bool = SPAWN_LOCATOR_SCRIPT.prefers_indoor(ZombieMutator.Type.SMOKER)
+	var stalker: bool = SPAWN_LOCATOR_SCRIPT.prefers_indoor(ZombieMutator.Type.STALKER)
+	var walker: bool = SPAWN_LOCATOR_SCRIPT.prefers_indoor(ZombieMutator.Type.WALKER)
+	var brute: bool = SPAWN_LOCATOR_SCRIPT.prefers_indoor(ZombieMutator.Type.BRUTE)
+	if not smoker or not stalker or walker or brute:
+		_fail(test_root, "Emboscada: smoker=%s stalker=%s walker=%s brute=%s." % [smoker, stalker, walker, brute])
+		return
+	print("PASS: So puxador e espreitador preferem spawn interno.")
 
 
 func _test_main_hooks(test_root: Node) -> void:
