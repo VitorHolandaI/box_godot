@@ -262,7 +262,9 @@ func start_parade_demo() -> void:
 		return
 	_demo_started = true
 	_parade_active = true
-	_parade_index = 0
+	# Comeca pela variante escolhida no Inspector/--lab-variant: sem isso tem que
+	# esperar o giro inteiro (~7 min) para chegar numa especifica, tipo a aranha.
+	_parade_index = clampi(spawn_variant_index, 0, ZombieMutator.TYPE_COUNT - 1)
 	_parade_left = SHOWROOM_SECONDS
 	_parade_hud_second = -1
 	_clear_all()
