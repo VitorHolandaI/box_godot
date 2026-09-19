@@ -84,6 +84,7 @@ enum ZombieType {
 	SMOKER = 18,
 	HEALER = 19,
 	STALKER = 20,
+	COLLECTOR = 21,
 }
 
 enum LodLevel {
@@ -141,7 +142,8 @@ var walk_time := 0.0
 	"Jumper",
 	"Smoker",
 	"Healer",
-	"Stalker"
+	"Stalker",
+	"Collector"
 ) var forced_variant := -1
 ## Grito do screamer: intervalo aleatorio entre gritos.
 var scream_cooldown := 0.0
@@ -173,6 +175,8 @@ var burn := ZombieBurn.new()
 var tongue := ZombieTongue.new()
 var healer := ZombieHealer.new()
 var stalker := ZombieStalker.new()
+## Coletor (variante COLLECTOR): pedacos absorvidos dos cadaveres.
+var collector := ZombieCollector.new()
 var damage_taken_total := 0
 var _tongue_damage_start := 0
 var _tongue_burn := 0.0
@@ -290,6 +294,7 @@ func _run_physics_tick(delta: float) -> void:
 	_update_scream(delta)
 	_update_boss(delta)
 	_update_l4d_cooldowns(delta)
+	_try_absorb_corpse(delta)
 	var target := alert_target
 	var is_walking := false
 	var in_melee_range := false
@@ -424,7 +429,7 @@ func _slide_or_hold(simulated_delta: float, planted: bool) -> void:
 ## Reusa a rota de ruido (hear_gunshot) para atrair os lideres de cluster.
 ## Uso: chamado a cada tick de simulacao (server/offline).
 func _update_scream(delta: float) -> void:
-	if int(zombie_type) != ZombieType.SCREAMER:
+	if not has_ability(ZombieType.SCREAMER):
 		return
 	scream_cooldown = maxf(scream_cooldown - delta, 0.0)
 	if scream_cooldown > 0.0:
@@ -669,18 +674,31 @@ func _check_charge_hit(target: CharacterBody3D, direction: Vector3) -> void:
 
 ## Recargas dos especiais novos e a aura do curandeiro (autoridade).
 func _update_l4d_cooldowns(delta: float) -> void:
+	# O coletor tambem recarrega a lingua do pedaco absorvido; as auras de
+	# stalker e healer continuam so do dono do tipo.
+	if has_ability(ZombieType.SMOKER):
+		tongue.tick_cooldown(delta)
 	match int(zombie_type):
-		ZombieType.SMOKER:
-			tongue.tick_cooldown(delta)
 		ZombieType.STALKER:
 			stalker.tick(delta)
 		ZombieType.HEALER:
 			healer.update(self, delta)
 
 
+## Coletor: absorve o pedaco do cadaver encostado. So no caminho simulado, como
+## o resto das habilidades. Uso: chamado a cada tick de simulacao.
+func _try_absorb_corpse(delta: float) -> void:
+	if int(zombie_type) != ZombieType.COLLECTOR:
+		return
+	if collector.try_absorb_nearby(self, delta):
+		# Reacao visivel para quem olha de fora.
+		attack_animation_time = ATTACK_ANIMATION_DURATION
+		attack_sequence += 1
+
+
 ## Puxador: prende de longe e puxa o alvo; enquanto puxa fica parado.
 func _smoker_holds_position(target: CharacterBody3D, distance: float, delta: float) -> bool:
-	if int(zombie_type) != ZombieType.SMOKER:
+	if not has_ability(ZombieType.SMOKER):
 		return false
 	var in_grab_range := distance >= ZombieTongue.MIN_RANGE and distance <= ZombieTongue.MAX_RANGE
 	if not tongue.is_pulling() and not in_grab_range:
@@ -722,7 +740,7 @@ func _announce_tongue(target: Node3D, active: bool) -> void:
 
 ## Cuspidor perto o bastante e vendo o alvo: fica parado e cospe de longe.
 func _spitter_holds_position(target: CharacterBody3D, distance: float, delta: float) -> bool:
-	if int(zombie_type) != ZombieType.SPITTER or distance > VARIANT_ABILITIES_SCRIPT.SPIT_MAX_RANGE:
+	if not has_ability(ZombieType.SPITTER) or distance > VARIANT_ABILITIES_SCRIPT.SPIT_MAX_RANGE:
 		return false
 	var sees_target := _has_line_of_sight(target)
 	if spit_state.update(delta, distance, sees_target):
@@ -1040,6 +1058,12 @@ func _spawn_ragdoll() -> void:
 	var scene := get_tree().current_scene
 	if scene.has_method("spawn_zombie_ragdoll"):
 		scene.spawn_zombie_ragdoll(global_position, rotation.y, death_velocity, int(zombie_type), appearance_hash, name)
+
+
+## Habilidades efetivas: a do proprio tipo mais as herdadas pelo coletor.
+## Uso: if zombie.has_ability(ZombieType.SMOKER): ...
+func has_ability(kind: int) -> bool:
+	return int(zombie_type) == kind or collector.has_ability(kind)
 
 
 func _configure_variant() -> void:
