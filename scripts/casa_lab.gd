@@ -4,8 +4,9 @@ extends Node3D
 ## Inspecao das construcoes procedurais: monta uma de cada arquetipo gerado
 ## (casa, loja, mercado, apartamento) lado a lado num chao plano, sem partida
 ## nenhuma, para olhar a planta e o interior de perto.
-## Uso: abra `scenes/casas_lab.tscn` e aperte F6. WASD voa, Q/E sobe e desce,
-## Shift acelera.
+## Uso: abra `scenes/casas_lab.tscn` e aperte F6. Por padrao o player entra na
+## cena em primeira pessoa e anda com WASD (mouse olha, ESC solta). Com
+## `usar_player = false` no Inspector volta a camera de voo (WASD/Q/E/Shift).
 ##
 ## O caminho de geracao e o MESMO do jogo: BuildingAssembler3D.build_lot(kind,
 ## rng), exatamente o que o city_generator.gd:222 chama para montar cada lote -
@@ -14,6 +15,7 @@ extends Node3D
 ## amontoado de paineis: ele nao e o caminho de predio do jogo.
 
 const BUILDING_ASSEMBLER_3D := preload("res://scripts/building_assembler_3d.gd")
+const PLAYER_SCENE := preload("res://scenes/player.tscn")
 
 ## Arquetipos que o building_generator reconhece hoje (city_generator monta os
 ## mesmos quatro; "house" e o que os testes de telhado usam).
@@ -26,6 +28,11 @@ const VOO_ACELERACAO := 3.0
 
 @export var semente := 240912
 @export var gerar_na_abertura := true
+## Player em primeira pessoa para andar dentro das casas. Desligue para usar a
+## camera de voo de inspecao.
+@export var usar_player := true
+@export var player_inicial := Vector3(0.0, 1.0, 22.0)
+@export var camera_altura := 1.45
 @export var camera_inicial := Vector3(0.0, 24.0, 44.0)
 
 var _camera: Camera3D
@@ -33,14 +40,22 @@ var _gerados := 0
 
 
 func _ready() -> void:
+	# As acoes player_1_* nascem no menu (GameConfig); sem isso o player.gd loga
+	# erro de InputMap a cada frame e o WASD nao anda.
+	if GameConfig.player_input_configs.is_empty():
+		GameConfig.configure_local_players([GameConfig.create_keyboard_config(0)])
 	_build_environment()
-	_build_camera()
+	if usar_player:
+		_build_player()
+	else:
+		_build_camera()
 	if gerar_na_abertura:
 		build_row()
 	print(JSON.stringify({
 		"event": "casas_lab_started",
 		"arquetipos": ARCHETYPES.size(),
 		"gerados": _gerados,
+		"player": usar_player,
 	}))
 
 
@@ -94,6 +109,22 @@ func _build_environment() -> void:
 	add_child(ground)
 
 
+## Player do jogo em primeira pessoa: camera filha na altura do olho, para
+## andar pelos comodos e conferir a planta por dentro.
+func _build_player() -> void:
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	if player == null:
+		push_error("casas_lab: player.tscn nao instanciou; esperado CharacterBody3D.")
+		return
+	add_child(player)
+	player.global_position = player_inicial
+	_camera = Camera3D.new()
+	_camera.position = Vector3(0.0, camera_altura, 0.0)
+	player.add_child(_camera)
+	_camera.current = true
+	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
 func _build_camera() -> void:
 	_camera = Camera3D.new()
 	add_child(_camera)
@@ -118,7 +149,7 @@ func _add_name_label(text: String, position: Vector3) -> void:
 ## Camera de voo livre: e a forma de olhar o interior de perto sem partida.
 ## Uso: WASD/Space/Ctrl ou Q/E, com Shift acelerando.
 func _process(delta: float) -> void:
-	if _camera == null:
+	if _camera == null or usar_player:
 		return
 	var direction := Vector3.ZERO
 	if Input.is_physical_key_pressed(KEY_W):
