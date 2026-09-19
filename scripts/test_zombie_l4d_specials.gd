@@ -16,6 +16,7 @@ const STALKER_SCRIPT := preload("res://scripts/zombie_stalker.gd")
 const COLLECTOR_SCRIPT := preload("res://scripts/zombie_collector.gd")
 const ABILITIES_SCRIPT := preload("res://scripts/zombie_variant_abilities.gd")
 const SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator.gd")
+const FLOOR_PLAN_SCRIPT := preload("res://scripts/floor_plan_generator.gd")
 const NEW_TYPES := ["SMOKER", "HEALER", "STALKER"]
 
 
@@ -35,6 +36,7 @@ func run(test_root: Node) -> void:
 	_test_procedural_walk_phase(test_root)
 	_test_jump_does_not_land_on_player(test_root)
 	_test_ambush_types_prefer_indoor(test_root)
+	_test_floor_plan_generation(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -376,6 +378,60 @@ func _test_ambush_types_prefer_indoor(test_root: Node) -> void:
 		_fail(test_root, "Emboscada: smoker=%s stalker=%s walker=%s brute=%s." % [smoker, stalker, walker, brute])
 		return
 	print("PASS: So puxador e espreitador preferem spawn interno.")
+
+
+func _test_floor_plan_generation(test_root: Node) -> void:
+	print("Testando geracao de planta (treemap + portas alcancaveis)...")
+	var first := FLOOR_PLAN_SCRIPT.generate(14, 10, 4242)
+	var again := FLOOR_PLAN_SCRIPT.generate(14, 10, 4242)
+	var rooms: Array = first["rooms"]
+	var deterministic := true
+	for index in rooms.size():
+		var first_rect: Rect2i = rooms[index]["rect"]
+		var again_rect: Rect2i = (again["rooms"] as Array)[index]["rect"]
+		if first_rect != again_rect or String(rooms[index]["name"]) != String((again["rooms"] as Array)[index]["name"]):
+			deterministic = false
+			break
+	var inside := true
+	var overlap := false
+	for index in rooms.size():
+		var rect: Rect2i = rooms[index]["rect"]
+		if rect.position.x < 0 or rect.position.y < 0 or rect.end.x > 14 or rect.end.y > 10:
+			inside = false
+		for other in range(index + 1, rooms.size()):
+			if rect.intersects((rooms[other]["rect"] as Rect2i)):
+				overlap = true
+	var reachable := _count_reachable_rooms(first)
+	if not deterministic or not inside or overlap or reachable != rooms.size():
+		_fail(test_root, "Planta: deterministica=%s contida=%s sobrepoe=%s alcancaveis=%d/%d." % [deterministic, inside, overlap, reachable, rooms.size()])
+		return
+	print("PASS: Planta determinista, contida, sem sobreposicao e com todos os %d quartos alcancaveis." % rooms.size())
+
+
+## Quantos quartos da para alcancar pelas portas, partindo do maior.
+func _count_reachable_rooms(plan: Dictionary) -> int:
+	var rooms: Array = plan["rooms"]
+	var doors: Array = plan["doors"]
+	var adjacency: Array = []
+	adjacency.resize(rooms.size())
+	for index in rooms.size():
+		adjacency[index] = []
+	for door in doors:
+		adjacency[int(door["a"])].append(int(door["b"]))
+		adjacency[int(door["b"])].append(int(door["a"]))
+	if rooms.is_empty():
+		return 0
+	var visited: Dictionary = {}
+	var queue: Array[int] = [0]
+	visited[0] = true
+	while not queue.is_empty():
+		var current: int = queue.pop_front()
+		for neighbor in adjacency[current]:
+			if visited.has(neighbor):
+				continue
+			visited[neighbor] = true
+			queue.append(neighbor)
+	return visited.size()
 
 
 func _test_main_hooks(test_root: Node) -> void:
