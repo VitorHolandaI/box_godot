@@ -1147,8 +1147,10 @@ func _animate_pose(delta: float, is_walking: bool) -> void:
 		attack_weight = sin(attack_progress * PI)
 
 	if is_walking:
-		var mult := 9.0 if zombie_type == ZombieType.SPRINTER else 5.5
-		walk_time += delta * mult
+		# Ritmo do passo amarrado na velocidade real (zombie_mutator): era um
+		# multiplicador fixo por tipo e o pe patinava ao acelerar ou ser empurrado.
+		var stride_speed := Vector3(velocity.x, 0.0, velocity.z).length()
+		walk_time += delta * ZombieMutator.stride_radians_per_second(stride_speed)
 
 	# Taxa de giro desde o ultimo frame animado: o corpo inclina na curva.
 	var turn_rate := wrapf(rotation.y - _last_yaw, -PI, PI) / maxf(delta, 0.001)
