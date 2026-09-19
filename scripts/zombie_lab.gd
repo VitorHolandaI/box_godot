@@ -29,9 +29,10 @@ const MAX_CORPSES := 20
 ## quatro: assim os 11 pedacos aparecem distribuidos.
 ## Raio do arco do desfile (um zumbi de cada variante).
 const DEMO_PARADE_RADIUS := 13.0
-## No desfile, quem chega a esta distancia do player volta para o arco: sem isso
-## eles param no corpo a corpo depois de poucos segundos de caminhada.
-const PARADE_RESPAWN_DISTANCE := 5.0
+## Desfile em ciclo: a cada PARADE_CYCLE_SECONDS todos voltam ao arco e refazem
+## a caminhada, para a passada ficar visivel sem parar no corpo a corpo. Nao
+## cria zumbi nenhum - sao os mesmos nos voltando de posicao.
+const PARADE_CYCLE_SECONDS := 20.0
 const DEMO_CORPSE_NEAR := 4.0
 const DEMO_CORPSE_FAR := 16.0
 const DEMO_CORPSE_SIDE := 1.2
@@ -73,7 +74,9 @@ var _report_timer := 0.0
 var _respawn_delay := 0.0
 var _demo_started := false
 var _parade_active := false
-var _parade_respawns := 0
+var _parade_cycles := 0
+var _parade_cycle_left := 0.0
+var _parade_hud_second := -1
 var _hud: Label
 ## Cadaveres registrados como no main, para o coletor ter o que absorver aqui.
 var corpses: Array[Node] = []
@@ -120,7 +123,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_follow_player(delta)
 	_keep_player_fighting(delta)
-	_recycle_parade_walkers()
+	_tick_parade_cycle(delta)
 	# Report antes do return: com o bot desligado (voce no teclado) o log headless
 	# continua mostrando zumbis vivos e vida do player.
 	_report_timer += delta
@@ -257,7 +260,9 @@ func start_parade_demo() -> void:
 		return
 	_demo_started = true
 	_parade_active = true
-	_parade_respawns = 0
+	_parade_cycles = 0
+	_parade_cycle_left = PARADE_CYCLE_SECONDS
+	_parade_hud_second = -1
 	_clear_all()
 	camera_offset = Vector3(0.0, 9.0, 16.0)
 	var origin := Vector3.ZERO
@@ -270,25 +275,37 @@ func start_parade_demo() -> void:
 	_update_hud()
 
 
-## Desfile anda em ciclo: quem encosta no player volta ao arco e recomeca a
-## caminhada, entao a passada fica visivel o tempo que quiser olhar.
+## Relogio do desfile: a cada PARADE_CYCLE_SECONDS o arco inteiro recomeca. O
+## HUD so e reescrito quando o segundo mostrado muda (evita string por frame).
 ## Uso: chamado a cada tick de fisica enquanto o desfile esta ativo.
-func _recycle_parade_walkers() -> void:
-	if not _parade_active or zombies_parent == null or not is_instance_valid(player):
+func _tick_parade_cycle(delta: float) -> void:
+	if not _parade_active:
+		return
+	_parade_cycle_left -= delta
+	if _parade_cycle_left <= 0.0:
+		_parade_cycle_left = PARADE_CYCLE_SECONDS
+		_parade_cycles += 1
+		_return_parade_to_arc()
+	var second := ceili(_parade_cycle_left)
+	if second != _parade_hud_second:
+		_parade_hud_second = second
+		_update_hud()
+
+
+## Poe todos os desfilantes de volta no arco, na ordem das variantes.
+func _return_parade_to_arc() -> void:
+	if zombies_parent == null or not is_instance_valid(player):
 		return
 	var origin := (player as Node3D).global_position
 	for child in zombies_parent.get_children():
 		var zombie := child as Node3D
 		if zombie == null or bool(zombie.get("is_dead")):
 			continue
-		if zombie.global_position.distance_to(origin) > PARADE_RESPAWN_DISTANCE:
-			continue
 		var slot := int(zombie.get_meta("parade_slot", -1))
 		if slot < 0:
 			continue
 		zombie.global_position = _parade_position(origin, slot, ZombieMutator.TYPE_COUNT) + Vector3.UP * 0.2
 		zombie.set("velocity", Vector3.ZERO)
-		_parade_respawns += 1
 
 
 ## Arco de N lugares na frente do player (-Z), largo o bastante para os 23
@@ -527,12 +544,15 @@ func _build_hud() -> void:
 func _update_hud() -> void:
 	if _hud == null:
 		return
-	_hud.text = "variante [ ] ou <- ->: %s (%d)   quantidade - = ou baixo/cima: %d   K vivos   N cadaveres   O mata variante   L mata tudo   M limpa   G deus: %s" % [
+	var text := "variante [ ] ou <- ->: %s (%d)   quantidade - = ou baixo/cima: %d   K vivos   N cadaveres   O mata variante   L mata tudo   M limpa   G deus: %s" % [
 		String(ZombieMutator.Type.find_key(spawn_variant_index)),
 		spawn_variant_index,
 		spawn_count,
 		"ligado" if player_god_mode else "desligado",
 	]
+	if _parade_active:
+		text += "   desfile: proximo ciclo em %ds (ciclos: %d)" % [ceili(_parade_cycle_left), _parade_cycles]
+	_hud.text = text
 
 
 ## Sem aliado para reanimar, o lab manteria o player deitado para sempre (foi o
@@ -588,6 +608,6 @@ func _report() -> void:
 		"player_health": snappedf(player_health, 0.1),
 		"corpses": corpses.size(),
 		"ragdolls": ragdolls.size(),
-		"parade_respawns": _parade_respawns,
+		"parade_cycles": _parade_cycles,
 		"forced_move_time": snappedf(float(player.get("forced_move_time")), 0.01) if is_instance_valid(player) else 0.0,
 	}))
