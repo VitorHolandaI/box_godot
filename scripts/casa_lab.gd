@@ -5,8 +5,9 @@ extends Node3D
 ## (casa, loja, mercado, apartamento) lado a lado num chao plano, sem partida
 ## nenhuma, para olhar a planta e o interior de perto.
 ## Uso: abra `scenes/casas_lab.tscn` e aperte F6. Por padrao o player entra na
-## cena em primeira pessoa e anda com WASD (mouse olha, ESC solta). Com
-## `usar_player = false` no Inspector volta a camera de voo (WASD/Q/E/Shift).
+## cena e a camera fica em TERCEIRA pessoa atras dele: da para ver o boneco
+## andando (WASD anda, mouse mira, ESC solta). Com `usar_player = false` no
+## Inspector volta a camera de voo (WASD/Q/E/Shift) para olhar por fora.
 ##
 ## O caminho de geracao e o MESMO do jogo: BuildingAssembler3D.build_lot(kind,
 ## rng), exatamente o que o city_generator.gd:222 chama para montar cada lote -
@@ -28,14 +29,17 @@ const VOO_ACELERACAO := 3.0
 
 @export var semente := 240912
 @export var gerar_na_abertura := true
-## Player em primeira pessoa para andar dentro das casas. Desligue para usar a
-## camera de voo de inspecao.
+## Player do jogo na cena, com a camera em terceira pessoa atras dele.
+## Desligue para usar a camera de voo de inspecao.
 @export var usar_player := true
 @export var player_inicial := Vector3(0.0, 1.0, 22.0)
-@export var camera_altura := 1.45
+## Quanto a camera fica atras e acima do boneco (a terceira pessoa).
+@export var camera_offset := Vector3(0.0, 4.5, 8.0)
+@export var camera_foco_altura := 1.2
 @export var camera_inicial := Vector3(0.0, 24.0, 44.0)
 
 var _camera: Camera3D
+var _player: CharacterBody3D
 var _gerados := 0
 
 
@@ -109,20 +113,33 @@ func _build_environment() -> void:
 	add_child(ground)
 
 
-## Player do jogo em primeira pessoa: camera filha na altura do olho, para
-## andar pelos comodos e conferir a planta por dentro.
+## Player do jogo com camera em TERCEIRA pessoa: o boneco fica visivel
+## andando e a camera o segue de tras (mesmo esquema do lab de zumbis).
 func _build_player() -> void:
-	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
-	if player == null:
+	_player = PLAYER_SCENE.instantiate() as CharacterBody3D
+	if _player == null:
 		push_error("casas_lab: player.tscn nao instanciou; esperado CharacterBody3D.")
 		return
-	add_child(player)
-	player.global_position = player_inicial
+	add_child(_player)
+	_player.global_position = player_inicial
+	# A camera nao e filha do player: ela segue a posicao dele, entao nao gira
+	# junto com a mira e o boneco continua visivel de tras.
 	_camera = Camera3D.new()
-	_camera.position = Vector3(0.0, camera_altura, 0.0)
-	player.add_child(_camera)
+	add_child(_camera)
+	_camera.global_position = _player.global_position + camera_offset
+	_camera.look_at(_player.global_position + Vector3.UP * camera_foco_altura, Vector3.UP)
 	_camera.current = true
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+## Segue o boneco de tras: e o que permite ver a caminhada, que era o pedido.
+## Uso: chamado a cada tick de fisica.
+func _physics_process(delta: float) -> void:
+	if not usar_player or _camera == null or not is_instance_valid(_player):
+		return
+	var focus := _player.global_position
+	_camera.global_position = _camera.global_position.lerp(focus + camera_offset, minf(delta * 4.0, 1.0))
+	_camera.look_at(focus + Vector3.UP * camera_foco_altura, Vector3.UP)
 
 
 func _build_camera() -> void:
