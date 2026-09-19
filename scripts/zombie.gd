@@ -694,6 +694,11 @@ func _try_absorb_corpse(delta: float) -> void:
 		# Reacao visivel para quem olha de fora.
 		attack_animation_time = ATTACK_ANIMATION_DURATION
 		attack_sequence += 1
+		print(JSON.stringify({
+			"event": "zombie_absorbed_part",
+			"type": int(collector.inherited_types.back()),
+			"pieces": collector.inherited_types.size(),
+		}))
 
 
 ## Puxador: prende de longe e puxa o alvo; enquanto puxa fica parado.
