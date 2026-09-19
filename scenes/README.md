@@ -9,6 +9,7 @@ Cenas reutilizaveis e composicao principal do jogo.
 - `bullet.tscn`: projetil visual e autoritativo com trajetoria fixa apos o disparo.
 - `bush.tscn`: arbusto verde para floresta e ruinas.
 - `car.tscn`: carro voxel decorativo.
+- `casas_lab.tscn`: cena de inspecao das construcoes procedurais: uma casa, uma loja, um mercado e um apartamento lado a lado, com camera de voo (WASD/Q/E) para olhar a planta e o interior de perto.
 - `grass_tuft.tscn`: tufo de grama decorativo.
 - `in_game_menu.tscn`: menu sobreposto durante a partida (continuar, destravar personagem, menu principal, sair).
 - `main.tscn`: mundo sem zumbis autorados nas ruas; entidades surgem pela politica da partida.

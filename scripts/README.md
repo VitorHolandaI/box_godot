@@ -17,6 +17,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis e do hitscan com esfera de tolerancia ao atraso de rede, mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
 - `capture_shots.sh`: captura os frames de divulgacao do README pelo modo `--capture` do jogo e otimiza para `docs/imagens/` (`--shot=NOME`, `--list`, `--no-optimize`; brutos em `dist/capturas/`).
 - `corpse_cleanup_policy.gd`: escolhe quais ragdolls somem: so os longe de todos os jogadores, com teto que remove o mais distante.
+- `casa_lab.gd`: monta a fileira de construcoes da cena `casas_lab.tscn` chamando building_generator + building_assembler (o mesmo caminho do jogo), com chao, sol, nomes flutuantes e camera de voo.
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
 - `crate_weapon_model_builder.gd`: modelos em caixas das armas de crate na mao do jogador (escopetas, fuzis, sniper, bazuca e armas futuristas com faixas brilhando).
 - `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores, tremida ao apanhar e arrombamento por zumbis, faca ou tiro que libera o vao.
