@@ -201,8 +201,23 @@ static func _add_wall_side(walls: Array[Dictionary], openings: Array[Dictionary]
 	var other_room := not outside and int(owner_of[neighbor]) != room_index
 	if not outside and not other_room:
 		return
-	var entry := {"cell": cell, "side": side}
-	if doors.has(cell):
+	# Canonicaliza a divisa interna: parede a leste vira "oeste do vizinho" e a
+	# sul vira "norte do vizinho", entao a mesma divisa tem uma representacao so,
+	# venha do quarto de cima ou do de baixo. Na borda externa (sem vizinho) a
+	# parede fica na celula de dentro.
+	var entry_cell := cell
+	var entry_side := side
+	if other_room and side == 1:
+		entry_cell = neighbor
+		entry_side = 3
+	elif other_room and side == 2:
+		entry_cell = neighbor
+		entry_side = 0
+	var entry := {"cell": entry_cell, "side": entry_side}
+	# A porta da planta guarda a celula de cima/esquerda da divisa, que e
+	# exatamente a celula canonica da parede - por isso o teste e na celula
+	# canonica, e nao na original (era o que fazia a porta virar parede).
+	if doors.has(entry_cell):
 		openings.append(entry)
 	else:
 		walls.append(entry)
