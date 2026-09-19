@@ -33,8 +33,10 @@ const VOO_ACELERACAO := 3.0
 ## Desligue para usar a camera de voo de inspecao.
 @export var usar_player := true
 @export var player_inicial := Vector3(0.0, 1.0, 22.0)
-## Quanto a camera fica atras e acima do boneco (a terceira pessoa).
-@export var camera_offset := Vector3(0.0, 4.5, 8.0)
+## Quanto a camera fica atras e acima do boneco. A camera de verdade do jogo e
+## o local_camera.gd (usado pelo split_screen_manager no PVP/sobrevivência);
+## enquanto ele nao entra aqui, este offset imita a distancia dele.
+@export var camera_offset := Vector3(0.0, 6.5, 14.0)
 @export var camera_foco_altura := 1.2
 @export var camera_inicial := Vector3(0.0, 24.0, 44.0)
 
@@ -88,7 +90,9 @@ func _build_environment() -> void:
 	environment.background_mode = Environment.BG_COLOR
 	environment.background_color = Color(0.42, 0.52, 0.66)
 	environment.ambient_light_source = Environment.AMBIENT_SOURCE_COLOR
-	environment.ambient_light_color = Color(0.75, 0.75, 0.78)
+	environment.ambient_light_color = Color(0.86, 0.86, 0.90)
+	# Interior de predio ficava escuro demais para inspecionar a planta.
+	environment.ambient_light_energy = 1.15
 	var world_environment := WorldEnvironment.new()
 	world_environment.environment = environment
 	add_child(world_environment)
@@ -96,6 +100,7 @@ func _build_environment() -> void:
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = Vector3(-50.0, -35.0, 0.0)
 	sun.shadow_enabled = true
+	sun.light_energy = 1.15
 	add_child(sun)
 
 	var ground := StaticBody3D.new()
