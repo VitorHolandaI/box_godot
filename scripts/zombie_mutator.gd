@@ -41,10 +41,13 @@ enum Type {
 	## Coletor: absorve pedacos de cadaveres e usa as habilidades deles
 	## (zombie_collector.gd). Fora do sorteio comum: nasce pela onda ou pelo lab.
 	COLLECTOR = 21,
+	## Aranha (pedido do dono, referencia Dead Space): corpo baixo com quatro
+	## membros finos a mais e costelas expostas; rapida e fragil.
+	SPIDER = 22,
 }
 
 ## Quantidade de tipos (snapshot leva ate 127, ZombieSnapshotCodec).
-const TYPE_COUNT := 22
+const TYPE_COUNT := 23
 ## Geometria base do zumbi (zombie.tscn): pes do modelo e capsula de colisao.
 const MODEL_FEET_Y := -0.82
 const BASE_CAPSULE_RADIUS := 0.56
@@ -62,6 +65,7 @@ const BODY_SCALES: Dictionary = {
 	Type.LEAPER: Vector3(0.85, 1.0, 0.85),
 	Type.CHARGER: Vector3(1.2, 1.1, 1.2),
 	Type.SMOKER: Vector3(0.9, 1.15, 0.9),
+	Type.SPIDER: Vector3(1.2, 0.85, 1.2),
 }
 
 const SKIN_PALETTE: Array[Color] = [
@@ -98,7 +102,11 @@ static func random_variant_for_hash(hash_val: int) -> int:
 	# -2: pula o chefe (nunca no sorteio comum) e o coletor (sem cadaver por
 	# perto ele nao vira ameaca, entao nao entra na populacao aleatoria).
 	var variant := posmod(hash_val, TYPE_COUNT - 2)
-	return variant + 1 if variant >= Type.TITAN else variant
+	if variant >= Type.TITAN:
+		variant += 1
+	if variant >= Type.COLLECTOR:
+		variant += 1
+	return variant
 
 
 ## Aplica SO a aparencia da variante, sem deixar que ela mude os stats: e o que
@@ -308,9 +316,44 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			zombie.set("speed", 2.0)
 			zombie.set("max_health", 260)
 			_setup_collector(model)
+		Type.SPIDER:
+			# Aranha: mais rapida que o walker e mais fragil; o susto e o corpo.
+			zombie.set("speed", 3.3)
+			zombie.set("max_health", 85)
+			_setup_spider(zombie, model)
 		Type.WALKER:
 			zombie.set("speed", 2.2)
 			zombie.set("max_health", 100)
+
+
+## Aranha: corpo baixo e largo, costelas expostas e quatro membros finos a mais.
+## O tamanho do corpo vem de BODY_SCALES (padrao das outras variantes); aqui so
+## o que e proprio dela. Uso: chamado pelo _apply_anatomy.
+static func _setup_spider(zombie: CharacterBody3D, model: Node3D) -> void:
+	model.rotation.x = deg_to_rad(58.0)
+	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	if head != null:
+		head.rotation.x = deg_to_rad(-45.0)
+	var torso := zombie.get_node_or_null("Model/Torso") as MeshInstance3D
+	if torso != null:
+		torso.material_override = _quick_mat(Color(0.30, 0.34, 0.24), 0.98)
+		# Costelas expostas: tres pares claros sobre o torso escuro.
+		for rib_index in 3:
+			var rib_y := -0.18 + float(rib_index) * 0.18
+			_add_box(torso, Vector3(0.62, 0.06, 0.1), Vector3(0.0, 0.12 + rib_y, -0.22), Color(0.78, 0.74, 0.62))
+	# Quatro membros extras: duas de cada lado, finos, abertos em diagonal.
+	for limb_index in 4:
+		var side := -1.0 if limb_index % 2 == 0 else 1.0
+		var depth := -0.12 + float(limb_index / 2) * 0.26
+		var limb := _add_box(model, Vector3(0.7, 0.09, 0.09), Vector3(side * 0.62, 0.30, depth), Color(0.78, 0.74, 0.62))
+		limb.rotation.z = deg_to_rad(side * 28.0)
+		limb.rotation.y = deg_to_rad(side * 22.0)
+	var col_shape := zombie.get_node_or_null("CollisionShape") as CollisionShape3D
+	if col_shape != null:
+		col_shape.position = Vector3(0.0, -0.28, 0.0)
+	var health_lbl := zombie.get_node_or_null("HealthLabel") as Label3D
+	if health_lbl != null:
+		health_lbl.position.y = 1.05
 
 
 ## Coletor: corcunda para frente, leitura diferente do walker sem arte nova.
