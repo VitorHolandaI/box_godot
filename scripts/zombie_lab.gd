@@ -27,6 +27,8 @@ const MAX_CORPSES := 20
 ## Demo: corredor de cadaveres na frente do player e a fila de coletores que
 ## entra andando. Um coletor so carrega 3 pedacos (MAX_ABILITIES), por isso sao
 ## quatro: assim os 11 pedacos aparecem distribuidos.
+## Raio do arco do desfile (um zumbi de cada variante).
+const DEMO_PARADE_RADIUS := 13.0
 const DEMO_CORPSE_NEAR := 4.0
 const DEMO_CORPSE_FAR := 16.0
 const DEMO_CORPSE_SIDE := 1.2
@@ -55,6 +57,9 @@ const HUD_MARGIN := Vector2(16.0, 12.0)
 ## habilidade em anel e o coletor do lado de fora, vindo comer um por um.
 ## Ligue aqui no Inspector ou use --lab-coletor.
 @export var coletor_demo := false
+## Desfile: um zumbi de CADA variante em arco na frente do player, para comparar
+## passada e anatomia de todas de uma vez. Ligue Desfile ou use --lab-desfile.
+@export var desfile_demo := false
 ## Variante que a tecla K cria (indice de ZombieMutator.Type, 0 a 20).
 @export var spawn_variant_index := 0
 ## Quantidade que a tecla K cria por vez.
@@ -95,6 +100,8 @@ func _ready() -> void:
 	_apply_lab_arguments()
 	if coletor_demo:
 		start_collector_demo()
+	elif desfile_demo:
+		start_parade_demo()
 	_update_hud()
 	print(JSON.stringify({
 		"event": "zombie_lab_started",
@@ -235,6 +242,30 @@ func start_collector_demo() -> void:
 		var distance := DEMO_COLLECTOR_DISTANCE + float(index) * DEMO_COLLECTOR_GAP
 		_spawn_at(ZombieMutator.Type.COLLECTOR, origin + Vector3(0.0, 0.2, -distance), false)
 	_update_hud()
+
+
+## Desfile: um zumbi de cada variante em arco na frente do player, todos vivos e
+## andando, para comparar as passadas. Uso: Desfile no Inspector ou --lab-desfile.
+func start_parade_demo() -> void:
+	if _demo_started:
+		return
+	_demo_started = true
+	_clear_all()
+	camera_offset = Vector3(0.0, 9.0, 16.0)
+	var origin := Vector3.ZERO
+	if is_instance_valid(player):
+		origin = (player as Node3D).global_position
+	for kind in ZombieMutator.TYPE_COUNT:
+		_spawn_at(kind, _parade_position(origin, kind, ZombieMutator.TYPE_COUNT), false)
+	_update_hud()
+
+
+## Arco de N lugares na frente do player (-Z), largo o bastante para os 23
+## caberem sem se empilhar.
+func _parade_position(origin: Vector3, index: int, total: int) -> Vector3:
+	var t := float(index) / float(maxi(total - 1, 1))
+	var angle := lerpf(deg_to_rad(-70.0), deg_to_rad(70.0), t)
+	return origin + Vector3(sin(angle), 0.0, -cos(angle)) * DEMO_PARADE_RADIUS + Vector3.UP * 0.2
 
 
 ## Cadaver do corredor: na frente do player (-Z, onde a camera enxerga), de
@@ -428,6 +459,8 @@ func _apply_lab_arguments() -> void:
 			_set_count_from_argument(argument.trim_prefix("--lab-corpse="), true)
 		elif argument == "--lab-coletor":
 			start_collector_demo()
+		elif argument == "--lab-desfile":
+			start_parade_demo()
 
 
 func _set_variant_from_argument(raw_value: String) -> void:
