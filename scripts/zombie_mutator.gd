@@ -58,6 +58,8 @@ const BASE_HEALTH_LABEL_Y := 1.75
 ## verga de 2.75 m: o Tita segue entrando em predio (a cabeca atravessa o teto).
 const MAX_CAPSULE_RADIUS := 0.95
 const MAX_CAPSULE_HEIGHT := 2.6
+## Patas extras da aranha (nomeadas SpiderLimb0..3 na montagem).
+const SPIDER_LIMB_COUNT := 4
 const BODY_SCALES: Dictionary = {
 	Type.BRUTE: Vector3(1.35, 1.25, 1.35),
 	Type.TITAN: Vector3(2.3, 2.3, 2.3),
@@ -346,6 +348,8 @@ static func _setup_spider(zombie: CharacterBody3D, model: Node3D) -> void:
 		var side := -1.0 if limb_index % 2 == 0 else 1.0
 		var depth := -0.12 + float(limb_index / 2) * 0.26
 		var limb := _add_box(model, Vector3(0.7, 0.09, 0.09), Vector3(side * 0.62, 0.30, depth), Color(0.78, 0.74, 0.62))
+		# Nome para a passada achar as patas extras (animate_variant_pose).
+		limb.name = "SpiderLimb%d" % limb_index
 		limb.rotation.z = deg_to_rad(side * 28.0)
 		limb.rotation.y = deg_to_rad(side * 22.0)
 	var col_shape := zombie.get_node_or_null("CollisionShape") as CollisionShape3D
@@ -604,6 +608,22 @@ static func animate_variant_pose(
 			var leg_drag := 1.45 + (sin(walk_time) * 0.08 if is_walking else 0.0)
 			left_leg.rotation.x = lerpf(left_leg.rotation.x, leg_drag, minf(delta * 8.0, 1.0))
 			right_leg.rotation.x = lerpf(right_leg.rotation.x, leg_drag + 0.05, minf(delta * 8.0, 1.0))
+		Type.SPIDER:
+			# Trote de aranha: pares em diagonal (frente-esq com tras-direita) e
+			# as quatro patas extras remando no mesmo ritmo, corpo balancando.
+			var trot := sin(walk_time) * 0.7 if is_walking else 0.0
+			var counter := sin(walk_time + PI) * 0.7 if is_walking else 0.0
+			left_leg.rotation.x = lerpf(left_leg.rotation.x, 1.15 + trot, minf(delta * 14.0, 1.0))
+			right_leg.rotation.x = lerpf(right_leg.rotation.x, 1.15 + counter, minf(delta * 14.0, 1.0))
+			left_arm.rotation.x = lerpf(left_arm.rotation.x, 0.95 + counter + attack_w * 1.1, minf(delta * 14.0, 1.0))
+			right_arm.rotation.x = lerpf(right_arm.rotation.x, 0.95 + trot + attack_w * 1.1, minf(delta * 14.0, 1.0))
+			model.position.y = lerpf(model.position.y, (sin(walk_time * 2.0) * 0.05) if is_walking else 0.0, minf(delta * 12.0, 1.0))
+			for limb_index in SPIDER_LIMB_COUNT:
+				var limb := _pose_node(zombie, cached_nodes, "Model/SpiderLimb%d" % limb_index)
+				if limb == null:
+					continue
+				var limb_phase := trot if limb_index % 2 == 0 else counter
+				limb.rotation.x = lerpf(limb.rotation.x, limb_phase * 0.5, minf(delta * 16.0, 1.0))
 		Type.LIMPER, Type.HALF_LEG:
 			var step := -sin(walk_time) * 0.55 if is_walking else 0.0
 			left_leg.rotation.x = lerpf(left_leg.rotation.x, step, minf(delta * 10.0, 1.0))
