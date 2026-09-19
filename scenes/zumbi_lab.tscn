@@ -1,0 +1,96 @@
+[gd_scene load_steps=7 format=3]
+
+[ext_resource type="Script" path="res://scripts/zombie_lab.gd" id="1_lab"]
+[ext_resource type="PackedScene" path="res://scenes/zombie.tscn" id="2_zombie"]
+[ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
+
+[sub_resource type="Environment" id="Env"]
+background_mode = 1
+background_color = Color(0.42, 0.52, 0.66, 1)
+ambient_light_source = 2
+ambient_light_color = Color(0.75, 0.75, 0.78, 1)
+ambient_light_energy = 0.7
+
+[sub_resource type="BoxShape3D" id="GroundShape"]
+size = Vector3(60, 1, 60)
+
+[sub_resource type="BoxMesh" id="GroundMesh"]
+size = Vector3(60, 1, 60)
+
+[node name="ZumbiLab" type="Node3D"]
+script = ExtResource("1_lab")
+player = NodePath("Player")
+zombies_parent = NodePath("Zumbis")
+camera = NodePath("Camera")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Env")
+
+[node name="Sol" type="DirectionalLight3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 0.7071, 0.7071, 0, -0.7071, 0.7071, 0, 20, 0)
+shadow_enabled = true
+
+[node name="Chao" type="StaticBody3D" parent="."]
+position = Vector3(0, -0.5, 0)
+
+[node name="Malha" type="MeshInstance3D" parent="Chao"]
+mesh = SubResource("GroundMesh")
+
+[node name="Colisao" type="CollisionShape3D" parent="Chao"]
+shape = SubResource("GroundShape")
+
+[node name="Camera" type="Camera3D" parent="."]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 7, 12)
+
+[node name="Player" parent="." instance=ExtResource("3_player")]
+position = Vector3(0, 1, 0)
+
+[node name="Zumbis" type="Node3D" parent="."]
+
+[node name="ZumbiWalker" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(-10, 1, -6)
+forced_variant = 0
+
+[node name="ZumbiSprinter" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(-6, 1, 2)
+forced_variant = 4
+
+[node name="ZumbiBrute" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(-2, 1, -8)
+forced_variant = 9
+
+[node name="ZumbiScreamer" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(2, 1, 6)
+forced_variant = 10
+
+[node name="ZumbiBloater" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(6, 1, -4)
+forced_variant = 11
+
+[node name="ZumbiLeaper" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(10, 1, 3)
+forced_variant = 12
+
+[node name="ZumbiSpitter" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(-12, 1, 8)
+forced_variant = 15
+
+[node name="ZumbiCharger" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(0, 1, -12)
+forced_variant = 16
+
+[node name="ZumbiJumper" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(8, 1, 10)
+forced_variant = 17
+
+[node name="ZumbiSmoker" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(-8, 1, 12)
+forced_variant = 18
+
+[node name="ZumbiHealer" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(12, 1, -10)
+forced_variant = 19
+
+[node name="ZumbiStalker" parent="Zumbis" instance=ExtResource("2_zombie")]
+position = Vector3(4, 1, 12)
+forced_variant = 20
