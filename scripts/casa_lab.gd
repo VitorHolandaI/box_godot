@@ -17,6 +17,7 @@ extends Node3D
 
 const BUILDING_ASSEMBLER_3D := preload("res://scripts/building_assembler_3d.gd")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
+const FLOOR_PLAN_SCRIPT := preload("res://scripts/floor_plan_generator.gd")
 
 ## Arquetipos que o building_generator reconhece hoje (city_generator monta os
 ## mesmos quatro; "house" e o que os testes de telhado usam).
@@ -26,6 +27,16 @@ const FILEIRA_ESPACO := 26.0
 const CHAO_TAMANHO := Vector3(150.0, 1.0, 70.0)
 const VOO_VELOCIDADE := 14.0
 const VOO_ACELERACAO := 3.0
+## Planta: metro por celula, origem no chao e cor por quarto.
+const PLAN_CELL := 1.0
+const PLAN_ORIGIN := Vector3(0.0, 0.05, 20.0)
+const PLAN_COLORS: Array[Color] = [
+	Color(0.85, 0.75, 0.35),
+	Color(0.45, 0.70, 0.85),
+	Color(0.65, 0.80, 0.45),
+	Color(0.85, 0.55, 0.55),
+	Color(0.70, 0.60, 0.85),
+]
 
 @export var semente := 240912
 @export var gerar_na_abertura := true
@@ -39,6 +50,9 @@ const VOO_ACELERACAO := 3.0
 @export var camera_offset := Vector3(0.0, 6.5, 14.0)
 @export var camera_foco_altura := 1.2
 @export var camera_inicial := Vector3(0.0, 24.0, 44.0)
+## Desenha a PLANTA gerada (treemap) como lajes no chao, na frente da fileira.
+@export var mostrar_planta := true
+@export var planta_celulas := Vector2i(14, 10)
 
 var _camera: Camera3D
 var _player: CharacterBody3D
@@ -57,6 +71,8 @@ func _ready() -> void:
 		_build_camera()
 	if gerar_na_abertura:
 		build_row()
+	if mostrar_planta:
+		build_plan_view()
 	print(JSON.stringify({
 		"event": "casas_lab_started",
 		"arquetipos": ARCHETYPES.size(),
@@ -81,6 +97,45 @@ func build_row() -> void:
 		building.position = Vector3(offset * FILEIRA_ESPACO, 0.0, 0.0)
 		_add_name_label(archetype.to_upper(), building.position + Vector3(0.0, 13.0, 0.0))
 		_gerados += 1
+
+
+## Planta gerada (floor_plan_generator) desenhada como lajes no chao: da para
+## ver a distribuicao dos quartos e as portas sem virar parede ainda.
+## Uso: build_plan_view() (chamado no _ready quando mostrar_planta).
+func build_plan_view() -> void:
+	var plan := FLOOR_PLAN_SCRIPT.generate(planta_celulas.x, planta_celulas.y, semente, FLOOR_PLAN_SCRIPT.HOUSE_PROGRAM)
+	var rooms: Array = plan["rooms"]
+	for index in rooms.size():
+		var room: Dictionary = rooms[index]
+		var rect := room["rect"] as Rect2i
+		var center := Vector2(float(rect.position.x) + float(rect.size.x) * 0.5, float(rect.position.y) + float(rect.size.y) * 0.5)
+		var slab := MeshInstance3D.new()
+		var box := BoxMesh.new()
+		box.size = Vector3(maxf(float(rect.size.x) - 0.2, 0.2), 0.1, maxf(float(rect.size.y) - 0.2, 0.2)) * PLAN_CELL
+		var material := StandardMaterial3D.new()
+		material.albedo_color = PLAN_COLORS[index % PLAN_COLORS.size()]
+		box.material = material
+		slab.mesh = box
+		slab.position = PLAN_ORIGIN + Vector3(center.x * PLAN_CELL, 0.0, center.y * PLAN_CELL)
+		add_child(slab)
+		_add_name_label(String(room["name"]), slab.position + Vector3(0.0, 1.2, 0.0))
+	# Porta como pilarzinho vermelho na parede comum, para ver a circulacao.
+	for door in plan["doors"]:
+		var cell: Vector2i = door["cell"]
+		var post := MeshInstance3D.new()
+		var post_box := BoxMesh.new()
+		post_box.size = Vector3(0.4, 0.9, 0.4)
+		var post_material := StandardMaterial3D.new()
+		post_material.albedo_color = Color(0.9, 0.25, 0.2)
+		post_box.material = post_material
+		post.mesh = post_box
+		post.position = PLAN_ORIGIN + Vector3(float(cell.x) * PLAN_CELL, 0.45, float(cell.y) * PLAN_CELL)
+		add_child(post)
+	print(JSON.stringify({
+		"event": "casas_lab_plan",
+		"quartos": rooms.size(),
+		"portas": (plan["doors"] as Array).size(),
+	}))
 
 
 ## Chao, sol e ambiente: sem isso a cena abre preta e sem piso para as
