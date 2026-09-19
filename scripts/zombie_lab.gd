@@ -326,6 +326,19 @@ func register_corpse(corpse: Node) -> void:
 			oldest_corpse.queue_free()
 
 
+## Curandeiro levantando cadaver tambem funciona aqui: espelha o main.gd, que
+## cria um walker novo no lugar (sem rede no lab). Uso: ZombieHealer.update.
+func revive_zombie_corpse(corpse: Node) -> bool:
+	if not is_instance_valid(corpse) or not corpses.has(corpse):
+		return false
+	var position := (corpse as Node3D).global_position
+	corpses.erase(corpse)
+	_remove_zombie_ragdoll(String(corpse.name))
+	corpse.queue_free()
+	_spawn_at(ZombieMutator.Type.WALKER, position, false)
+	return true
+
+
 ## Uso: chamado por ZombieCollector.try_absorb_nearby.
 func consume_zombie_corpse(corpse: Node) -> bool:
 	if not is_instance_valid(corpse) or not corpses.has(corpse):
