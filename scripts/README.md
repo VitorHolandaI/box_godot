@@ -134,6 +134,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie_boss_brain.gd`: cerebro do super zumbi Tita: pisao em area, invocacao de sprinters em 66%/33% e furia abaixo de 25%.
 - `zombie_burn.gd`: fogo no zumbi: dano por segundo em ticks e espalha para vizinhos a 1,5 m ate 2 saltos.
 - `zombie_crowd_slots.gd`: fila de ataque estilo Left 4 Dead: no maximo 8 zumbis batem no mesmo jogador; os outros a 3 m esperam parados sem move_and_slide ate abrir vaga.
+- `zombie_collector.gd`: coletor (variante COLLECTOR): encosta no cadaver, absorve o pedaco e herda a habilidade da variante morta (no maximo 3, sem repetir), consumindo o cadaver para o healer nao reviver; despacho em `zombie.gd` pergunta por `has_ability()`.
 - `zombie_dissolve_visual.gd`: materiais de dissolucao compartilhados por cor e po ao desintegrar zumbis fora da visao.
 - `zombie_healer.gd`: curandeiro: cura zumbis a 6 m a cada 3 s e levanta o cadaver mais proximo a 8 m a cada 8 s.
 - `zombie_indoor_router.gd`: caminho do zumbi pelo navmesh do edificio, replanejado em intervalos com jitter.
