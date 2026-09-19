@@ -29,6 +29,9 @@ const MAX_CORPSES := 20
 ## quatro: assim os 11 pedacos aparecem distribuidos.
 ## Raio do arco do desfile (um zumbi de cada variante).
 const DEMO_PARADE_RADIUS := 13.0
+## No desfile, quem chega a esta distancia do player volta para o arco: sem isso
+## eles param no corpo a corpo depois de poucos segundos de caminhada.
+const PARADE_RESPAWN_DISTANCE := 5.0
 const DEMO_CORPSE_NEAR := 4.0
 const DEMO_CORPSE_FAR := 16.0
 const DEMO_CORPSE_SIDE := 1.2
@@ -69,6 +72,8 @@ var _bot_ai := PlayerBotAI.new()
 var _report_timer := 0.0
 var _respawn_delay := 0.0
 var _demo_started := false
+var _parade_active := false
+var _parade_respawns := 0
 var _hud: Label
 ## Cadaveres registrados como no main, para o coletor ter o que absorver aqui.
 var corpses: Array[Node] = []
@@ -115,6 +120,7 @@ func _ready() -> void:
 func _physics_process(delta: float) -> void:
 	_follow_player(delta)
 	_keep_player_fighting(delta)
+	_recycle_parade_walkers()
 	# Report antes do return: com o bot desligado (voce no teclado) o log headless
 	# continua mostrando zumbis vivos e vida do player.
 	_report_timer += delta
@@ -250,14 +256,39 @@ func start_parade_demo() -> void:
 	if _demo_started:
 		return
 	_demo_started = true
+	_parade_active = true
+	_parade_respawns = 0
 	_clear_all()
 	camera_offset = Vector3(0.0, 9.0, 16.0)
 	var origin := Vector3.ZERO
 	if is_instance_valid(player):
 		origin = (player as Node3D).global_position
 	for kind in ZombieMutator.TYPE_COUNT:
-		_spawn_at(kind, _parade_position(origin, kind, ZombieMutator.TYPE_COUNT), false)
+		var walker := _spawn_at(kind, _parade_position(origin, kind, ZombieMutator.TYPE_COUNT), false)
+		if walker != null:
+			walker.set_meta("parade_slot", kind)
 	_update_hud()
+
+
+## Desfile anda em ciclo: quem encosta no player volta ao arco e recomeca a
+## caminhada, entao a passada fica visivel o tempo que quiser olhar.
+## Uso: chamado a cada tick de fisica enquanto o desfile esta ativo.
+func _recycle_parade_walkers() -> void:
+	if not _parade_active or zombies_parent == null or not is_instance_valid(player):
+		return
+	var origin := (player as Node3D).global_position
+	for child in zombies_parent.get_children():
+		var zombie := child as Node3D
+		if zombie == null or bool(zombie.get("is_dead")):
+			continue
+		if zombie.global_position.distance_to(origin) > PARADE_RESPAWN_DISTANCE:
+			continue
+		var slot := int(zombie.get_meta("parade_slot", -1))
+		if slot < 0:
+			continue
+		zombie.global_position = _parade_position(origin, slot, ZombieMutator.TYPE_COUNT) + Vector3.UP * 0.2
+		zombie.set("velocity", Vector3.ZERO)
+		_parade_respawns += 1
 
 
 ## Arco de N lugares na frente do player (-Z), largo o bastante para os 23
@@ -279,17 +310,18 @@ func _corridor_position(origin: Vector3, index: int, total: int) -> Vector3:
 
 
 ## Cria um zumbi (ou cadaver) de uma variante num ponto exato.
-func _spawn_at(kind: int, position: Vector3, as_corpse: bool) -> void:
+func _spawn_at(kind: int, position: Vector3, as_corpse: bool) -> Node3D:
 	if zombies_parent == null:
-		return
+		return null
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	if zombie == null:
-		return
+		return null
 	zombie.set("forced_variant", kind)
 	zombie.position = position
 	zombies_parent.add_child(zombie)
 	if as_corpse:
 		zombie.call("take_damage", 999999, Vector3.ZERO)
+	return zombie
 
 
 ## Mata so a variante escolhida: faz cadaver util sem matar o coletor junto.
@@ -556,5 +588,6 @@ func _report() -> void:
 		"player_health": snappedf(player_health, 0.1),
 		"corpses": corpses.size(),
 		"ragdolls": ragdolls.size(),
+		"parade_respawns": _parade_respawns,
 		"forced_move_time": snappedf(float(player.get("forced_move_time")), 0.01) if is_instance_valid(player) else 0.0,
 	}))
