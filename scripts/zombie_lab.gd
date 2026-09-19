@@ -14,6 +14,8 @@ extends Node3D
 ##   N    spawna cadaveres (para o coletor absorver)
 ##   O    mata so a variante escolhida (faz cadaver sem matar o coletor)
 ##   L    mata todos                  M    limpa a cena
+##   G    liga/desliga o modo deus do player (ligado por padrao: sem ele o
+##        player morre no meio da horda e a simulacao fica sem cobaia)
 
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const ZOMBIE_RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
@@ -22,6 +24,8 @@ const COUNT_STEPS: Array[int] = [1, 2, 5, 10, 25, 50, 100]
 const MAX_SPAWN_BATCH := 200
 ## Mesmo teto do main: cadaver antigo sai para a lista nao crescer sem fim.
 const MAX_CORPSES := 20
+## Tempo deitado antes de levantar sozinho quando o modo deus esta desligado.
+const RESPAWN_DELAY_SECONDS := 1.0
 const SPAWN_DISTANCE := 6.0
 const ARC_STEP_DEGREES := 12.0
 const HUD_MARGIN := Vector2(16.0, 12.0)
@@ -36,6 +40,8 @@ const HUD_MARGIN := Vector2(16.0, 12.0)
 @export var camera_offset := Vector3(0.0, 6.0, 10.0)
 ## Desligue para assumir o player com o teclado e ver pelo olhar do jogador.
 @export var drive_player_with_bot := true
+## Vida cheia a cada tick: o lab existe para ver interacao, nao para sobreviver.
+@export var player_god_mode := true
 ## Variante que a tecla K cria (indice de ZombieMutator.Type, 0 a 20).
 @export var spawn_variant_index := 0
 ## Quantidade que a tecla K cria por vez.
@@ -43,6 +49,7 @@ const HUD_MARGIN := Vector2(16.0, 12.0)
 
 var _bot_ai := PlayerBotAI.new()
 var _report_timer := 0.0
+var _respawn_delay := 0.0
 var _hud: Label
 ## Cadaveres registrados como no main, para o coletor ter o que absorver aqui.
 var corpses: Array[Node] = []
@@ -84,6 +91,7 @@ func _ready() -> void:
 
 func _physics_process(delta: float) -> void:
 	_follow_player(delta)
+	_keep_player_fighting(delta)
 	# Report antes do return: com o bot desligado (voce no teclado) o log headless
 	# continua mostrando zumbis vivos e vida do player.
 	_report_timer += delta
@@ -133,6 +141,9 @@ func _handle_lab_key(key_event: InputEventKey) -> void:
 			_kill_all()
 		KEY_M:
 			_clear_all()
+		KEY_G:
+			player_god_mode = not player_god_mode
+			_update_hud()
 		_:
 			_handle_lab_key_by_unicode(key_event.unicode)
 
@@ -367,11 +378,36 @@ func _build_hud() -> void:
 func _update_hud() -> void:
 	if _hud == null:
 		return
-	_hud.text = "variante [ ] ou <- ->: %s (%d)   quantidade - = ou baixo/cima: %d   K vivos   N cadaveres   O mata variante   L mata tudo   M limpa" % [
+	_hud.text = "variante [ ] ou <- ->: %s (%d)   quantidade - = ou baixo/cima: %d   K vivos   N cadaveres   O mata variante   L mata tudo   M limpa   G deus: %s" % [
 		String(ZombieMutator.Type.find_key(spawn_variant_index)),
 		spawn_variant_index,
 		spawn_count,
+		"ligado" if player_god_mode else "desligado",
 	]
+
+
+## Sem aliado para reanimar, o lab manteria o player deitado para sempre (foi o
+## que acontecia no F6). Com o modo deus ligado a vida fica cheia; desligado, o
+## player levanta sozinho depois de RESPAWN_DELAY_SECONDS.
+## Uso: chamado a cada tick de fisica.
+func _keep_player_fighting(delta: float) -> void:
+	if not is_instance_valid(player):
+		return
+	var downed := bool(player.get("is_downed"))
+	var eliminated := bool(player.get("is_eliminated"))
+	if player_god_mode and not downed and not eliminated:
+		player.set("health", player.get("max_health"))
+		player.set("stamina", player.get("max_stamina"))
+		_respawn_delay = 0.0
+		return
+	if not downed and not eliminated:
+		_respawn_delay = 0.0
+		return
+	if _respawn_delay <= 0.0:
+		_respawn_delay = RESPAWN_DELAY_SECONDS
+	_respawn_delay = maxf(_respawn_delay - delta, 0.0)
+	if _respawn_delay <= 0.0:
+		player.call("respawn")
 
 
 ## Camera segue o player de longe para caber a interacao inteira na tela.
