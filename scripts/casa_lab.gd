@@ -7,11 +7,13 @@ extends Node3D
 ## Uso: abra `scenes/casas_lab.tscn` e aperte F6. WASD voa, Q/E sobe e desce,
 ## Shift acelera.
 ##
-## O caminho de geracao e o mesmo que o jogo usa e que os testes exercitam:
-## building_generator.generate(semente, arquetipo) -> building_assembler.assemble.
+## O caminho de geracao e o MESMO do jogo: BuildingAssembler3D.build_lot(kind,
+## rng), exatamente o que o city_generator.gd:222 chama para montar cada lote -
+## inclusive o predio multi-andar, que vai pelo modular_building_builder. Usar o
+## assembler de teste (building_assembler.gd) aqui deixava o apartamento como um
+## amontoado de paineis: ele nao e o caminho de predio do jogo.
 
-const BUILDING_GENERATOR := preload("res://scripts/procedural/generators/building_generator.gd")
-const BUILDING_ASSEMBLER := preload("res://scripts/procedural/assemblers/building_assembler.gd")
+const BUILDING_ASSEMBLER_3D := preload("res://scripts/building_assembler_3d.gd")
 
 ## Arquetipos que o building_generator reconhece hoje (city_generator monta os
 ## mesmos quatro; "house" e o que os testes de telhado usam).
@@ -45,12 +47,13 @@ func _ready() -> void:
 ## Monta uma construcao de cada arquetipo em fileira, com o nome flutuando em
 ## cima. Uso: build_row() (chamado no _ready ou na mao pelo editor).
 func build_row() -> void:
+	var rng := RandomNumberGenerator.new()
 	for index in ARCHETYPES.size():
 		var archetype := ARCHETYPES[index]
-		var blueprint = BUILDING_GENERATOR.generate(semente + index, archetype)
-		var building := BUILDING_ASSEMBLER.assemble(blueprint) as StaticBody3D
+		rng.seed = semente + index
+		var building := BUILDING_ASSEMBLER_3D.build_lot(archetype, rng) as StaticBody3D
 		if building == null:
-			push_error("casas_lab: arquetipo '%s' nao devolveu StaticBody3D do building_assembler; esperado construcao montada." % archetype)
+			push_error("casas_lab: arquetipo '%s' nao devolveu StaticBody3D do BuildingAssembler3D.build_lot; esperado lote montado." % archetype)
 			continue
 		add_child(building)
 		var offset := float(index) - float(ARCHETYPES.size() - 1) * 0.5
