@@ -1483,7 +1483,14 @@ func _configure_network_zombies() -> void:
 
 
 func _spawn_zombie(position_override: Variant = null, variant_override: int = -1) -> bool:
-	var spawn_position: Vector3 = position_override as Vector3 if position_override is Vector3 else zombie_spawn_locator.pick_spawn_position(get_tree())
+	# A variante e decidida ANTES da posicao: puxador e espreitador preferem
+	# nascer dentro de predio (emboscada) e o locator precisa saber disso.
+	var variant := variant_override
+	if variant < 0 and NetworkSession.survival_mode and survival_wave_controller != null:
+		var roll := posmod(spawn_index * 37 + NetworkSession.world_seed * 13, 100)
+		variant = survival_wave_controller.schedule.pick_variant(survival_wave_controller.wave_index, roll)
+	var prefer_indoor := ZOMBIE_SPAWN_LOCATOR_SCRIPT.prefers_indoor(variant)
+	var spawn_position: Vector3 = position_override as Vector3 if position_override is Vector3 else zombie_spawn_locator.pick_spawn_position(get_tree(), prefer_indoor)
 	if spawn_position == ZOMBIE_SPAWN_LOCATOR_SCRIPT.INVALID_SPAWN_POSITION:
 		return false
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
@@ -1491,11 +1498,8 @@ func _spawn_zombie(position_override: Variant = null, variant_override: int = -1
 	zombie.set_meta("network_id", spawn_index)
 	# Sobrevivencia: a onda sorteia a variante (mix percentual por fase) e o
 	# hash sincroniza o visual para os clientes pelo snapshot.
-	if variant_override >= 0:
-		zombie.set("forced_variant", variant_override)
-	elif NetworkSession.survival_mode and survival_wave_controller != null:
-		var roll := posmod(spawn_index * 37 + NetworkSession.world_seed * 13, 100)
-		zombie.set("forced_variant", survival_wave_controller.schedule.pick_variant(survival_wave_controller.wave_index, roll))
+	if variant >= 0:
+		zombie.set("forced_variant", variant)
 	zombies.add_child(zombie, true)
 	zombie.died.connect(_on_zombie_died.bind(zombie))
 	zombie.stranded.connect(_on_zombie_stranded)
