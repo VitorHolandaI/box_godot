@@ -32,6 +32,7 @@ func run(test_root: Node) -> void:
 	_test_procedural_turn_lean(test_root)
 	_test_procedural_stride_speed(test_root)
 	_test_procedural_walk_phase(test_root)
+	_test_jump_does_not_land_on_player(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -348,6 +349,19 @@ func _test_procedural_walk_phase(test_root: Node) -> void:
 		_fail(test_root, "Fase: %s=%.2f %s=%.2f." % [first_name, first_phase, second_name, second_phase])
 		return
 	print("PASS: Cada zumbi comeca a passada numa fase propria (%.2f / %.2f)." % [first_phase, second_phase])
+
+
+func _test_jump_does_not_land_on_player(test_root: Node) -> void:
+	print("Testando que o voo do bote ignora jogador e horda...")
+	var ground := 15
+	var flight: int = ZOMBIE_SCRIPT.flight_collision_mask(ground)
+	var player_cleared := (flight & ZOMBIE_SCRIPT.PLAYER_MASK_BIT) == 0
+	var zombie_cleared := (flight & ZOMBIE_SCRIPT.ZOMBIE_MASK_BIT) == 0
+	var world_kept := (flight & 1) != 0
+	if not player_cleared or not zombie_cleared or not world_kept:
+		_fail(test_root, "Voo: ground=%d flight=%d jogador_limpo=%s horda_limpa=%s chao_ok=%s." % [ground, flight, player_cleared, zombie_cleared, world_kept])
+		return
+	print("PASS: No voo o zumbi nao colide com jogador (nao empoleira) nem com a horda.")
 
 
 func _test_main_hooks(test_root: Node) -> void:
