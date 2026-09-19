@@ -119,6 +119,8 @@ var hit_reaction_time := 0.0
 var hit_direction := Vector3.ZERO
 var hit_kind := ""
 var walk_time := 0.0
+## Ultimo yaw animado, para medir a taxa de giro (inclinacao ao virar).
+var _last_yaw := 0.0
 ## Variante forçada pela onda (mix percentual); -1 = hash aleatorio original.
 ## Exportado para montar cena de teste no editor: arraste um Zombie, escolha a
 ## variante no Inspector e rode com F6 (a IA simula sozinha, sem servidor).
@@ -1148,7 +1150,10 @@ func _animate_pose(delta: float, is_walking: bool) -> void:
 		var mult := 9.0 if zombie_type == ZombieType.SPRINTER else 5.5
 		walk_time += delta * mult
 
-	ZombieMutator.animate_variant_pose(self, int(zombie_type), delta, is_walking, attack_weight, walk_time, _pose_nodes)
+	# Taxa de giro desde o ultimo frame animado: o corpo inclina na curva.
+	var turn_rate := wrapf(rotation.y - _last_yaw, -PI, PI) / maxf(delta, 0.001)
+	_last_yaw = rotation.y
+	ZombieMutator.animate_variant_pose(self, int(zombie_type), delta, is_walking, attack_weight, walk_time, _pose_nodes, turn_rate)
 	ZombieMutator.animate_hit_reaction(
 		self,
 		delta,
