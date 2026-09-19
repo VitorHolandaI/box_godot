@@ -20,6 +20,8 @@ extends RefCounted
 const MIN_ROOM_SIDE := 3
 ## Trecho minimo de parede para caber uma porta.
 const MIN_DOOR_EDGE := 2
+## Deslocamento do vizinho por lado: 0 norte, 1 leste, 2 sul, 3 oeste.
+const SIDE_OFFSETS: Array[Vector2i] = [Vector2i(0, -1), Vector2i(1, 0), Vector2i(0, 1), Vector2i(-1, 0)]
 
 ## Programa de uma casa: nome do quarto e peso relativo de area.
 const HOUSE_PROGRAM: Array[Dictionary] = [
@@ -145,6 +147,65 @@ static func _shared_edge(first: Rect2i, second: Rect2i) -> Dictionary:
 			var y := first.position.y + first.size.y if second.position.y > first.position.y else first.position.y
 			return {"cell": Vector2i((left + right) / 2, y)}
 	return {}
+
+
+## Traduz a planta em paredes e vaos, que e o que um montador precisa consumir:
+## cada parede e uma celula mais um lado (0=norte, 1=leste, 2=sul, 3=oeste) e
+## cada portao e o mesmo par com o vao aberto. Tira as paredes internas das
+## divisas entre quartos e o resto vira parede externa, entao o desenho fecha.
+## Uso: var interior := FloorPlanGenerator.draft_interior(plan)
+static func draft_interior(plan: Dictionary) -> Dictionary:
+	var rooms: Array = plan["rooms"]
+	var owner_of := {}
+	for index in rooms.size():
+		var rect: Rect2i = rooms[index]["rect"]
+		for x: int in range(rect.position.x, rect.end.x):
+			for y: int in range(rect.position.y, rect.end.y):
+				owner_of[Vector2i(x, y)] = index
+	var doors := {}
+	for door in plan["doors"]:
+		doors[door["cell"]] = true
+	var walls: Array[Dictionary] = []
+	var openings: Array[Dictionary] = []
+	for index in rooms.size():
+		var rect: Rect2i = rooms[index]["rect"]
+		for x: int in range(rect.position.x, rect.end.x):
+			_add_wall_side(walls, openings, owner_of, doors, index, Vector2i(x, rect.position.y), 0)
+			_add_wall_side(walls, openings, owner_of, doors, index, Vector2i(x, rect.end.y - 1), 2)
+		for y: int in range(rect.position.y, rect.end.y):
+			_add_wall_side(walls, openings, owner_of, doors, index, Vector2i(rect.position.x, y), 3)
+			_add_wall_side(walls, openings, owner_of, doors, index, Vector2i(rect.end.x - 1, y), 1)
+	# A divisa entre dois quartos e visitada pelos dois, e o vao da porta
+	# tambem: sem deduplicar, cada parede interna e cada porta entram duas vezes.
+	return {"walls": _unique_sides(walls), "openings": _unique_sides(openings)}
+
+
+## Tira lado repetido mantendo a ordem. Uso: interno do draft_interior.
+static func _unique_sides(sides: Array[Dictionary]) -> Array[Dictionary]:
+	var seen := {}
+	var unique: Array[Dictionary] = []
+	for side in sides:
+		var key := "%s/%d" % [side["cell"], side["side"]]
+		if seen.has(key):
+			continue
+		seen[key] = true
+		unique.append(side)
+	return unique
+
+
+## Guarda o lado da celula como parede (divisa com outro quarto ou borda) ou
+## como vao, quando a porta cai ali. Uso: interno do draft_interior.
+static func _add_wall_side(walls: Array[Dictionary], openings: Array[Dictionary], owner_of: Dictionary, doors: Dictionary, room_index: int, cell: Vector2i, side: int) -> void:
+	var neighbor := cell + SIDE_OFFSETS[side]
+	var outside := not owner_of.has(neighbor)
+	var other_room := not outside and int(owner_of[neighbor]) != room_index
+	if not outside and not other_room:
+		return
+	var entry := {"cell": cell, "side": side}
+	if doors.has(cell):
+		openings.append(entry)
+	else:
+		walls.append(entry)
 
 
 ## Embaralha com o rng da planta (Array.shuffle usa o global, que nao e
