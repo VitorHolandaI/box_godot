@@ -33,18 +33,29 @@ const PART_COLORS: Dictionary = {
 	ZombieMutator.Type.CHARGER: Color(0.80, 0.35, 0.20),
 	ZombieMutator.Type.JUMPER: Color(0.35, 0.55, 0.85),
 	ZombieMutator.Type.SMOKER: Color(0.55, 0.40, 0.75),
+	ZombieMutator.Type.BLOATER: Color(0.60, 0.75, 0.20),
+	ZombieMutator.Type.ARMORED: Color(0.55, 0.55, 0.60),
+	ZombieMutator.Type.TITAN: Color(0.85, 0.25, 0.25),
+	ZombieMutator.Type.HEALER: Color(0.30, 0.80, 0.75),
+	ZombieMutator.Type.STALKER: Color(0.20, 0.20, 0.45),
 }
 
-## Variantes cujo pedaco o coletor ja sabe usar. As outras habilidades (armored,
-## bloater, stalker, healer e o chefe) entram na proxima fatia: cada uma mexe em
-## dano recebido, morte, aura ou cerebro, e pede teste proprio.
+## Todas as 11 variantes com habilidade de verdade. As outras (walker, amputados,
+## brute e sprinter) so tem estatistica e anatomia, entao nao ha o que herdar.
+## O kamikaze do bloater NAO e herdado de proposito: o coletor se mataria ao
+## encostar; o que ele herda e a explosao da morte.
 const ABSORBABLE_TYPES: Array[int] = [
 	ZombieMutator.Type.SCREAMER,
+	ZombieMutator.Type.BLOATER,
 	ZombieMutator.Type.LEAPER,
+	ZombieMutator.Type.ARMORED,
+	ZombieMutator.Type.TITAN,
 	ZombieMutator.Type.SPITTER,
 	ZombieMutator.Type.CHARGER,
 	ZombieMutator.Type.JUMPER,
 	ZombieMutator.Type.SMOKER,
+	ZombieMutator.Type.HEALER,
+	ZombieMutator.Type.STALKER,
 ]
 
 var inherited_types: Array[int] = []

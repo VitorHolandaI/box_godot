@@ -314,7 +314,7 @@ func _run_physics_tick(delta: float) -> void:
 		horizontal_offset.y = 0.0
 		var distance := horizontal_offset.length()
 		var same_level := absf(target_offset.y) <= MELEE_VERTICAL_RANGE
-		if int(zombie_type) == ZombieType.STALKER and same_level and stalker.try_pounce(target, distance, horizontal_offset.normalized()):
+		if has_ability(ZombieType.STALKER) and same_level and stalker.try_pounce(target, distance, horizontal_offset.normalized()):
 			attack_animation_time = ATTACK_ANIMATION_DURATION
 			attack_sequence += 1
 		var waits_in_queue: bool = same_level and distance > MELEE_RANGE and (dash == null or not dash.is_leaping()) and ZombieCrowdSlots.shared.should_wait(target.get_instance_id(), get_instance_id(), distance, Engine.get_physics_frames())
@@ -681,15 +681,13 @@ func _check_charge_hit(target: CharacterBody3D, direction: Vector3) -> void:
 
 ## Recargas dos especiais novos e a aura do curandeiro (autoridade).
 func _update_l4d_cooldowns(delta: float) -> void:
-	# O coletor tambem recarrega a lingua do pedaco absorvido; as auras de
-	# stalker e healer continuam so do dono do tipo.
+	# Recarga dos pedacos absorvidos e das auras do proprio tipo, sem distincao.
 	if has_ability(ZombieType.SMOKER):
 		tongue.tick_cooldown(delta)
-	match int(zombie_type):
-		ZombieType.STALKER:
-			stalker.tick(delta)
-		ZombieType.HEALER:
-			healer.update(self, delta)
+	if has_ability(ZombieType.STALKER):
+		stalker.tick(delta)
+	if has_ability(ZombieType.HEALER):
+		healer.update(self, delta)
 
 
 ## Coletor: absorve o pedaco do cadaver encostado. So no caminho simulado, como
@@ -856,7 +854,7 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 	if is_dead or not simulation_enabled:
 		return
 
-	amount = VARIANT_ABILITIES_SCRIPT.adjust_incoming_damage(int(zombie_type), amount, damage_kind)
+	amount = VARIANT_ABILITIES_SCRIPT.adjust_incoming_damage(int(zombie_type), amount, damage_kind, collector.has_ability(ZombieType.ARMORED))
 	damage_taken_total += amount
 	health = maxi(health - mini(amount, max_health), 0)
 	_refresh_health_label()
@@ -966,7 +964,8 @@ func _run_death(killer: Node) -> void:
 	if killer != null and killer.has_method("register_zombie_kill"):
 		killer.register_zombie_kill()
 	died.emit(killer)
-	if int(zombie_type) == ZombieType.BLOATER:
+	# Vale para o bloater e para o coletor que comeu um pedaco dele.
+	if has_ability(ZombieType.BLOATER):
 		VARIANT_ABILITIES_SCRIPT.bloater_burst(get_tree(), global_position, self)
 		_play_bloater_burst()
 	var scene := get_tree().current_scene
@@ -995,7 +994,7 @@ static func play_area_effect(tree: SceneTree, origin: Vector3, color: Color, rad
 ## Super zumbi: consulta o cerebro e executa pisao e furia aqui; a invocacao
 ## precisa do spawn do main e sai pelo sinal. Roda so onde ha simulacao.
 func _update_boss(delta: float) -> void:
-	if int(zombie_type) != ZombieType.TITAN:
+	if not has_ability(ZombieType.TITAN):
 		return
 	if boss_brain == null:
 		boss_brain = BOSS_BRAIN_SCRIPT.new()
@@ -1204,6 +1203,6 @@ func apply_network_state(state: Dictionary) -> void:
 		collision_shape.set_deferred("disabled", true)
 		model.visible = false
 		_spawn_ragdoll()
-		if int(zombie_type) == ZombieType.BLOATER:
+		if has_ability(ZombieType.BLOATER):
 			_play_bloater_burst()
 
