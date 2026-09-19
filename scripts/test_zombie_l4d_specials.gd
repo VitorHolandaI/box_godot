@@ -13,6 +13,7 @@ const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const TONGUE_SCRIPT := preload("res://scripts/zombie_tongue.gd")
 const HEALER_SCRIPT := preload("res://scripts/zombie_healer.gd")
 const STALKER_SCRIPT := preload("res://scripts/zombie_stalker.gd")
+const COLLECTOR_SCRIPT := preload("res://scripts/zombie_collector.gd")
 const NEW_TYPES := ["SMOKER", "HEALER", "STALKER"]
 
 
@@ -22,6 +23,7 @@ func run(test_root: Node) -> void:
 	await _test_player_forced_move_overrides_input(test_root)
 	await _test_healer_heals_nearby_and_picks_corpse(test_root)
 	_test_stalker_reveal_and_pounce(test_root)
+	_test_collector_absorbs_and_inherits(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -175,13 +177,41 @@ func _test_stalker_reveal_and_pounce(test_root: Node) -> void:
 	print("PASS: Espreitador some longe, aparece perto e da o bote com recarga.")
 
 
+func _test_collector_absorbs_and_inherits(test_root: Node) -> void:
+	print("Testando coletor: absorve pedaco, herda habilidade e recusa o resto...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	# forced_variant antes do add_child: _ready le a variante e monta a aparencia.
+	zombie.set("forced_variant", ZombieMutator.Type.COLLECTOR)
+	test_root.add_child(zombie)
+	zombie.set_physics_process(false)
+	var collector = zombie.get("collector")
+	var starts_clean := not bool(zombie.call("has_ability", ZombieMutator.Type.SPITTER))
+	var refuses_passive: bool = not collector.absorb(ZombieMutator.Type.BRUTE, zombie)
+	var took_screamer: bool = collector.absorb(ZombieMutator.Type.SCREAMER, zombie)
+	var inherited_scream := bool(zombie.call("has_ability", ZombieMutator.Type.SCREAMER))
+	var took_spitter: bool = collector.absorb(ZombieMutator.Type.SPITTER, zombie)
+	var took_smoker: bool = collector.absorb(ZombieMutator.Type.SMOKER, zombie)
+	var full: bool = collector.is_full()
+	var refuses_repeat: bool = not collector.absorb(ZombieMutator.Type.SCREAMER, zombie)
+	var inherits_smoker := bool(zombie.call("has_ability", ZombieMutator.Type.SMOKER))
+	# test_root nao tem consume_zombie_corpse: o coletor nao pode explodir nem
+	# absorver sem um main que hospede a lista de cadaveres.
+	var no_host: bool = not collector.try_absorb_nearby(zombie, 1.0)
+	var pieces: int = int(collector.get("inherited_types").size())
+	zombie.free()
+	if not starts_clean or not refuses_passive or not took_screamer or not inherited_scream or not took_spitter or not took_smoker or not full or not refuses_repeat or not inherits_smoker or not no_host or pieces != COLLECTOR_SCRIPT.MAX_ABILITIES:
+		_fail(test_root, "Coletor: limpo=%s passiva=%s grito=%s sim=%s cuspe=%s lingua=%s cheio=%s repete=%s herdou_lingua=%s sem_host=%s pedacos=%d." % [starts_clean, refuses_passive, took_screamer, inherited_scream, took_spitter, took_smoker, full, refuses_repeat, inherits_smoker, no_host, pieces])
+		return
+	print("PASS: Coletor herda ate 3 habilidades, recusa passiva/repetida e come so cadaver util.")
+
+
 func _test_main_hooks(test_root: Node) -> void:
 	print("Testando ganchos do main para lingua e cadaver levantado...")
 	var main_world: Node = MAIN_SCRIPT.new()
-	var hooks := main_world.has_method("revive_zombie_corpse") and main_world.has_method("show_zombie_tongue")
+	var hooks := main_world.has_method("revive_zombie_corpse") and main_world.has_method("show_zombie_tongue") and main_world.has_method("consume_zombie_corpse")
 	main_world.free()
 	if not hooks:
-		_fail(test_root, "Main deveria ter revive_zombie_corpse e show_zombie_tongue.")
+		_fail(test_root, "Main deveria ter revive_zombie_corpse, show_zombie_tongue e consume_zombie_corpse.")
 		return
 	print("PASS: Main atende lingua e cadaver levantado.")
 
