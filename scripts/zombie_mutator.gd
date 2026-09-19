@@ -71,6 +71,10 @@ const HEAD_REST_Y := 1.14
 ## proporcional a taxa de giro, com teto. Vale para qualquer variante.
 const TURN_LEAN_FACTOR := 0.06
 const TURN_LEAN_MAX := 0.16
+## Passada por metro andado: ~2 no walker (2,2 m/s) e ~3 no sprinter (3,1 m/s),
+## que e perto das constantes fixas que existiam por tipo (5,5 e 9,0 rad/s).
+const STRIDE_RADIANS_PER_METER := 2.6
+const STRIDE_MIN_SPEED := 0.5
 const BODY_SCALES: Dictionary = {
 	Type.BRUTE: Vector3(1.35, 1.25, 1.35),
 	Type.TITAN: Vector3(2.3, 2.3, 2.3),
@@ -564,6 +568,14 @@ static func _create_split_head(zombie: CharacterBody3D) -> void:
 	_add_box(head, Vector3(0.22, 0.36, 0.42), Vector3(0.15, 0.10, -0.02), Color(0.50, 0.05, 0.07))
 	_add_box(head, Vector3(0.16, 0.10, 0.36), Vector3(0.16, 0.24, -0.02), Color(0.68, 0.10, 0.12))
 	_add_box(head, Vector3(0.04, 0.38, 0.44), Vector3(0.02, 0.10, -0.02), Color(0.84, 0.82, 0.76))
+
+
+## Frequencia da passada a partir da velocidade REAL, em vez do multiplicador
+## fixo por tipo: acelera, freia e empurrao mudam o ritmo do passo junto com o
+## deslocamento, que e o que tira a sensacao de pe patinando.
+## Uso: walk_time += delta * ZombieMutator.stride_radians_per_second(velocidade)
+static func stride_radians_per_second(speed: float) -> float:
+	return maxf(speed, STRIDE_MIN_SPEED) * STRIDE_RADIANS_PER_METER
 
 
 ## Inclinacao ao virar: o corpo rola para fora da curva na proporcao da taxa de
