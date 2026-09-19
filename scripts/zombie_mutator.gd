@@ -101,6 +101,47 @@ static func random_variant_for_hash(hash_val: int) -> int:
 	return variant + 1 if variant >= Type.TITAN else variant
 
 
+## Aplica SO a aparencia da variante, sem deixar que ela mude os stats: e o que
+## o coletor usa para ficar com o pedaco que comeu (colete, capacete, corcunda,
+## corpo do chefe...). As rotinas chamadas foram escritas para rodar uma vez por
+## zumbi; o coletor come cada variante no maximo uma vez, entao nao duplica node.
+## Uso: ZombieMutator.apply_part_appearance(zombie, ZombieMutator.Type.ARMORED)
+static func apply_part_appearance(zombie: CharacterBody3D, z_type: int) -> void:
+	var model := zombie.get_node_or_null("Model") as Node3D
+	if model == null:
+		return
+	# Algumas rotinas tambem escrevem speed/health; guarda e devolve no fim.
+	var speed_before := float(zombie.get("speed"))
+	var health_before := int(zombie.get("max_health"))
+	match z_type:
+		Type.LEAPER:
+			model.rotation.x = deg_to_rad(24.0)
+		Type.SCREAMER:
+			_setup_screamer(zombie)
+		Type.BLOATER:
+			_setup_bloater(zombie, model)
+		Type.ARMORED:
+			_setup_armored(zombie)
+		Type.TITAN:
+			_setup_titan(zombie, model)
+		Type.SPITTER:
+			_setup_spitter(zombie)
+		Type.CHARGER:
+			_setup_charger(zombie)
+		Type.JUMPER:
+			_setup_jumper(zombie)
+		Type.SMOKER:
+			_setup_smoker(zombie)
+		Type.HEALER:
+			_setup_healer(zombie)
+		Type.STALKER:
+			_setup_stalker(zombie, model)
+		_:
+			return
+	zombie.set("speed", speed_before)
+	zombie.set("max_health", health_before)
+
+
 ## Escala do corpo por tipo, usada pelo zumbi vivo e pelo cadaver.
 ## Uso: var escala := ZombieMutator.body_scale_for(ZombieMutator.Type.TITAN)
 static func body_scale_for(z_type: int) -> Vector3:

@@ -85,7 +85,7 @@ func absorb(zombie_type: int, owner: Node3D) -> bool:
 		return false
 	inherited_types.append(zombie_type)
 	_install_dash_state(zombie_type)
-	_change_appearance(owner, zombie_type, inherited_types.size() - 1)
+	_change_appearance(owner, zombie_type)
 	return true
 
 
@@ -167,16 +167,17 @@ func _nearest_absorbable_corpse(scene: Node, from: Vector3) -> Node:
 	return nearest
 
 
-## Cada pedaco muda o corpo: o modelo cresce um pouco e ganha um bloco na cor
-## da habilidade. Sem arte nova, e o que da leitura imediata de quem ele comeu.
-func _change_appearance(owner: Node3D, zombie_type: int, index: int) -> void:
+## Cada pedaco muda o corpo de verdade: aplica a anatomia da variante comida
+## (colete, capacete, corcunda, corpo do chefe...) e o modelo cresce um pouco.
+## Uso: chamado no absorb.
+func _change_appearance(owner: Node3D, zombie_type: int) -> void:
 	if not is_instance_valid(owner):
 		return
 	var model := owner.get_node_or_null("Model") as Node3D
 	if model == null:
 		return
+	ZombieMutator.apply_part_appearance(owner, zombie_type)
 	model.scale *= PART_GROWTH
-	_add_part_marker(model, PART_COLORS.get(zombie_type, PART_MARKER_FALLBACK_COLOR) as Color, index)
 	if zombie_type == ZombieMutator.Type.STALKER:
 		_apply_stalker_transparency(model)
 
