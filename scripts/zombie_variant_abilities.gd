@@ -124,6 +124,11 @@ class DashState extends RefCounted:
 	func is_leaping() -> bool:
 		return _time_left > 0.0
 
+	## Fora de recarga e parada: quem empresta a arrancada para outro tipo usa
+	## isto para escolher entre varias. Uso: if state.is_ready(): ...
+	func is_ready() -> bool:
+		return not is_leaping() and _cooldown_left <= 0.0
+
 
 ## Bote/salto balistico: resolve o arco ate o alvo e mantem o voo ate
 ## aterrissar. A velocidade horizontal e distancia/tempo_de_voo (alveja onde
@@ -181,6 +186,10 @@ class ArcLeapState extends RefCounted:
 
 	func is_leaping() -> bool:
 		return _flying
+
+	## Fora de recarga e parada (mesmo contrato do DashState.is_ready).
+	func is_ready() -> bool:
+		return not is_leaping() and _cooldown_left <= 0.0
 
 
 ## Bote do leaper: arco baixo e rapido de perto, pousando no alvo.

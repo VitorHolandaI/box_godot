@@ -24,6 +24,7 @@ func run(test_root: Node) -> void:
 	await _test_healer_heals_nearby_and_picks_corpse(test_root)
 	_test_stalker_reveal_and_pounce(test_root)
 	_test_collector_absorbs_and_inherits(test_root)
+	_test_collector_borrows_dash(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -203,6 +204,31 @@ func _test_collector_absorbs_and_inherits(test_root: Node) -> void:
 		_fail(test_root, "Coletor: limpo=%s passiva=%s grito=%s sim=%s cuspe=%s lingua=%s cheio=%s repete=%s herdou_lingua=%s sem_host=%s pedacos=%d." % [starts_clean, refuses_passive, took_screamer, inherited_scream, took_spitter, took_smoker, full, refuses_repeat, inherits_smoker, no_host, pieces])
 		return
 	print("PASS: Coletor herda ate 3 habilidades, recusa passiva/repetida e come so cadaver util.")
+
+
+func _test_collector_borrows_dash(test_root: Node) -> void:
+	print("Testando coletor: pedaco de arrancada vira estado usavel...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.set("forced_variant", ZombieMutator.Type.COLLECTOR)
+	test_root.add_child(zombie)
+	zombie.set_physics_process(false)
+	var collector = zombie.get("collector")
+	var no_dash_before: bool = collector.pick_dash_state() == null
+	var took_leaper: bool = collector.absorb(ZombieMutator.Type.LEAPER, zombie)
+	var leap_state = collector.dash_state_for(ZombieMutator.Type.LEAPER)
+	var ready_after: bool = collector.pick_dash_state() != null
+	var leap_range_ok := false
+	if leap_state != null:
+		# Fora do alcance nao arranca; no alcance, sim.
+		leap_state.call("update", 0.1, Vector3.ZERO, Vector3.FORWARD, 99.0, true, 22.0)
+		var far_leap := bool(leap_state.call("is_leaping"))
+		leap_state.call("update", 0.1, Vector3.ZERO, Vector3.FORWARD, 2.0, true, 22.0)
+		leap_range_ok = not far_leap and bool(leap_state.call("is_leaping"))
+	zombie.free()
+	if not no_dash_before or not took_leaper or leap_state == null or not ready_after or not leap_range_ok:
+		_fail(test_root, "Coletor arrancada: sem_antes=%s pegou=%s estado=%s pronto=%s alcance=%s." % [no_dash_before, took_leaper, leap_state != null, ready_after, leap_range_ok])
+		return
+	print("PASS: Coletor usa a arrancada do pedaco (recarga e alcance do original).")
 
 
 func _test_main_hooks(test_root: Node) -> void:
