@@ -31,6 +31,7 @@ func run(test_root: Node) -> void:
 	_test_procedural_head_bob(test_root)
 	_test_procedural_turn_lean(test_root)
 	_test_procedural_stride_speed(test_root)
+	_test_procedural_walk_phase(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -327,6 +328,26 @@ func _test_procedural_stride_speed(test_root: Node) -> void:
 		_fail(test_root, "Passada: parado=%.2f lento=%.2f walker=%.2f sprinter=%.2f." % [parado, lento, walker, sprinter])
 		return
 	print("PASS: Ritmo da passada cresce com a velocidade (%.2f a %.2f rad/s)." % [parado, sprinter])
+
+
+func _test_procedural_walk_phase(test_root: Node) -> void:
+	print("Testando fase de passada propria por zumbi...")
+	var first := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	var second := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	test_root.add_child(first)
+	test_root.add_child(second)
+	first.set_physics_process(false)
+	second.set_physics_process(false)
+	var first_name := String(first.name)
+	var second_name := String(second.name)
+	var first_phase := float(first.get("walk_time"))
+	var second_phase := float(second.get("walk_time"))
+	first.free()
+	second.free()
+	if first_name == second_name or first_phase <= 0.0 or second_phase <= 0.0 or is_equal_approx(first_phase, second_phase):
+		_fail(test_root, "Fase: %s=%.2f %s=%.2f." % [first_name, first_phase, second_name, second_phase])
+		return
+	print("PASS: Cada zumbi comeca a passada numa fase propria (%.2f / %.2f)." % [first_phase, second_phase])
 
 
 func _test_main_hooks(test_root: Node) -> void:
