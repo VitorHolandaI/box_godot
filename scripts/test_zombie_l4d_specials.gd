@@ -27,6 +27,7 @@ func run(test_root: Node) -> void:
 	_test_collector_absorbs_and_inherits(test_root)
 	_test_collector_borrows_dash(test_root)
 	_test_collector_borrows_armor(test_root)
+	_test_collector_mutation_scream_heals(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -250,6 +251,24 @@ func _test_collector_borrows_armor(test_root: Node) -> void:
 		_fail(test_root, "Coletor colete: sem=%d pegou=%s tem=%s tiro=%d faca=%d." % [plain_bullet, took_armored, has_armor, armored_bullet, armored_knife])
 		return
 	print("PASS: Coletor herda o colete (tiro pela metade, faca cheia).")
+
+
+func _test_collector_mutation_scream_heals(test_root: Node) -> void:
+	print("Testando mutacao do coletor: grito + curandeiro...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.set("forced_variant", ZombieMutator.Type.COLLECTOR)
+	test_root.add_child(zombie)
+	zombie.set_physics_process(false)
+	var collector = zombie.get("collector")
+	collector.absorb(ZombieMutator.Type.SCREAMER, zombie)
+	var only_scream: bool = not collector.has_mutation(&"grito_que_cura")
+	collector.absorb(ZombieMutator.Type.HEALER, zombie)
+	var both: bool = collector.has_mutation(&"grito_que_cura")
+	zombie.free()
+	if not only_scream or not both:
+		_fail(test_root, "Mutacao grito: so_grito=%s com_curandeiro=%s." % [only_scream, both])
+		return
+	print("PASS: Coletor so muta o grito quando junta curandeiro.")
 
 
 func _test_main_hooks(test_root: Node) -> void:
