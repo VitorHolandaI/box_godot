@@ -10,6 +10,10 @@ extends MeshInstance3D
 
 const MAX_SECONDS := ZombieTongue.MAX_PULL_SECONDS + 0.5
 const THICKNESS := 0.07
+## Fio de 7 cm some a 10 m de camera (foi o que aconteceu no lab): engorda com a
+## distancia para continuar legivel de longe, sem virar um cano de perto.
+const THICKNESS_FAR_BOOST := 3.0
+const THICKNESS_BOOST_DISTANCE := 6.0
 
 var zombie: Node3D = null
 var target: Node3D = null
@@ -47,4 +51,5 @@ func _update_shape() -> void:
 		return
 	global_position = (from + to) * 0.5
 	look_at(to, Vector3.UP)
-	scale = Vector3(1.0, 1.0, length)
+	var thickness_boost := clampf(length / THICKNESS_BOOST_DISTANCE, 1.0, THICKNESS_FAR_BOOST)
+	scale = Vector3(thickness_boost, thickness_boost, length)
