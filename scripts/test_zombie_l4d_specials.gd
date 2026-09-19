@@ -14,6 +14,7 @@ const TONGUE_SCRIPT := preload("res://scripts/zombie_tongue.gd")
 const HEALER_SCRIPT := preload("res://scripts/zombie_healer.gd")
 const STALKER_SCRIPT := preload("res://scripts/zombie_stalker.gd")
 const COLLECTOR_SCRIPT := preload("res://scripts/zombie_collector.gd")
+const ABILITIES_SCRIPT := preload("res://scripts/zombie_variant_abilities.gd")
 const NEW_TYPES := ["SMOKER", "HEALER", "STALKER"]
 
 
@@ -25,6 +26,7 @@ func run(test_root: Node) -> void:
 	_test_stalker_reveal_and_pounce(test_root)
 	_test_collector_absorbs_and_inherits(test_root)
 	_test_collector_borrows_dash(test_root)
+	_test_collector_borrows_armor(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -229,6 +231,25 @@ func _test_collector_borrows_dash(test_root: Node) -> void:
 		_fail(test_root, "Coletor arrancada: sem_antes=%s pegou=%s estado=%s pronto=%s alcance=%s." % [no_dash_before, took_leaper, leap_state != null, ready_after, leap_range_ok])
 		return
 	print("PASS: Coletor usa a arrancada do pedaco (recarga e alcance do original).")
+
+
+func _test_collector_borrows_armor(test_root: Node) -> void:
+	print("Testando coletor: colete do armored (tiro pela metade, faca cheia)...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	zombie.set("forced_variant", ZombieMutator.Type.COLLECTOR)
+	test_root.add_child(zombie)
+	zombie.set_physics_process(false)
+	var collector = zombie.get("collector")
+	var plain_bullet: int = ABILITIES_SCRIPT.adjust_incoming_damage(ZombieMutator.Type.COLLECTOR, 40, "bullet")
+	var took_armored: bool = collector.absorb(ZombieMutator.Type.ARMORED, zombie)
+	var has_armor := bool(zombie.call("has_ability", ZombieMutator.Type.ARMORED))
+	var armored_bullet: int = ABILITIES_SCRIPT.adjust_incoming_damage(ZombieMutator.Type.COLLECTOR, 40, "bullet", has_armor)
+	var armored_knife: int = ABILITIES_SCRIPT.adjust_incoming_damage(ZombieMutator.Type.COLLECTOR, 40, "melee", has_armor)
+	zombie.free()
+	if plain_bullet != 40 or not took_armored or not has_armor or armored_bullet >= 40 or armored_knife != 40:
+		_fail(test_root, "Coletor colete: sem=%d pegou=%s tem=%s tiro=%d faca=%d." % [plain_bullet, took_armored, has_armor, armored_bullet, armored_knife])
+		return
+	print("PASS: Coletor herda o colete (tiro pela metade, faca cheia).")
 
 
 func _test_main_hooks(test_root: Node) -> void:

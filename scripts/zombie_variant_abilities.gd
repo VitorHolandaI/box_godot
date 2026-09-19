@@ -43,9 +43,10 @@ const SPITTER_KEEP_DISTANCE := 8.0
 
 
 ## Dano de tiro no armored cai pela metade; faca e golpes batem cheio.
+## extra_armor serve para quem herdou o colete sem ser do tipo ARMORED (coletor).
 ## Uso: var dano := ZombieVariantAbilities.adjust_incoming_damage(ZombieMutator.Type.ARMORED, 40, "bullet")
-static func adjust_incoming_damage(zombie_type: int, amount: int, damage_kind: String) -> int:
-	if zombie_type == ZombieMutator.Type.ARMORED and damage_kind == "bullet":
+static func adjust_incoming_damage(zombie_type: int, amount: int, damage_kind: String, extra_armor: bool = false) -> int:
+	if (zombie_type == ZombieMutator.Type.ARMORED or extra_armor) and damage_kind == "bullet":
 		return maxi(roundi(float(amount) * ARMORED_BULLET_FACTOR), 1)
 	return amount
 
