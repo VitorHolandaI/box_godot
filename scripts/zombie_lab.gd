@@ -16,6 +16,7 @@ extends Node3D
 ##   L    mata todos                  M    limpa a cena
 
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
+const ZOMBIE_RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const REPORT_INTERVAL_SECONDS := 2.0
 const COUNT_STEPS: Array[int] = [1, 2, 5, 10, 25, 50, 100]
 const MAX_SPAWN_BATCH := 200
@@ -45,6 +46,9 @@ var _report_timer := 0.0
 var _hud: Label
 ## Cadaveres registrados como no main, para o coletor ter o que absorver aqui.
 var corpses: Array[Node] = []
+## Cadaveres VISIVEIS: o zumbi morto esconde o modelo e quem aparece e o ragdoll.
+var ragdolls: Array[Node] = []
+var ragdolls_by_zombie: Dictionary = {}
 
 
 func _ready() -> void:
@@ -66,6 +70,7 @@ func _ready() -> void:
 	# sem depender de input local nem de servidor.
 	NetworkSession.bot_mode = drive_player_with_bot
 	_build_hud()
+	_connect_spit_signals()
 	_apply_lab_arguments()
 	_update_hud()
 	print(JSON.stringify({
@@ -180,6 +185,7 @@ func _spawn_batch(as_corpse: bool = false) -> void:
 			# ragdoll, que e o que o coletor procura.
 			zombie.call("take_damage", 999999, Vector3.ZERO)
 	_update_hud()
+	_connect_spit_signals()
 
 
 ## Mata so a variante escolhida: faz cadaver util sem matar o coletor junto.
@@ -224,6 +230,12 @@ func _clear_all() -> void:
 		return
 	for child in zombies_parent.get_children():
 		child.queue_free()
+	for ragdoll in ragdolls:
+		if is_instance_valid(ragdoll):
+			ragdoll.queue_free()
+	ragdolls.clear()
+	ragdolls_by_zombie.clear()
+	corpses.clear()
 	_update_hud()
 
 
@@ -237,6 +249,7 @@ func register_corpse(corpse: Node) -> void:
 	if corpses.size() > MAX_CORPSES:
 		var oldest_corpse = corpses.pop_front()
 		if is_instance_valid(oldest_corpse):
+			_remove_zombie_ragdoll(String(oldest_corpse.name))
 			oldest_corpse.queue_free()
 
 
@@ -245,8 +258,64 @@ func consume_zombie_corpse(corpse: Node) -> bool:
 	if not is_instance_valid(corpse) or not corpses.has(corpse):
 		return false
 	corpses.erase(corpse)
+	_remove_zombie_ragdoll(String(corpse.name))
 	corpse.queue_free()
 	return true
+
+
+## Cadaver visivel: espelha o main.gd (mesma assinatura), sem replicacao.
+## Uso: chamado por zombie.gd/_spawn_ragdoll via has_method.
+func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0, appearance_hash: int = 0, source_name: String = "") -> void:
+	if not source_name.is_empty() and is_instance_valid(ragdolls_by_zombie.get(source_name)):
+		return
+	var ragdoll := ZOMBIE_RAGDOLL_SCENE.instantiate()
+	ragdoll.set("body_scale", ZombieMutator.body_scale_for(z_type))
+	add_child(ragdoll)
+	ragdoll.position = position
+	ragdoll.rotation.y = rotation
+	ragdoll.setup(velocity, z_type, appearance_hash)
+	ragdolls.append(ragdoll)
+	if not source_name.is_empty():
+		ragdolls_by_zombie[source_name] = ragdoll
+
+
+func _remove_zombie_ragdoll(zombie_name: String) -> void:
+	var ragdoll: Variant = ragdolls_by_zombie.get(zombie_name)
+	if is_instance_valid(ragdoll):
+		(ragdoll as Node).queue_free()
+		ragdolls.erase(ragdoll)
+	ragdolls_by_zombie.erase(zombie_name)
+
+
+## Lingua do puxador: o desenho e do cenario, nao do zumbi (gancho do main).
+func show_zombie_tongue(zombie: Node3D, target: Node3D, active: bool) -> void:
+	if zombie == null:
+		return
+	var existing := get_node_or_null("Tongue_%s" % String(zombie.name))
+	if existing != null:
+		existing.queue_free()
+	if not active or target == null:
+		return
+	var tongue_visual := ZombieTongueVisual.new()
+	add_child(tongue_visual)
+	tongue_visual.setup(zombie, target)
+
+
+## Cuspe: poça de acido que queima (gancho do main, aqui sem replicacao).
+func _on_lab_spit_used(_zombie: Node, target_position: Vector3) -> void:
+	var puddle := AcidPuddle.new()
+	puddle.damages = true
+	add_child(puddle)
+	puddle.global_position = Vector3(target_position.x, target_position.y - 0.9, target_position.z)
+
+
+## Zumbis ja na cena tambem precisam avisar o cuspe; connect repetido e no-op.
+func _connect_spit_signals() -> void:
+	if zombies_parent == null:
+		return
+	for child in zombies_parent.get_children():
+		if child.has_signal("spit_used") and not child.is_connected("spit_used", _on_lab_spit_used):
+			child.connect("spit_used", _on_lab_spit_used)
 
 
 ## Atalhos de linha de comando, processados na ordem em que aparecem:
@@ -332,4 +401,6 @@ func _report() -> void:
 		"zombies_alive": alive,
 		"zombies_total": total,
 		"player_health": snappedf(player_health, 0.1),
+		"corpses": corpses.size(),
+		"ragdolls": ragdolls.size(),
 	}))
