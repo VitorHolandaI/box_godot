@@ -30,6 +30,7 @@ func run(test_root: Node) -> void:
 	_test_collector_mutation_scream_heals(test_root)
 	_test_procedural_head_bob(test_root)
 	_test_procedural_turn_lean(test_root)
+	_test_procedural_stride_speed(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -314,6 +315,18 @@ func _test_procedural_turn_lean(test_root: Node) -> void:
 		_fail(test_root, "Inclinacao: repouso=%.3f virando=%.3f reto=%.3f." % [rest_roll, leaning, straight])
 		return
 	print("PASS: Corpo inclina virando e volta ao normal indo reto.")
+
+
+func _test_procedural_stride_speed(test_root: Node) -> void:
+	print("Testando passada amarrada na velocidade...")
+	var parado: float = ZombieMutator.stride_radians_per_second(0.0)
+	var lento: float = ZombieMutator.stride_radians_per_second(1.0)
+	var walker: float = ZombieMutator.stride_radians_per_second(2.2)
+	var sprinter: float = ZombieMutator.stride_radians_per_second(3.1)
+	if parado <= 0.0 or lento <= parado or walker <= lento or sprinter <= walker:
+		_fail(test_root, "Passada: parado=%.2f lento=%.2f walker=%.2f sprinter=%.2f." % [parado, lento, walker, sprinter])
+		return
+	print("PASS: Ritmo da passada cresce com a velocidade (%.2f a %.2f rad/s)." % [parado, sprinter])
 
 
 func _test_main_hooks(test_root: Node) -> void:
