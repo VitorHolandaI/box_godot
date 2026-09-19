@@ -436,6 +436,19 @@ func _update_scream(delta: float) -> void:
 		return
 	scream_cooldown = randf_range(7.0, 11.0)
 	ZombieFlockCoordinator.relay_sound(get_tree(), global_position, 28.0)
+	_scream_mutation_effects()
+
+
+## Mutacao grito + curandeiro: o mesmo grito tambem cura a horda no raio do
+## curandeiro. Uso: chamado logo depois do grito.
+func _scream_mutation_effects() -> void:
+	if not collector.has_mutation(&"grito_que_cura"):
+		return
+	if ZombieHealer.heal_nearby(get_tree(), self) == 0:
+		return
+	var scene := get_tree().current_scene
+	if scene != null and scene.has_method("show_zombie_ability"):
+		scene.call("show_zombie_ability", "heal", global_position)
 
 
 func _update_senses(delta: float) -> void:
