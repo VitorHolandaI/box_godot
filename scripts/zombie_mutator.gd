@@ -38,10 +38,13 @@ enum Type {
 	HEALER = 19,
 	## Espreitador: quase invisivel ate chegar perto; da o bote e prende.
 	STALKER = 20,
+	## Coletor: absorve pedacos de cadaveres e usa as habilidades deles
+	## (zombie_collector.gd). Fora do sorteio comum: nasce pela onda ou pelo lab.
+	COLLECTOR = 21,
 }
 
 ## Quantidade de tipos (snapshot leva ate 127, ZombieSnapshotCodec).
-const TYPE_COUNT := 21
+const TYPE_COUNT := 22
 ## Geometria base do zumbi (zombie.tscn): pes do modelo e capsula de colisao.
 const MODEL_FEET_Y := -0.82
 const BASE_CAPSULE_RADIUS := 0.56
@@ -92,7 +95,9 @@ static func apply_appearance(zombie: CharacterBody3D, z_type: int, hash_val: int
 ## Variante do sorteio comum (modo classico) pelo hash do nome; nunca o chefe.
 ## Uso: var tipo := ZombieMutator.random_variant_for_hash(absi(name.hash()))
 static func random_variant_for_hash(hash_val: int) -> int:
-	var variant := posmod(hash_val, TYPE_COUNT - 1)
+	# -2: pula o chefe (nunca no sorteio comum) e o coletor (sem cadaver por
+	# perto ele nao vira ameaca, entao nao entra na populacao aleatoria).
+	var variant := posmod(hash_val, TYPE_COUNT - 2)
 	return variant + 1 if variant >= Type.TITAN else variant
 
 
@@ -256,9 +261,20 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 			zombie.set("max_health", 10000)
 			zombie.set("attack_damage", 45)
 			_setup_titan(zombie, model)
+		Type.COLLECTOR:
+			# Lento e bem mais duro: precisa sobreviver ate encostar no cadaver
+			# para virar ameaca, senao morre na horda antes de juntar pedaco.
+			zombie.set("speed", 2.0)
+			zombie.set("max_health", 260)
+			_setup_collector(model)
 		Type.WALKER:
 			zombie.set("speed", 2.2)
 			zombie.set("max_health", 100)
+
+
+## Coletor: corcunda para frente, leitura diferente do walker sem arte nova.
+static func _setup_collector(model: Node3D) -> void:
+	model.rotation.x = deg_to_rad(12.0)
 
 
 static func _setup_crawler(zombie: CharacterBody3D, model: Node3D) -> void:
