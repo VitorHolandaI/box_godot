@@ -29,6 +29,7 @@ func run(test_root: Node) -> void:
 	_test_collector_borrows_armor(test_root)
 	_test_collector_mutation_scream_heals(test_root)
 	_test_procedural_head_bob(test_root)
+	_test_procedural_turn_lean(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -294,6 +295,25 @@ func _test_procedural_head_bob(test_root: Node) -> void:
 		_fail(test_root, "Balanco: repouso=%.3f inicio=%.3f passo=%.3f parado=%.3f." % [rest, at_start, at_step, at_idle])
 		return
 	print("PASS: Cabeca balanca no ritmo do passo e volta ao repouso parada.")
+
+
+func _test_procedural_turn_lean(test_root: Node) -> void:
+	print("Testando inclinacao procedural ao virar...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	test_root.add_child(zombie)
+	zombie.set_physics_process(false)
+	var model := zombie.get_node_or_null("Model") as Node3D
+	var model_found := model != null
+	var rest_roll := model.rotation.z if model_found else 0.0
+	ZombieMutator.animate_variant_pose(zombie, int(ZombieMutator.Type.WALKER), 1.0, true, 0.0, 1.0, {}, 2.0)
+	var leaning := model.rotation.z
+	ZombieMutator.animate_variant_pose(zombie, int(ZombieMutator.Type.WALKER), 1.0, true, 0.0, 1.0, {}, 0.0)
+	var straight := model.rotation.z
+	zombie.free()
+	if not model_found or absf(leaning - rest_roll) <= 0.01 or absf(straight - rest_roll) > 0.01:
+		_fail(test_root, "Inclinacao: repouso=%.3f virando=%.3f reto=%.3f." % [rest_roll, leaning, straight])
+		return
+	print("PASS: Corpo inclina virando e volta ao normal indo reto.")
 
 
 func _test_main_hooks(test_root: Node) -> void:
