@@ -1027,7 +1027,8 @@ func _update_visual_fade(delta: float) -> void:
 		return
 	var should_show := vision_visible and not is_dead and lod_level != LodLevel.FAR
 	var target_opacity := 1.0 if should_show else 0.0
-	if should_show and int(zombie_type) == ZombieType.STALKER:
+	# has_ability: o coletor que comeu um espreitador some do mesmo jeito.
+	if should_show and has_ability(ZombieType.STALKER):
 		target_opacity = ZombieStalker.reveal_opacity(_nearest_player_distance())
 	var fade_time := REASSEMBLE_TIME if should_show else DISSOLVE_OUT_TIME
 	var was_whole := visual_opacity >= 0.999

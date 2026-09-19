@@ -24,9 +24,6 @@ const PART_MARKER_STEP := 0.18
 ## O corpo cresce um pouco a cada pedaco: leitura de "esta maior" sem arte nova.
 const PART_GROWTH := 1.08
 const PART_MARKER_FALLBACK_COLOR := Color(0.25, 0.25, 0.28)
-## Espreitador: o coletor fica translucido, mas menos que o original (que some
-## a 6 m). transparency e por instancia, entao nao mexe no material dos outros.
-const STALKER_TRANSPARENCY := 0.55
 
 ## Cor do bloco de cada habilidade, para dar para ler o que ele ja comeu.
 const PART_COLORS: Dictionary = {
@@ -178,17 +175,6 @@ func _change_appearance(owner: Node3D, zombie_type: int) -> void:
 		return
 	ZombieMutator.apply_part_appearance(owner, zombie_type)
 	model.scale *= PART_GROWTH
-	if zombie_type == ZombieMutator.Type.STALKER:
-		_apply_stalker_transparency(model)
-
-
-## Deixa o corpo translucido sem tocar no material compartilhado das outras
-## variantes: transparency e do no, nao do material.
-func _apply_stalker_transparency(model: Node3D) -> void:
-	for node in model.find_children("*", "MeshInstance3D", true, false):
-		var mesh := node as MeshInstance3D
-		if mesh != null:
-			mesh.transparency = STALKER_TRANSPARENCY
 
 
 func _add_part_marker(model: Node3D, color: Color, index: int) -> void:
