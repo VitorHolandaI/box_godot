@@ -302,6 +302,13 @@ func _remove_zombie_ragdoll(zombie_name: String) -> void:
 func show_zombie_tongue(zombie: Node3D, target: Node3D, active: bool) -> void:
 	if zombie == null:
 		return
+	# Diagnostico do gancho: sem isto nao da para saber se o zumbi pediu o
+	# desenho e se a puxada terminou (o visual e fino e some de longe).
+	print(JSON.stringify({
+		"event": "lab_tongue",
+		"active": active,
+		"zombie": String(zombie.name),
+	}))
 	var existing := get_node_or_null("Tongue_%s" % String(zombie.name))
 	if existing != null:
 		existing.queue_free()
@@ -439,4 +446,5 @@ func _report() -> void:
 		"player_health": snappedf(player_health, 0.1),
 		"corpses": corpses.size(),
 		"ragdolls": ragdolls.size(),
+		"forced_move_time": snappedf(float(player.get("forced_move_time")), 0.01) if is_instance_valid(player) else 0.0,
 	}))
