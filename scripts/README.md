@@ -137,6 +137,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie_dissolve_visual.gd`: materiais de dissolucao compartilhados por cor e po ao desintegrar zumbis fora da visao.
 - `zombie_healer.gd`: curandeiro: cura zumbis a 6 m a cada 3 s e levanta o cadaver mais proximo a 8 m a cada 8 s.
 - `zombie_indoor_router.gd`: caminho do zumbi pelo navmesh do edificio, replanejado em intervalos com jitter.
+- `zombie_lab.gd`: cena de teste no editor (F6): dirige o player com o PlayerBotAI e deixa cada zumbi instanciado simular sozinho, com a variante escolhida no Inspector; imprime relatorio periodico de zumbis vivos e vida do player.
 - `player_unstuck_locator.gd`: acha espaco livre acima ou ao redor do jogador para o botao "Destravar personagem".
 - `zombie_progress_watch.gd`: mede se o zumbi perseguindo avanca (tempo parado e tempo sem se aproximar do alvo).
 - `zombie_stalker.gd`: espreitador: quase invisivel alem de 6 m e bote de 35 de dano que prende o jogador por 1,5 s.
