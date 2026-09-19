@@ -65,11 +65,16 @@ func _test_random_variants_skip_titan(test_root: Node) -> void:
 		if variant == ZombieMutator.Type.TITAN:
 			_fail(test_root, "Sorteio comum gerou Tita no hash %d." % hash_value)
 			return
+		if variant == ZombieMutator.Type.COLLECTOR:
+			_fail(test_root, "Sorteio comum gerou Coletor no hash %d; ele nasce pela onda/lab." % hash_value)
+			return
 		seen[variant] = true
-	if seen.size() != ZombieMutator.TYPE_COUNT - 1:
-		_fail(test_root, "Sorteio comum deveria cobrir todos os %d tipos menos o Tita; cobriu %d." % [ZombieMutator.TYPE_COUNT - 1, seen.size()])
+	# Fora do sorteio comum: o chefe (sempre) e o coletor (depende de cadaver).
+	var expected := ZombieMutator.TYPE_COUNT - 2
+	if seen.size() != expected:
+		_fail(test_root, "Sorteio comum deveria cobrir %d tipos (todos menos Tita e Coletor); cobriu %d." % [expected, seen.size()])
 		return
-	print("PASS: Sorteio comum cobre as especiais e nunca gera Tita.")
+	print("PASS: Sorteio comum cobre as especiais, sem Tita e sem Coletor.")
 
 
 func _test_spit_needs_range_line_and_cooldown(test_root: Node) -> void:

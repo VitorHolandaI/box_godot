@@ -2096,6 +2096,21 @@ func revive_zombie_corpse(corpse: Node) -> bool:
 	return true
 
 
+## Coletor comeu o cadaver: sai da lista e o corpo some, entao o healer nao
+## revive mais. Uso: chamado por ZombieCollector.try_absorb_nearby.
+func consume_zombie_corpse(corpse: Node) -> bool:
+	if NetworkSession.is_client() or not is_instance_valid(corpse) or not corpses.has(corpse):
+		return false
+	corpses.erase(corpse)
+	var corpse_name := String(corpse.name)
+	corpse.queue_free()
+	_remove_zombie_ragdoll(corpse_name)
+	if NetworkSession.is_server():
+		for peer_id in NetworkSession.loaded_peers:
+			_remove_zombie_ragdoll_remote.rpc_id(int(peer_id), corpse_name)
+	return true
+
+
 @rpc("authority", "call_remote", "reliable")
 func _remove_zombie_ragdoll_remote(zombie_name: String) -> void:
 	if NetworkSession.is_client():
