@@ -402,6 +402,22 @@ func _test_floor_plan_generation(test_root: Node) -> void:
 			if rect.intersects((rooms[other]["rect"] as Rect2i)):
 				overlap = true
 	var reachable := _count_reachable_rooms(first)
+	var interior := FLOOR_PLAN_SCRIPT.draft_interior(first)
+	var wall_keys := {}
+	for wall in interior["walls"]:
+		wall_keys["%s/%d" % [wall["cell"], wall["side"]]] = true
+	var door_blocked := false
+	for opening in interior["openings"]:
+		if wall_keys.has("%s/%d" % [opening["cell"], opening["side"]]):
+			door_blocked = true
+	# Vaos: a divisa entre dois quartos pode ser registrada pelos dois lados (a
+	# mesma porta como lado leste de um e oeste do outro), entao o esperado e
+	# pelo menos uma abertura por porta. Normalizar (canonicalizar o lado) fica
+	# para quando o montador consumir a planta.
+	var walls_ok := (interior["walls"] as Array).size() > 0 and (interior["openings"] as Array).size() >= (first["doors"] as Array).size()
+	if not walls_ok or door_blocked:
+		_fail(test_root, "Parede/vao: paredes=%d vaos=%d porta_em_parede=%s." % [(interior["walls"] as Array).size(), (interior["openings"] as Array).size(), door_blocked])
+		return
 	if not deterministic or not inside or overlap or reachable != rooms.size():
 		_fail(test_root, "Planta: deterministica=%s contida=%s sobrepoe=%s alcancaveis=%d/%d." % [deterministic, inside, overlap, reachable, rooms.size()])
 		return
