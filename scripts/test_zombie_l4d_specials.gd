@@ -410,11 +410,10 @@ func _test_floor_plan_generation(test_root: Node) -> void:
 	for opening in interior["openings"]:
 		if wall_keys.has("%s/%d" % [opening["cell"], opening["side"]]):
 			door_blocked = true
-	# Vaos: a divisa entre dois quartos pode ser registrada pelos dois lados (a
-	# mesma porta como lado leste de um e oeste do outro), entao o esperado e
-	# pelo menos uma abertura por porta. Normalizar (canonicalizar o lado) fica
-	# para quando o montador consumir a planta.
-	var walls_ok := (interior["walls"] as Array).size() > 0 and (interior["openings"] as Array).size() >= (first["doors"] as Array).size()
+	# Com o lado canonico (leste vira oeste do vizinho, sul vira norte) e o
+	# teste da porta na celula canonica, cada porta e cada divisa tem uma unica
+	# representacao - entao a contagem fecha 1:1.
+	var walls_ok := (interior["walls"] as Array).size() > 0 and (interior["openings"] as Array).size() == (first["doors"] as Array).size()
 	if not walls_ok or door_blocked:
 		_fail(test_root, "Parede/vao: paredes=%d vaos=%d porta_em_parede=%s." % [(interior["walls"] as Array).size(), (interior["openings"] as Array).size(), door_blocked])
 		return
