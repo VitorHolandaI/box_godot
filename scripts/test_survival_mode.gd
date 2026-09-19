@@ -464,10 +464,16 @@ func _test_variant_mix(test_root: Node) -> void:
 	if endgame.get(ZombieMutator.Type.SCREAMER, 0) == 0:
 		_fail(test_root, "Hora 11+ deveria liberar o screamer.")
 		return
+	if early.has(ZombieMutator.Type.COLLECTOR) or mid.has(ZombieMutator.Type.COLLECTOR):
+		_fail(test_root, "Coletor e especial de hora 11+, nao pertence as fases iniciais.")
+		return
+	if endgame.get(ZombieMutator.Type.COLLECTOR, 0) == 0:
+		_fail(test_root, "Hora 11+ deveria liberar o coletor.")
+		return
 	# Faixas acumuladas do mix final (ordem do tipo): walker 0-4, brute 39-44,
 	# screamer 45-51, bloater 52-57, leaper 58-64, armored 65-72, cuspidor 73-77,
-	# investida 78-82, saltador 83-87, puxador 88-91, curandeiro 92-95,
-	# espreitador 96-99 (os tres ultimos entraram no pedido de variedade).
+	# investida 78-82, saltador 83-87, puxador 88-90, curandeiro 91-93,
+	# espreitador 94-95, coletor 96-99 (especial que so entra na hora 11+).
 	if schedule.pick_variant(12, 0) != int(ZombieMutator.Type.WALKER):
 		_fail(test_root, "Rolagem 0 deveria cair no walker.")
 		return
@@ -477,8 +483,11 @@ func _test_variant_mix(test_root: Node) -> void:
 	if schedule.pick_variant(12, 38) == int(ZombieMutator.Type.BRUTE):
 		_fail(test_root, "Rolagem 38 deveria ficar fora da faixa do brute.")
 		return
-	if schedule.pick_variant(12, 45) != int(ZombieMutator.Type.SCREAMER) or schedule.pick_variant(12, 87) != int(ZombieMutator.Type.JUMPER) or schedule.pick_variant(12, 99) != int(ZombieMutator.Type.STALKER):
-		_fail(test_root, "Rolagem 45 deveria cair no screamer, 87 no saltador e 99 no espreitador.")
+	if schedule.pick_variant(12, 45) != int(ZombieMutator.Type.SCREAMER) or schedule.pick_variant(12, 87) != int(ZombieMutator.Type.JUMPER):
+		_fail(test_root, "Rolagem 45 deveria cair no screamer e 87 no saltador.")
+		return
+	if schedule.pick_variant(12, 94) != int(ZombieMutator.Type.STALKER) or schedule.pick_variant(12, 99) != int(ZombieMutator.Type.COLLECTOR):
+		_fail(test_root, "Rolagem 94 deveria cair no espreitador e 99 no coletor.")
 		return
 	print("PASS: Mix percentual de variantes validado.")
 
