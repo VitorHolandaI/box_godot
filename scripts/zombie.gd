@@ -118,6 +118,9 @@ var last_applied_attack_sequence := -1
 var hit_reaction_time := 0.0
 var hit_direction := Vector3.ZERO
 var hit_kind := ""
+## Fase inicial da passada por zumbi (rad por unidade do hash do nome): sem ela
+## a horda inteira bate o pe no mesmo instante, e isso denuncia o procedural.
+const WALK_PHASE_STEP := 0.06
 var walk_time := 0.0
 ## Ultimo yaw animado, para medir a taxa de giro (inclinacao ao virar).
 var _last_yaw := 0.0
@@ -1104,6 +1107,8 @@ func _configure_variant() -> void:
 	else:
 		zombie_type = ZombieMutator.random_variant_for_hash(appearance_hash) as ZombieType
 	ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
+	# Passada fora de fase entre zumbis: hash do nome, deterministico e estavel.
+	walk_time = float(appearance_hash % 1000) * WALK_PHASE_STEP
 	# Grupo proprio: o minimapa mostra o chefe sempre sem varrer a horda inteira.
 	shows_health_label = int(zombie_type) == ZombieType.TITAN
 	if shows_health_label:
