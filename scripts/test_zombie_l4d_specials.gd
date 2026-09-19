@@ -28,6 +28,7 @@ func run(test_root: Node) -> void:
 	_test_collector_borrows_dash(test_root)
 	_test_collector_borrows_armor(test_root)
 	_test_collector_mutation_scream_heals(test_root)
+	_test_procedural_head_bob(test_root)
 	_test_main_hooks(test_root)
 
 
@@ -269,6 +270,30 @@ func _test_collector_mutation_scream_heals(test_root: Node) -> void:
 		_fail(test_root, "Mutacao grito: so_grito=%s com_curandeiro=%s." % [only_scream, both])
 		return
 	print("PASS: Coletor so muta o grito quando junta curandeiro.")
+
+
+func _test_procedural_head_bob(test_root: Node) -> void:
+	print("Testando balanco procedural da cabeca na passada...")
+	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
+	test_root.add_child(zombie)
+	zombie.set_physics_process(false)
+	var head := zombie.get_node_or_null("Model/Head") as Node3D
+	var rest := head.position.y if head != null else 0.0
+	var walk_cache: Dictionary = {}
+	ZombieMutator.animate_variant_pose(zombie, int(ZombieMutator.Type.WALKER), 0.1, true, 0.0, 0.0, walk_cache)
+	var at_start := head.position.y
+	ZombieMutator.animate_variant_pose(zombie, int(ZombieMutator.Type.WALKER), 0.3, true, 0.0, PI * 0.25, walk_cache)
+	var at_step := head.position.y
+	var idle_cache: Dictionary = {}
+	ZombieMutator.animate_variant_pose(zombie, int(ZombieMutator.Type.WALKER), 0.5, false, 0.0, PI * 0.25, idle_cache)
+	var at_idle := head.position.y
+	# head vira objeto liberado depois do free(): guarda o teste antes.
+	var head_found := head != null
+	zombie.free()
+	if not head_found or is_equal_approx(at_start, at_step) or absf(at_step - rest) <= 0.001 or absf(at_idle - rest) > 0.06:
+		_fail(test_root, "Balanco: repouso=%.3f inicio=%.3f passo=%.3f parado=%.3f." % [rest, at_start, at_step, at_idle])
+		return
+	print("PASS: Cabeca balanca no ritmo do passo e volta ao repouso parada.")
 
 
 func _test_main_hooks(test_root: Node) -> void:
