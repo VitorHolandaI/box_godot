@@ -85,6 +85,7 @@ enum ZombieType {
 	HEALER = 19,
 	STALKER = 20,
 	COLLECTOR = 21,
+	SPIDER = 22,
 }
 
 enum LodLevel {
@@ -143,7 +144,8 @@ var walk_time := 0.0
 	"Smoker",
 	"Healer",
 	"Stalker",
-	"Collector"
+	"Collector",
+	"Spider"
 ) var forced_variant := -1
 ## Grito do screamer: intervalo aleatorio entre gritos.
 var scream_cooldown := 0.0
