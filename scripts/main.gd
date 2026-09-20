@@ -135,15 +135,9 @@ var swat_squads: Dictionary = {}
 var swat_squad_index := 0
 ## Cerebro dos soldados: mesma IA do bot de teste, em modo esquadrao.
 var swat_bot_ai := PlayerBotAI.new()
-## Mata-mata (--pvp): economia, placar e respawn vivem aqui no servidor.
-var pvp_match: PvpMatch = null
-## Bots de PVP criados no servidor (--pvp-bots=N): chaves no dicionario de
-## jogadores de rede, para o cliente enxergar eles pelo snapshot normal.
-var pvp_bot_keys: Dictionary = {}
-## Ids reservados dos bots (negativos, fora do sorteio do ENet).
-const PVP_BOT_PEER_ID_BASE := -2000
-## Contagem para comecar uma partida nova depois do fim (0 = sem partida).
-var pvp_restart_left := 0.0
+## Mata-mata (--pvp): bots, rodadas, economia e rota entre as bases vivem em
+## PvpServerDirector. Aqui ficam so os RPCs e o estado replicado abaixo.
+var pvp := PvpServerDirector.new(self)
 ## Estado replicado do mata-mata para o cliente (linha de HUD e dica de compra).
 var pvp_state_text := ""
 var pvp_buy_open := false
@@ -153,46 +147,6 @@ var pvp_state_elapsed := 0.0
 var last_purchase_rejection := ""
 ## Menu de compra do cliente (tecla B), criado quando o jogador local existe.
 var buy_menu: BuyMenu = null
-## Gira os marcadores fixos de spawn de cada time (nao empilha os 4 no mesmo).
-var pvp_spawn_counters: Array[int] = [0, 0]
-## Rota invertida (time 1) preguicosa: ver _reversed_route_cached().
-var pvp_reversed_route: Array = []
-## Waypoint atual de cada bot de PVP (chave -> indice), monotonico por rodada.
-var pvp_bot_route_index: Dictionary = {}
-const PVP_RESTART_SECONDS := 10.0
-## Bases dos dois times: uma safehouse por canto OPOSTO do mapa (~165 m entre
-## elas). Cada time nasce nos marcadores fixos PlayerSpawn1..4 da sua casa e so
-## compra DENTRO dela. A casa central continua sendo a da sobrevivencia.
-const PVP_TEAM_SAFEHOUSES := ["PvpSafehouseA", "PvpSafehouseB"]
-## Fallback quando a cidade nao tem as casas (modo legacy/teste).
-const PVP_TEAM_BASE_FALLBACK := [Vector3(-58.5, 1.18, -58.5), Vector3(58.5, 1.18, 58.5)]
-## Raio da zona de compra em volta da casa (a casa tem 12,8 m de lado). Subiu
-## para 9 m porque os bots nascem no quintal, na frente da porta (7,6 m).
-const PVP_BASE_RADIUS := 9.0
-## Bots de PVP nascem no QUINTAL, na frente da porta da propria base: nascer
-## dentro da casa dependia de o bot achar a saida com movimento sem pathfinding,
-## e ele ficava preso num canto interno oscilando ate estourar a rodada
-## (medido: 80 s parado com o alvo a 126 m).
-const PVP_BOT_YARD_DISTANCE := 7.6
-## Espalhamento lateral entre os bots do mesmo time, no quintal.
-const PVP_BOT_YARD_SPREAD := 1.4
-## Distancia para considerar um waypoint da rota alcancado (o alvo passa a ser o
-## proximo). Uso: ver _pvp_bot_hunt_position.
-const PVP_WAYPOINT_ARRIVE_RADIUS := 6.0
-## Rota entre as duas casas pelo ANEL DE RUAS do perimetro (as ruas ficam em
-## -72/-24/24/72 e os quarteiroes vao ate 69, entao o anel externo e o unico
-## caminho sem predio no meio). As duas portas davam para o mesmo lado (Z local):
-## a casa B foi girada 180 graus, entao cada porta cai a ~4 m da sua rua de
-## perimetro. O time 0 desce a rua de baixo, sobe a direita e entra na casa B
-## pela porta; o time 1 percorre a mesma rota ao contrario — de frente um com o
-## outro.
-const PVP_STREET_ROUTE := [
-	Vector3(-58.5, 1.3, -72.0),
-	Vector3(72.0, 1.3, -72.0),
-	Vector3(72.0, 1.3, 72.0),
-	Vector3(58.5, 1.3, 72.0),
-	Vector3(58.5, 1.3, 58.5),
-]
 var loot_rng := RandomNumberGenerator.new()
 ## Jogadores na sala no frame anterior: a sala reinicia na TRANSICAO para vazia.
 var _previous_player_count := 0
@@ -215,7 +169,7 @@ func _ready() -> void:
 			survival_wave_controller.wave_index = 7
 	if not NetworkSession.is_client() and NetworkSession.pvp_mode:
 		# PVP: sem supimentos/airdrop/loot de sobrevivencia no mapa.
-		pvp_match = PvpMatch.new()
+		pvp.start_match()
 	if not NetworkSession.is_client() and not NetworkSession.pvp_mode:
 		wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
 		airdrop_controller = AIRDROP_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
@@ -268,7 +222,7 @@ func _ready() -> void:
 		door_state_replicator.watch(get_tree())
 		_prespawn_load_test_zombies(LOAD_TEST_OPTIONS_SCRIPT.prespawn_zombie_count(OS.get_cmdline_user_args()))
 		if NetworkSession.pvp_mode:
-			_spawn_pvp_bots_when_ready.call_deferred(LOAD_TEST_OPTIONS_SCRIPT.pvp_bot_count(OS.get_cmdline_user_args()))
+			pvp.spawn_bots_when_ready.call_deferred(LOAD_TEST_OPTIONS_SCRIPT.pvp_bot_count(OS.get_cmdline_user_args()))
 	_notify_scene_loaded.call_deferred()
 
 
@@ -414,8 +368,8 @@ func _physics_process(delta: float) -> void:
 	# O smoke roda nos dois papeis: no servidor cria o esquadrao, no cliente
 	# confere que os soldados aparecem e se movem.
 	_tick_swat_smoke(delta)
-	if pvp_match != null:
-		_tick_pvp(delta)
+	if pvp.is_active():
+		pvp.tick(delta)
 	if NetworkSession.is_client():
 		if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
 			bot_ai.update(delta, get_tree())
@@ -676,7 +630,7 @@ func _update_swat_squads(delta: float) -> void:
 ## faixa de id: o ENet sorteia id de peer de 32 bits e um jogador de verdade
 ## pode cair no mesmo valor reservado.
 func _is_reserved_player_key(key: String) -> bool:
-	if pvp_bot_keys.has(key):
+	if pvp.has_bot(key):
 		return true
 	for squad_value in swat_squads.values():
 		if (squad_value as Dictionary)["keys"].has(key):
@@ -918,7 +872,7 @@ func _spawn_offline_player(slot: int, config: Dictionary) -> void:
 	player.set_spawn_position(player.global_position)
 	_connect_crate_weapon_signals(player)
 	local_players.append(player)
-	_register_pvp_player(player)
+	pvp.register_player(player)
 
 
 ## Campo de testes de armas (--armas-lab): arena vazia e uma arma de crate de
@@ -1179,8 +1133,7 @@ func _reconcile_network_players() -> void:
 			continue
 		var player = network_players[key]
 		network_players.erase(key)
-		if pvp_match != null:
-			pvp_match.remove_player(key)
+		pvp.forget_player(key)
 		player_slots_replication.forget(key)
 		if is_instance_valid(player):
 			player.queue_free()
@@ -1195,9 +1148,9 @@ func _on_peer_scene_loaded(peer_id: int) -> void:
 		return
 	# Antes saia cedo na onda 0: quem entrava num servidor em game over na onda 0
 	# nunca reiniciava a horda, e quem entrava cedo ficava sem os itens do chao.
-	if pvp_bot_keys.size() > 0:
+	if pvp.bot_count() > 0:
 		# Quem entra no meio do mata-mata tambem precisa ver os bots.
-		_spawn_pvp_bots_rpc.rpc_id(peer_id, pvp_bot_keys.size())
+		_spawn_pvp_bots_rpc.rpc_id(peer_id, pvp.bot_count())
 	if survival_wave_controller.game_over:
 		_restart_survival()
 	_wave_state.rpc_id(peer_id, survival_wave_controller.wave_index, survival_wave_controller.total_kills, survival_wave_controller.alive_in_wave, survival_wave_controller.game_over)
@@ -1285,7 +1238,7 @@ func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
 	players_node.add_child(player, true)
 	player.set_spawn_position(player.global_position)
 	network_players[key] = player
-	_register_pvp_player(player)
+	pvp.register_player(player)
 	if player.simulation_enabled:
 		_connect_crate_weapon_signals(player)
 
@@ -1351,7 +1304,7 @@ func _submit_inputs(states: Array) -> void:
 		var player = network_players.get(_player_key(sender_id, slot))
 		if player == null:
 			continue
-		if pvp_match != null and pvp_match.phase == PvpMatch.Phase.BUY:
+		if pvp.is_buy_phase():
 			# Freezetime: ninguem anda enquanto escolhe arma (comprar vai por RPC
 			# proprio, entao continua funcionando).
 			player.apply_network_input(PvpMatch.frozen_input(state))
@@ -1696,305 +1649,30 @@ func _reset_wave_lives(_wave_index: int) -> void:
 func get_survival_hud_text() -> String:
 	if NetworkSession.pvp_mode:
 		# No servidor/offline o texto sai da partida; no cliente vem replicado.
-		return pvp_match.hud_text() if pvp_match != null else pvp_state_text
+		return pvp.hud_text() if pvp.is_active() else pvp_state_text
 	return survival_wave_controller.get_hud_text() if NetworkSession.survival_mode else ""
 
 
-## Teste jogador vs bot: cria `count` jogadores de verdade simulados no
-## servidor, cacando os outros (mesma IA de PVP dos clientes bot). O cliente
-## ve eles como qualquer jogador, pelo snapshot.
+## Ponte de rede do mata-mata. A simulacao inteira (bots, rodadas, compra,
+## rota entre as bases) vive em PvpServerDirector; aqui ficam so os RPCs, que
+## precisam de um no na arvore para o Godot rotear, e o estado replicado que o
+## menu de compra e a captura de telas leem por nome deste script.
 ## Uso: godot --headless --path . -- --server --pvp --pvp-bots=4
-## Espera a cidade montar (as safehouses nascem na montagem em etapas) para
-## criar os bots ja nos marcadores fixos da casa do time deles.
-## Uso: _spawn_pvp_bots_when_ready.call_deferred(count)
-func _spawn_pvp_bots_when_ready(count: int) -> void:
-	while not _procedural_city_ready():
-		await get_tree().create_timer(0.1).timeout
-	_spawn_pvp_bots(count)
-
-
-func _spawn_pvp_bots(count: int) -> void:
-	if not NetworkSession.pvp_mode or count <= 0:
-		return
-	for index in count:
-		_create_pvp_bot(index, NetworkSession.is_server() or NetworkSession.is_offline())
-	# O cliente so cria jogador do roster de peers; os bots sao do servidor,
-	# entao precisam deste RPC para existir do outro lado (senao o estado deles
-	# chega no snapshot e nao ha no para receber: o humano nao ve os bots).
-	if NetworkSession.is_server():
-		for peer_id in multiplayer.get_peers():
-			_spawn_pvp_bots_rpc.rpc_id(int(peer_id), count)
-	print(JSON.stringify({"event": "pvp_bots_spawned", "count": pvp_bot_keys.size()}))
+func broadcast_pvp_bots(count: int) -> void:
+	for peer_id in multiplayer.get_peers():
+		_spawn_pvp_bots_rpc.rpc_id(int(peer_id), count)
 
 
 @rpc("authority", "call_remote", "reliable")
 func _spawn_pvp_bots_rpc(count: int) -> void:
 	if not NetworkSession.is_client():
 		return
-	for index in count:
-		_create_pvp_bot(index, false)
+	pvp.create_client_bots(count)
 
 
-## Cria (ou reaproveita) o no de um bot de PVP. `simulate` so no servidor: no
-## cliente o bot e um proxy como qualquer jogador de rede.
-## Uso: _create_pvp_bot(0, NetworkSession.is_server())
-func _create_pvp_bot(index: int, simulate: bool) -> void:
-	var key := "%d:%d" % [PVP_BOT_PEER_ID_BASE - index, 0]
-	if pvp_bot_keys.has(key):
-		return
-	var bot = PLAYER_SCENE.instantiate()
-	bot.name = "PvpBot_%d" % index
-	bot.local_slot = index
-	bot.simulation_enabled = simulate
-	bot.owner_peer_id = PVP_BOT_PEER_ID_BASE - index
-	bot.reads_local_input = false
-	bot.is_local_controller = false
-	bot.position = _pvp_bot_yard_spawn(index)
-	players_node.add_child(bot, true)
-	bot.set_spawn_position(bot.global_position)
-	bot.set_color_index(index + 1)
-	bot.set("input_device_name", "Bot PVP %d" % (index + 1))
-	if simulate:
-		bot.reset_pvp_loadout()
-	network_players[key] = bot
-	pvp_bot_keys[key] = true
-	if simulate:
-		_register_pvp_player(bot)
-		# O time so existe depois do register: e ele que decide a casa/marcador.
-		bot.global_position = _pvp_spawn_position_for(bot)
-		bot.set_spawn_position(bot.global_position)
-
-
-## Alimenta a IA dos bots de PVP (servidor simula; o cliente so ve o snapshot).
-func _tick_pvp_bots(delta: float) -> void:
-	var slot := 0
-	for key in pvp_bot_keys.keys().duplicate():
-		var bot = network_players.get(key)
-		if not is_instance_valid(bot):
-			pvp_bot_keys.erase(key)
-			network_players.erase(key)
-			if pvp_match != null:
-				pvp_match.remove_player(String(key))
-			continue
-		if bool(bot.get("is_eliminated")):
-			continue
-		_pvp_bot_try_buy(bot)
-		if pvp_match.phase == PvpMatch.Phase.BUY:
-			bot.apply_network_input(PvpMatch.frozen_input({}))
-			continue
-		var rumo := _pvp_bot_hunt_position(bot)
-		bot.apply_network_input(bot_ai.collect_pvp_input(bot, get_tree(), slot, delta, rumo))
-		slot += 1
-
-
-## Posicao de nascimento do bot de PVP: no quintal, na frente da porta da base
-## do time. O lado da porta segue a rotacao da casa (time 0 em -Z, time 1 em +Z).
-## Uso: var pos := _pvp_bot_yard_spawn_for_team(1, 0)
-func _pvp_bot_yard_spawn_for_team(team: int, slot: int) -> Vector3:
-	var base := _pvp_team_base(team)
-	var door_sign := -1.0 if team == 0 else 1.0
-	var lateral := (float(posmod(slot, 4)) - 1.5) * PVP_BOT_YARD_SPREAD
-	return Vector3(base.x + lateral, base.y + 1.0, base.z + door_sign * PVP_BOT_YARD_DISTANCE)
-
-
-## Chute inicial (antes do register o time ainda nao existe): por paridade.
-## Uso: var pos := _pvp_bot_yard_spawn(3)
-func _pvp_bot_yard_spawn(index: int) -> Vector3:
-	return _pvp_bot_yard_spawn_for_team(0 if index % 2 == 0 else 1, index)
-
-
-## Proxima esquina da rota do bot ate o lado inimigo (anda para a frente quando
-## chega perto). Sem rota definida para o time, devolve a base inimiga.
-## Uso: var rumo := _pvp_bot_hunt_position(bot)
-func _pvp_bot_hunt_position(bot: Node) -> Vector3:
-	if pvp_match == null or not is_instance_valid(bot):
-		return _pvp_team_base(1)
-	var team: int = pvp_match.team_of(_key_for_player(bot))
-	var enemy_team := 0 if team == 1 else 1
-	var route: Array = PVP_STREET_ROUTE if team == 0 else _reversed_route_cached()
-	var position := (bot as Node3D).global_position
-	if route.is_empty():
-		return _pvp_team_base(enemy_team)
-	var key := _key_for_player(bot)
-	var index: int = int(pvp_bot_route_index.get(key, 0))
-	# Avanca o indice de forma MONOTONICA. Recalcular "a primeira esquina nao
-	# alcancada" a cada tick fazia o bot oscilar no limite do raio: ao andar para
-	# a esquina 2 a esquina 1 voltava a ficar fora do raio e ele voltava (medido:
-	# vai e volta em volta de (-53,-68) por minutos).
-	while index < route.size() - 1 and position.distance_to(route[index]) <= PVP_WAYPOINT_ARRIVE_RADIUS:
-		index += 1
-	pvp_bot_route_index[key] = index
-	if index == route.size() - 1 and position.distance_to(route[index]) <= PVP_WAYPOINT_ARRIVE_RADIUS:
-		# Fim da rota: empurra para dentro da base inimiga.
-		return _pvp_team_base(enemy_team)
-	return route[index]
-
-
-## Rota do time 1 montada UMA vez. Antes `_reversed_route()` criava um Array
-## novo a cada chamada, e ela roda por bot a cada tick (4 bots a 30 Hz = 120
-## alocacoes por segundo so de lixo).
-## Uso: var rota := _reversed_route_cached()
-func _reversed_route_cached() -> Array:
-	if pvp_reversed_route.is_empty():
-		for index in range(PVP_STREET_ROUTE.size() - 1, -1, -1):
-			pvp_reversed_route.append(PVP_STREET_ROUTE[index])
-	return pvp_reversed_route
-
-
-## Bot compra na fase de compra, na propria base, a arma mais cara que couber.
-## E o mesmo caminho do humano (money -> spend -> equipar), so sem menu.
-## Uso: chamado no _tick_pvp_bots.
-func _pvp_bot_try_buy(bot: Node) -> void:
-	if pvp_match == null or pvp_match.phase != PvpMatch.Phase.BUY:
-		return
-	if not _pvp_in_buy_zone(bot):
-		return
-	var key := _key_for_player(bot)
-	if key.is_empty():
-		return
-	var wanted := 0
-	var wanted_price := pvp_match.money_of(key)
-	for kind in WeaponStats.purchasable_kinds():
-		var price := WeaponStats.price_for(kind)
-		if price <= wanted_price and price > WeaponStats.price_for(wanted):
-			wanted = int(kind)
-			wanted_price = price
-	if wanted == 0 or WeaponStats.price_for(wanted) > pvp_match.money_of(key):
-		return
-	if bot.has_crate_weapon(wanted):
-		return
-	var rejection := request_purchase(bot, wanted)
-	if not rejection.is_empty():
-		return
-	print(JSON.stringify({"event": "pvp_buy", "key": key, "kind": wanted, "price": WeaponStats.price_for(wanted)}))
-
-
-## Entra na partida de PVP com a economia inicial e a janela de compra aberta.
-## Uso: chamado no spawn de cada jogador (servidor/offline).
-func _register_pvp_player(player: Node) -> void:
-	if pvp_match == null or not is_instance_valid(player):
-		return
-	var key := _key_for_player(player)
-	if key.is_empty():
-		return
-	pvp_match.register_player(key)
-	player.set("pvp_money", pvp_match.money_of(key))
-	PvpDeathWiring.connect_once(player, self)
-
-
-## Chave de rede do jogador ("" quando nao esta no dicionario).
-## Uso: var key := _key_for_player(player)
-func _key_for_player(player: Node) -> String:
-	for key in network_players:
-		if network_players[key] == player:
-			return String(key)
-	return ""
-
-
-## Abate no mata-mata: credita quem matou, conta a morte e encerra a partida
-## quando alguem chega no alvo. Callable.bind anexa a vitima no FIM.
-## Uso: conectado ao sinal pvp_died de cada jogador.
-func _on_pvp_died(killer: Node, victim: Node) -> void:
-	if pvp_match == null:
-		return
-	var killer_key := _key_for_player(killer) if is_instance_valid(killer) else ""
-	var victim_key := _key_for_player(victim)
-	if victim_key.is_empty():
-		return
-	pvp_match.register_kill(killer_key, victim_key)
-	print(JSON.stringify({"event": "pvp_kill", "killer": killer_key, "victim": victim_key, "team_kills": pvp_match.kills_of(killer_key)}))
-	_check_pvp_round_end()
-
-
-## A rodada acaba quando um time inteiro cai (o outro leva) — o tempo estourando
-## e tratado no _tick_pvp. Uso: chamado a cada abate.
-func _check_pvp_round_end() -> void:
-	if pvp_match.phase != PvpMatch.Phase.LIVE:
-		return
-	var alive := _pvp_alive_per_team()
-	if alive[0] > 0 and alive[1] > 0:
-		return
-	if alive[0] == 0 and alive[1] == 0:
-		pvp_match.finish_round(-1, "eliminacao")
-		return
-	pvp_match.finish_round(0 if alive[0] > 0 else 1, "eliminacao")
-
-
-## Vivos por time (usado para decidir a rodada). Uso: var vivos := _pvp_alive_per_team()
-func _pvp_alive_per_team() -> Array[int]:
-	var alive: Array[int] = [0, 0]
-	for key in network_players.keys():
-		var player = network_players.get(key)
-		if not is_instance_valid(player) or bool(player.get("is_swat_bot")):
-			continue
-		if bool(player.get("is_eliminated")):
-			continue
-		var team: int = pvp_match.team_of(String(key))
-		if team >= 0 and team < alive.size():
-			alive[team] += 1
-	return alive
-
-
-func _pvp_announce_end() -> void:
-	pvp_restart_left = PVP_RESTART_SECONDS
-	print(JSON.stringify({"event": "pvp_over", "winner_team": pvp_match.match_winner(), "score": pvp_match.team_score_text(), "standings": pvp_match.standings()}))
-
-
-## Avanca a partida: fases/rodadas, IA dos bots, respawn e broadcast do estado.
-## Uso: chamado em _physics_process no servidor/offline.
-func _tick_pvp(delta: float) -> void:
-	var phase_before: int = pvp_match.phase
-	var round_before: int = pvp_match.round_index
-	if pvp_match.phase == PvpMatch.Phase.LIVE and _pvp_alive_per_team() == [0, 0]:
-		# Ninguem vivo (rodada travada em 0x0 por morte simultanea/queda).
-		pvp_match.finish_round(-1, "sem_vivos")
-	elif pvp_match.phase == PvpMatch.Phase.LIVE and float(pvp_match.phase_left) <= delta:
-		# Tempo estourou: quem tem mais gente viva leva a rodada.
-		pvp_match.finish_round_by_time(_pvp_alive_per_team())
-	pvp_match.tick(delta)
-	_tick_pvp_bots(delta)
-	for key in network_players.keys().duplicate():
-		var player = network_players.get(key)
-		if not is_instance_valid(player) or bool(player.get("is_swat_bot")):
-			continue
-		player.tick_pvp(delta)
-		player.set("pvp_money", pvp_match.money_of(String(key)))
-		if pvp_match.phase != PvpMatch.Phase.BUY:
-			# Estilo CS: quem morre fica fora ate o fim da rodada; o respawn
-			# acontece quando a proxima fase de compra abre (senao a rodada
-			# nunca fecha, porque o time eliminado volta em 3 s).
-			continue
-		if not bool(player.get("is_eliminated")):
-			continue
-		player.pvp_respawn_at(_pvp_spawn_position_for(player))
-	if round_before != pvp_match.round_index or (phase_before != pvp_match.phase and pvp_match.phase == PvpMatch.Phase.BUY):
-		print(JSON.stringify({"event": "pvp_round", "round": pvp_match.round_index, "score": pvp_match.team_score_text(), "rodada_anterior": pvp_match.last_round_report()}))
-	if pvp_match.is_over() and pvp_restart_left <= 0.0 and phase_before != PvpMatch.Phase.MATCH_END:
-		_pvp_announce_end()
-	if pvp_restart_left <= 0.0:
-		_pvp_broadcast_state()
-		return
-	pvp_restart_left -= delta
-	if pvp_restart_left > 0.0:
-		_pvp_broadcast_state()
-		return
-	pvp_restart_left = 0.0
-	_pvp_start_new_match()
-
-
-## Estado da partida para os clientes (HUD e dica do menu de compra), 2 Hz.
-## Uso: chamado no _tick_pvp (pvp_match so existe no servidor/offline).
-func _pvp_broadcast_state() -> void:
-	if not NetworkSession.is_server():
-		return
-	pvp_state_elapsed += 1.0 / 30.0
-	if pvp_state_elapsed < 0.5:
-		return
-	pvp_state_elapsed = 0.0
-	var text := pvp_match.hud_text()
-	var in_buy := pvp_match.phase == PvpMatch.Phase.BUY
+func broadcast_pvp_state(text: String, in_buy: bool, buy_seconds_left: float) -> void:
 	for peer_id in NetworkSession.loaded_peers:
-		_pvp_state.rpc_id(int(peer_id), text, in_buy, pvp_match.phase_left if in_buy else 0.0)
+		_pvp_state.rpc_id(int(peer_id), text, in_buy, buy_seconds_left)
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -2006,87 +1684,6 @@ func _pvp_state(text: String, in_buy: bool, buy_seconds_left: float) -> void:
 	pvp_buy_seconds_left = buy_seconds_left
 
 
-## Partida nova: economia zerada, placar limpo e todo mundo na base.
-## Uso: chamado quando o reinicio vence (fim de partida).
-func _pvp_start_new_match() -> void:
-	pvp_match = PvpMatch.new()
-	pvp_restart_left = 0.0
-	for key in network_players.keys().duplicate():
-		var player = network_players.get(key)
-		if not is_instance_valid(player) or bool(player.get("is_swat_bot")):
-			continue
-		_register_pvp_player(player)
-		player.set("pvp_kills", 0)
-		player.set("pvp_deaths", 0)
-		player.pvp_respawn_at(_pvp_spawn_position_for(player))
-	print(JSON.stringify({"event": "pvp_restart"}))
-
-
-## Ponto de spawn do jogador: anel na base do time dele (lados opostos do mapa).
-## Uso: var posicao := _pvp_spawn_position_for(player)
-func _pvp_spawn_position_for(player: Node) -> Vector3:
-	var key := _key_for_player(player)
-	var team: int = pvp_match.team_of(key) if not key.is_empty() else 0
-	if team < 0 or team >= PVP_TEAM_SAFEHOUSES.size():
-		team = 0
-	pvp_spawn_counters[team] += 1
-	if pvp_bot_keys.has(key):
-		# Bot nasce e RENASCE no quintal: sair da casa com movimento sem
-		# pathfinding prendia ele num canto interno ate estourar a rodada. O
-		# indice da rota volta ao comeco para ele refazer o caminho das ruas.
-		pvp_bot_route_index.erase(key)
-		return _pvp_bot_yard_spawn_for_team(team, pvp_spawn_counters[team])
-	# Humano: marcador FIXO da safehouse do time, girando entre os 4 para nao
-	# empilhar.
-	var slot := posmod(pvp_spawn_counters[team], 4) + 1
-	var marker := get_node_or_null("GeneratedCity/%s/PlayerSpawn%d" % [PVP_TEAM_SAFEHOUSES[team], slot]) as Marker3D
-	if marker != null:
-		return marker.global_position
-	return PVP_TEAM_BASE_FALLBACK[team]
-
-
-## Centro (no chao) da safehouse do time; fallback se a casa nao existir.
-## Uso: var centro := _pvp_team_base(team)
-func _pvp_team_base(team: int) -> Vector3:
-	if team < 0 or team >= PVP_TEAM_SAFEHOUSES.size():
-		return PVP_TEAM_BASE_FALLBACK[0]
-	var house := get_node_or_null("GeneratedCity/" + PVP_TEAM_SAFEHOUSES[team]) as Node3D
-	if house != null:
-		return house.global_position
-	return PVP_TEAM_BASE_FALLBACK[team]
-
-
-## Verdadeiro quando o jogador esta DENTRO da propria safehouse (zona de compra).
-## Uso: if _pvp_in_buy_zone(player): ...
-func _pvp_in_buy_zone(player: Node) -> bool:
-	var key := _key_for_player(player)
-	var team: int = pvp_match.team_of(key) if not key.is_empty() else -1
-	if team < 0:
-		return false
-	var position := (player as Node3D).global_position
-	var base := _pvp_team_base(team)
-	return Vector2(position.x - base.x, position.z - base.z).length() <= PVP_BASE_RADIUS
-
-
-## Compra pedida pelo cliente: valida fase, base, dinheiro e arma; desconta e
-## equipa. A resposta volta para o cliente mostrar o motivo da recusa.
-## Uso: chamado por BuyMenu via main.request_purchase(kind)
-func request_purchase(player: Node, kind: int) -> String:
-	if pvp_match == null or not is_instance_valid(player):
-		return "Sem partida de PVP."
-	var price := WeaponStats.price_for(kind)
-	var rejection := pvp_match.buy_rejection(_key_for_player(player), price)
-	if not rejection.is_empty():
-		return rejection
-	if not _pvp_in_buy_zone(player):
-		return "Compre na sua base (zona azul no mapa)."
-	if not player.equip_crate_weapon(kind):
-		return "Nao deu para equipar %s." % WeaponStats.stats_for(kind).get("label", kind)
-	pvp_match.spend(_key_for_player(player), price)
-	player.set("pvp_money", pvp_match.money_of(_key_for_player(player)))
-	return ""
-
-
 ## Compra pedida pelo jogador local (menu de compra). No cliente vai por RPC;
 ## offline resolve direto, que e o mesmo caminho do servidor.
 ## Uso: conectado ao BuyMenu.
@@ -2095,7 +1692,7 @@ func request_purchase_local(kind: int) -> void:
 		_request_purchase.rpc_id(NetworkSession.SERVER_ID, kind, 0)
 		return
 	if NetworkSession.is_offline() and not local_players.is_empty():
-		last_purchase_rejection = request_purchase(local_players[0], kind)
+		last_purchase_rejection = pvp.request_purchase(local_players[0], kind)
 
 
 ## Ultima recusa de compra (o menu mostra essa linha). Limpa na proxima compra.
@@ -2115,7 +1712,7 @@ func _request_purchase(kind: int, slot: int) -> void:
 	var player = network_players.get(_player_key(sender_id, slot))
 	if player == null:
 		return
-	_pvp_purchase_result.rpc_id(sender_id, kind, request_purchase(player, kind))
+	_pvp_purchase_result.rpc_id(sender_id, kind, pvp.request_purchase(player, kind))
 
 
 @rpc("authority", "call_remote", "reliable")
