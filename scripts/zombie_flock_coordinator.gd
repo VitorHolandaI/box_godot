@@ -69,26 +69,18 @@ func _update_building_lights(delta: float) -> void:
 	if _light_toggle_elapsed < LIGHT_TOGGLE_INTERVAL:
 		return
 	_light_toggle_elapsed = 0.0
-	var margin := Vector3.ONE * LIGHT_MARGIN
-	var relevant_players: Array = _cached_players if not _cached_players.is_empty() else get_living_players(get_tree())
+	# get_living_players poda o cache: um peer que desconectou deixa o Node
+	# liberado em _cached_players, e o cast dele estourava com 8 peers.
+	var relevant_players: Array = get_living_players(get_tree())
 	for building_value in get_tree().get_nodes_in_group("visibility_building"):
 		var building := building_value as Node
 		if building == null or String(building.name).begins_with("CentralSafehouse"):
 			continue
-		var min_value: Variant = building.get_meta("visibility_min", null)
-		var max_value: Variant = building.get_meta("visibility_max", null)
-		if not (min_value is Vector3 and max_value is Vector3):
+		var bounds: Variant = _building_visibility_bounds(building)
+		if bounds == null:
 			continue
-		var bounds_min := (min_value as Vector3) - margin
-		var bounds := AABB(bounds_min, (max_value as Vector3) + margin - bounds_min)
-		var want_on := false
-		for player in relevant_players:
-			var player_node := player as Node3D
-			if player_node != null and is_instance_valid(player_node) and bounds.has_point(player_node.global_position):
-				want_on = true
-				break
 		var key := String(building.get_path())
-		if want_on:
+		if _any_player_in_bounds(relevant_players, bounds as AABB):
 			_light_off_ticks.erase(key)
 			ProceduralBuildingAssembler.set_building_lights_enabled(building, true)
 			continue
@@ -96,6 +88,29 @@ func _update_building_lights(delta: float) -> void:
 		_light_off_ticks[key] = off_ticks
 		if off_ticks >= LIGHT_OFF_TICKS:
 			ProceduralBuildingAssembler.set_building_lights_enabled(building, false)
+
+
+## AABB do volume de visibilidade do predio com a margem de luz, ou null se o
+## predio nao tem meta de visibilidade. Uso: var b := _building_visibility_bounds(predio)
+func _building_visibility_bounds(building: Node) -> Variant:
+	var min_value: Variant = building.get_meta("visibility_min", null)
+	var max_value: Variant = building.get_meta("visibility_max", null)
+	if not (min_value is Vector3 and max_value is Vector3):
+		return null
+	var margin := Vector3.ONE * LIGHT_MARGIN
+	var bounds_min := (min_value as Vector3) - margin
+	return AABB(bounds_min, (max_value as Vector3) + margin - bounds_min)
+
+
+## Algum jogador vivo dentro do volume? Uso: if _any_player_in_bounds(players, aabb)
+func _any_player_in_bounds(players: Array, bounds: AABB) -> bool:
+	for player in players:
+		if not is_instance_valid(player):
+			continue
+		var player_node := player as Node3D
+		if player_node != null and bounds.has_point(player_node.global_position):
+			return true
+	return false
 
 
 ## Canal estatico de som: usa o coordenador quando existe (mundo real) e cai
@@ -313,22 +328,34 @@ func _apply_distance_lod(zombie: CharacterBody3D) -> void:
 func _process_cluster(cluster: Array[CharacterBody3D]) -> void:
 	var valid_cluster: Array[CharacterBody3D] = []
 	for z in cluster:
-		if is_instance_valid(z) and not z.is_queued_for_deletion() and not bool(z.get("is_dead")):
+		if is_instance_valid(z) and _is_active(z):
 			valid_cluster.append(z)
 	if valid_cluster.is_empty():
 		return
 
+	var leader := _elect_leader(valid_cluster)
+	_stamp_horde(valid_cluster, leader)
+	_share_leader_intent(valid_cluster, leader)
+	_apply_boids_flocking(valid_cluster)
+
+
+## Lider do grupo: sorteia entre os lideres que ja existiam (a horda mantem o
+## dono e o id entre frames) e, sem nenhum, entre os membros.
+## Uso: var leader := _elect_leader(valid_cluster)
+func _elect_leader(valid_cluster: Array[CharacterBody3D]) -> CharacterBody3D:
 	var previous_leaders: Array[CharacterBody3D] = []
 	for zombie in valid_cluster:
 		if bool(zombie.get("is_cluster_leader")) and int(zombie.get("horde_id")) > 0:
 			previous_leaders.append(zombie)
-	var leader: CharacterBody3D
-	var assigned_horde_id := -1
 	if previous_leaders.is_empty():
-		leader = valid_cluster[_random_source.randi_range(0, valid_cluster.size() - 1)]
-	else:
-		leader = previous_leaders[_random_source.randi_range(0, previous_leaders.size() - 1)]
-		assigned_horde_id = int(leader.get("horde_id"))
+		return valid_cluster[_random_source.randi_range(0, valid_cluster.size() - 1)]
+	return previous_leaders[_random_source.randi_range(0, previous_leaders.size() - 1)]
+
+
+## Carimba o id da horda e quem e o lider em todos os membros do grupo.
+## Uso: _stamp_horde(valid_cluster, leader)
+func _stamp_horde(valid_cluster: Array[CharacterBody3D], leader: CharacterBody3D) -> void:
+	var assigned_horde_id := int(leader.get("horde_id"))
 	if assigned_horde_id <= 0:
 		assigned_horde_id = _next_horde_id
 		_next_horde_id += 1
@@ -337,34 +364,34 @@ func _process_cluster(cluster: Array[CharacterBody3D]) -> void:
 		zombie.set("is_cluster_leader", zombie == leader)
 	_horde_members[assigned_horde_id] = valid_cluster
 
+
+## Os seguidores copiam a intencao do lider: o alvo dele, o barulho que ele
+## ouviu ou, sem nada disso, a direcao de vagar. E o que faz a horda andar
+## junta em vez de cada zumbi decidir sozinho.
+## Uso: _share_leader_intent(valid_cluster, leader)
+func _share_leader_intent(valid_cluster: Array[CharacterBody3D], leader: CharacterBody3D) -> void:
 	var raw_target: Variant = leader.get("alert_target")
 	var leader_target: CharacterBody3D = raw_target if (is_instance_valid(raw_target) and raw_target is CharacterBody3D) else null
-	var has_alert: bool = leader_target != null
-	var leader_forget: float = float(leader.get("alert_forget_timer"))
-	var leader_sound: Vector3 = leader.get("sound_investigate_position") as Vector3
 	var leader_sound_timer: float = float(leader.get("sound_investigate_timer"))
-	var leader_is_sound: bool = bool(leader.get("is_investigating_sound"))
-	var leader_wander_dir: Vector3 = leader.get("wander_direction") as Vector3
-	var leader_wander_t: float = float(leader.get("wander_time"))
-
+	var chases: bool = leader_target != null
+	var investigates: bool = bool(leader.get("is_investigating_sound")) and leader_sound_timer > 0.0
 	for follower in valid_cluster:
 		if follower == leader:
 			continue
-		if has_alert and is_instance_valid(leader_target):
+		if chases:
 			follower.set("alert_target", leader_target)
-			follower.set("alert_forget_timer", leader_forget)
-		elif leader_is_sound and leader_sound_timer > 0.0:
-			follower.set("sound_investigate_position", leader_sound)
+			follower.set("alert_forget_timer", float(leader.get("alert_forget_timer")))
+			continue
+		if investigates:
+			follower.set("sound_investigate_position", leader.get("sound_investigate_position"))
 			follower.set("sound_investigate_timer", leader_sound_timer)
 			follower.set("is_investigating_sound", true)
-		else:
-			follower.set("alert_target", null)
-			follower.set("alert_forget_timer", 0.0)
-			follower.set("is_investigating_sound", false)
-			follower.set("wander_direction", leader_wander_dir)
-			follower.set("wander_time", leader_wander_t)
-
-	_apply_boids_flocking(valid_cluster)
+			continue
+		follower.set("alert_target", null)
+		follower.set("alert_forget_timer", 0.0)
+		follower.set("is_investigating_sound", false)
+		follower.set("wander_direction", leader.get("wander_direction"))
+		follower.set("wander_time", float(leader.get("wander_time")))
 
 
 ## Aplica os tres principios classicos de Boids de Craig Reynolds:
@@ -381,7 +408,7 @@ func _apply_boids_flocking(cluster: Array[CharacterBody3D]) -> void:
 	var active_count := 0.0
 
 	for z in cluster:
-		if z != null and not z.is_queued_for_deletion() and not bool(z.get("is_dead")):
+		if _is_active(z):
 			center_of_mass += z.global_position
 			avg_velocity += z.velocity
 			active_count += 1.0
@@ -392,7 +419,7 @@ func _apply_boids_flocking(cluster: Array[CharacterBody3D]) -> void:
 
 	var separation_cells: Dictionary = {}
 	for z in cluster:
-		if z == null or z.is_queued_for_deletion() or bool(z.get("is_dead")):
+		if not _is_active(z):
 			continue
 		var separation_key := _get_separation_cell(z.global_position)
 		if not separation_cells.has(separation_key):
@@ -402,49 +429,52 @@ func _apply_boids_flocking(cluster: Array[CharacterBody3D]) -> void:
 		members_ref.append(z)
 
 	for a in cluster:
-		if a == null or a.is_queued_for_deletion() or bool(a.get("is_dead")):
+		if not _is_active(a):
 			continue
-
 		var a_pos := a.global_position
-
-		# 1. Separacao (Repulsao por distancia)
-		var separation := Vector3.ZERO
-		var neighbor_count := 0
-		var separation_cell := _get_separation_cell(a_pos)
-		for offset_x in range(-1, 2):
-			for offset_z in range(-1, 2):
-				var neighbor_key := separation_cell + Vector2i(offset_x, offset_z)
-				if not separation_cells.has(neighbor_key):
-					continue
-				var neighbors: Array[CharacterBody3D] = separation_cells[neighbor_key]
-				for b in neighbors:
-					if a == b or b == null or b.is_queued_for_deletion() or bool(b.get("is_dead")):
-						continue
-					var diff := a_pos - b.global_position
-					diff.y = 0.0
-					var dist_sq := diff.length_squared()
-					if dist_sq > 0.0001 and dist_sq < 2.56: # Raio de 1.6m
-						var dist := sqrt(dist_sq)
-						separation += (diff / dist) * (1.6 - dist)
-					neighbor_count += 1
-					if neighbor_count >= MAX_SEPARATION_NEIGHBORS:
-						break
-				if neighbor_count >= MAX_SEPARATION_NEIGHBORS:
-					break
-			if neighbor_count >= MAX_SEPARATION_NEIGHBORS:
-				break
-
-		# 2. Alinhamento (Igualar velocidade e fluxo com o bando)
+		# 1. Separacao (repulsao por distancia, so nas celulas vizinhas)
+		var separation := _separation_force(a, a_pos, separation_cells)
+		# 2. Alinhamento (igualar velocidade e fluxo com o bando)
 		var alignment := (avg_velocity - a.velocity) * 0.2
 		alignment.y = 0.0
-
-		# 3. Coesao (Manter zumbis unidos ao enxame)
+		# 3. Coesao (manter zumbis unidos ao enxame)
 		var cohesion := (center_of_mass - a_pos) * 0.1
 		cohesion.y = 0.0
-
 		# Forca de bando resultante aplicada ao vetor de movimento
-		var boids_force := separation * 1.6 + alignment * 0.4 + cohesion * 0.2
-		a.set("flock_separation_vector", boids_force)
+		a.set("flock_separation_vector", separation * 1.6 + alignment * 0.4 + cohesion * 0.2)
+
+
+## Repulsao de um zumbi pelos vizinhos das 9 celulas em volta, com teto de
+## MAX_SEPARATION_NEIGHBORS vizinhos: na horda amontoada o custo e quadratico
+## sem esse teto. Uso: var separation := _separation_force(zumbi, pos, celulas)
+func _separation_force(zombie: CharacterBody3D, position: Vector3, separation_cells: Dictionary) -> Vector3:
+	var separation := Vector3.ZERO
+	var neighbor_count := 0
+	var separation_cell := _get_separation_cell(position)
+	for offset_x in range(-1, 2):
+		for offset_z in range(-1, 2):
+			var neighbors: Variant = separation_cells.get(separation_cell + Vector2i(offset_x, offset_z))
+			if neighbors == null:
+				continue
+			for b in neighbors as Array[CharacterBody3D]:
+				if zombie == b or not _is_active(b):
+					continue
+				var diff := position - b.global_position
+				diff.y = 0.0
+				var dist_sq := diff.length_squared()
+				if dist_sq > 0.0001 and dist_sq < 2.56: # Raio de 1.6m
+					var dist := sqrt(dist_sq)
+					separation += (diff / dist) * (1.6 - dist)
+				neighbor_count += 1
+				if neighbor_count >= MAX_SEPARATION_NEIGHBORS:
+					return separation
+	return separation
+
+
+## Zumbi que ainda conta para o bando: vivo, valido e nao marcado para sumir.
+## Uso: if not _is_active(zombie): continue
+func _is_active(zombie: CharacterBody3D) -> bool:
+	return zombie != null and not zombie.is_queued_for_deletion() and not bool(zombie.get("is_dead"))
 
 
 func _get_separation_cell(position: Vector3) -> Vector2i:

@@ -51,9 +51,15 @@ const EQUIPMENT_TESTS_SCRIPT := preload("res://scripts/test_equipment.gd")
 const SUPPORT_CALLS_TESTS_SCRIPT := preload("res://scripts/test_support_calls.gd")
 const ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT := preload("res://scripts/test_zombie_l4d_specials.gd")
 const IN_GAME_SETTINGS_TESTS_SCRIPT := preload("res://scripts/test_in_game_settings.gd")
+const MINIMAP_TESTS_SCRIPT := preload("res://scripts/test_minimap.gd")
+const ZOMBIE_HIT_ZONE_TESTS_SCRIPT := preload("res://scripts/test_zombie_hit_zones.gd")
+const ZOMBIE_SPIDER_TESTS_SCRIPT := preload("res://scripts/test_zombie_spider.gd")
+const WEAPON_RELOAD_TESTS_SCRIPT := preload("res://scripts/test_weapon_reload.gd")
+const WEAPON_ANCHOR_TESTS_SCRIPT := preload("res://scripts/test_weapon_anchor.gd")
 const LOT_FEASIBILITY_TESTS_SCRIPT := preload("res://scripts/test_lot_feasibility.gd")
 const PLAN_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_plan_layout.gd")
 const COMMERCIAL_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_commercial_layout.gd")
+const DRIVABLE_CAR_TESTS_SCRIPT := preload("res://scripts/test_drivable_car.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -97,6 +103,12 @@ const FOCUSED_TEST_GROUPS := {
 	"support_calls": SUPPORT_CALLS_TESTS_SCRIPT,
 	"zombie_l4d_specials": ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT,
 	"in_game_settings": IN_GAME_SETTINGS_TESTS_SCRIPT,
+	"minimap": MINIMAP_TESTS_SCRIPT,
+	"zombie_hit_zones": ZOMBIE_HIT_ZONE_TESTS_SCRIPT,
+	"zombie_spider": ZOMBIE_SPIDER_TESTS_SCRIPT,
+	"weapon_reload": WEAPON_RELOAD_TESTS_SCRIPT,
+	"weapon_anchor": WEAPON_ANCHOR_TESTS_SCRIPT,
+	"drivable_car": DRIVABLE_CAR_TESTS_SCRIPT,
 }
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
@@ -154,12 +166,18 @@ func _ready() -> void:
 	await SUPPORT_CALLS_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT.new().run(self)
 	await IN_GAME_SETTINGS_TESTS_SCRIPT.new().run(self)
+	MINIMAP_TESTS_SCRIPT.new().run(self)
+	await ZOMBIE_HIT_ZONE_TESTS_SCRIPT.new().run(self)
+	ZOMBIE_SPIDER_TESTS_SCRIPT.new().run(self)
+	WEAPON_RELOAD_TESTS_SCRIPT.new().run(self)
+	WEAPON_ANCHOR_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	LOT_FEASIBILITY_TESTS_SCRIPT.new().run(self)
 	PLAN_LAYOUT_TESTS_SCRIPT.new().run(self)
 	COMMERCIAL_LAYOUT_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)
+	await DRIVABLE_CAR_TESTS_SCRIPT.new().run(self)
 	if bool(get_meta("unit_test_failed", false)):
 		failure_count += 1
 	_test_hit_reaction_flinch()

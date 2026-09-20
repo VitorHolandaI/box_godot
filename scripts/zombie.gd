@@ -32,6 +32,9 @@ const TARGET_SWITCH_COOLDOWN := 1.0
 const TARGET_SWITCH_DISTANCE_MARGIN := 2.0
 const MELEE_RANGE := 1.25
 const MELEE_VERTICAL_RANGE := 1.4
+## Alcance do golpe contra um veiculo: o carro e grande e o zumbi bate na lataria,
+## nao no boneco la dentro. Uso: _find_nearest_melee_player
+const VEHICLE_MELEE_RANGE := 3.6
 const DOOR_ATTACK_RANGE := 1.9
 const DOOR_ATTACK_HEIGHT := 0.9
 const FEET_OFFSET := 1.1
@@ -46,12 +49,31 @@ const NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation
 const VARIANT_ABILITIES_SCRIPT: GDScript = preload("res://scripts/zombie_variant_abilities.gd")
 const BLOATER_BURST_EFFECT_SCRIPT: GDScript = preload("res://scripts/bloater_burst_effect.gd")
 const BOSS_BRAIN_SCRIPT: GDScript = preload("res://scripts/zombie_boss_brain.gd")
+const LIMB_STATE_SCRIPT: GDScript = preload("res://scripts/zombie_limb_state.gd")
+const LIMB_DEBRIS_SCRIPT: GDScript = preload("res://scripts/zombie_limb_debris.gd")
 const BLOATER_BURST_COLOR := Color(0.55, 0.8, 0.15)
 const BOSS_GROUP := "boss_zombies"
 const TITAN_SLAM_COLOR := Color(1.0, 0.45, 0.1)
 const STUCK_LOG_SECONDS := 15.0
 const STRANDED_SECONDS := 40.0
 const STRANDED_MIN_TARGET_DISTANCE := 30.0
+## Dano localizado (item 5): a zona e a parte do corpo mais proxima do ponto de
+## impacto. Cabeca leva multiplicador, perna derruba a velocidade e braco
+## enfraquece o golpe — cada membro so debuffa uma vez, sem empilhar por tiro.
+const HIT_ZONE_HEAD := "head"
+const HIT_ZONE_TORSO := "torso"
+const HIT_ZONE_ARM := "arm"
+const HIT_ZONE_LEG := "leg"
+const HEADSHOT_DAMAGE_MULTIPLIER := 2.0
+const LEG_SHOT_SPEED_FACTOR := 0.6
+const ARM_SHOT_ATTACK_FACTOR := 0.5
+const MIN_LIMP_SPEED := 0.6
+## Tres tiros de pistola no mesmo membro arrancam-no; armas fortes resolvem em
+## menos impactos porque usam o dano real ja corrigido por armor/headshot.
+const LIMB_DAMAGE_TO_SEVER := 30
+const ARM_LOSS_SPEED_FACTOR := 0.9
+const ARM_LOSS_ATTACK_FACTOR := 0.75
+const LEG_LOSS_SPEED_FACTOR := 0.75
 
 @export var speed := 2.2
 @export var gravity := 22.0
@@ -189,6 +211,13 @@ var stalker := ZombieStalker.new()
 ## Coletor (variante COLLECTOR): pedacos absorvidos dos cadaveres.
 var collector := ZombieCollector.new()
 var damage_taken_total := 0
+## Dano localizado: flags para o debuff nao empilhar e a ultima zona atingida.
+var leg_shot := false
+var arm_shot := false
+var last_hit_zone := HIT_ZONE_TORSO
+var limb_damage := {"left_arm": 0, "right_arm": 0, "left_leg": 0, "right_leg": 0}
+var limb_loss_mask := 0
+var natural_limb_loss_mask := 0
 var _tongue_damage_start := 0
 var _tongue_burn := 0.0
 var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
@@ -205,11 +234,18 @@ var shows_health_label := false
 var _watched_target: Node = null
 var _stuck_logged := false
 var _dissolve_visual = null
+## Saidas do passo de movimento deste tick: quem anda entra na animacao de
+## caminhada e quem esta no alcance do golpe nao desliza nem leva empurrao de
+## boides. Ficam em campo (e nao em valor de retorno) porque o passo roda por
+## zumbi a cada tick: alocar um resultado aqui pesa com a horda de 200.
+var _tick_is_walking := false
+var _tick_in_melee_range := false
 
 
 func _ready() -> void:
 	add_to_group("zombies")
 	_configure_variant()
+	natural_limb_loss_mask = _natural_limb_loss_mask()
 	health = max_health
 	_ground_collision_mask = collision_mask
 	tick_budget = ZombieTickBudget.new(absi(name.hash()))
@@ -233,31 +269,7 @@ func _physics_process(delta: float) -> void:
 
 func _run_physics_tick(delta: float) -> void:
 	if not simulation_enabled:
-		var fade_start := FramePerfProbe.begin()
-		_update_visual_fade(delta)
-		FramePerfProbe.end("sub:zombie_visual_fade", fade_start)
-		# So quem esta fora do raio de visao compartilhada (35 m) pode atualizar
-		# a 15 Hz: MID (22-50 m) aparece na tela e com 1 frame em 4 atualizava a
-		# posicao a 15 Hz, o que o jogador via como zumbi teleportando.
-		if lod_level != LodLevel.NEAR:
-			var proxy_stride := 2 if lod_level == LodLevel.MID else 4
-			lod_tick_skip_counter = (lod_tick_skip_counter + 1) % proxy_stride
-			if lod_tick_skip_counter != 0:
-				return
-		snapshot_buffer.sample(float(Time.get_ticks_msec()))
-		var target_pos := snapshot_buffer.position
-		var motion := target_pos - global_position
-		if motion.length_squared() > 0.00001:
-			# Posicao ja validada pelo servidor: segue direto. move_and_collide
-			# no proxy custava ate 4 ms/frame e a fisica do client 8-10 ms com a
-			# horda de 200 na tela (teste na VPS, ec6aee7).
-			global_position = target_pos
-		rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 14.0, 1.0))
-		attack_animation_time = maxf(attack_animation_time - delta, 0.0)
-		hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
-		if not is_dead:
-			_animate_pose(delta, motion.length_squared() > 0.0001)
-			_update_groan_audio(delta)
+		_run_proxy_tick(delta)
 		return
 	if is_dead:
 		return
@@ -269,12 +281,8 @@ func _run_physics_tick(delta: float) -> void:
 	if not is_instance_valid(alert_target):
 		alert_target = null
 	var has_active_target := is_instance_valid(alert_target) or is_investigating_sound
-	if lod_level != LodLevel.NEAR and not has_active_target:
-		lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
-		if not is_cluster_leader or lod_tick_skip_counter != 0:
-			global_position.x += velocity.x * delta
-			global_position.z += velocity.z * delta
-			return
+	if _coasts_while_idle(delta, has_active_target):
+		return
 	var dash: RefCounted = _dash_for_type()
 	var leaping: bool = dash != null and dash.is_leaping()
 	if has_active_target:
@@ -282,138 +290,243 @@ func _run_physics_tick(delta: float) -> void:
 		if simulated_delta <= 0.0:
 			return
 		delta = simulated_delta
+	_simulate_ai(delta, dash, leaping)
 
+
+## Cliente: o proxy so interpola o snapshot do servidor, sem IA nem fisica.
+## Uso: interno de _run_physics_tick quando simulation_enabled e false.
+func _run_proxy_tick(delta: float) -> void:
+	var fade_start := FramePerfProbe.begin()
+	_update_visual_fade(delta)
+	FramePerfProbe.end("sub:zombie_visual_fade", fade_start)
+	# So quem esta fora do raio de visao compartilhada (35 m) pode atualizar
+	# a 15 Hz: MID (22-50 m) aparece na tela e com 1 frame em 4 atualizava a
+	# posicao a 15 Hz, o que o jogador via como zumbi teleportando.
+	if lod_level != LodLevel.NEAR:
+		var proxy_stride := 2 if lod_level == LodLevel.MID else 4
+		lod_tick_skip_counter = (lod_tick_skip_counter + 1) % proxy_stride
+		if lod_tick_skip_counter != 0:
+			return
+	snapshot_buffer.sample(float(Time.get_ticks_msec()))
+	var target_pos := snapshot_buffer.position
+	var motion := target_pos - global_position
+	if motion.length_squared() > 0.00001:
+		# Posicao ja validada pelo servidor: segue direto. move_and_collide
+		# no proxy custava ate 4 ms/frame e a fisica do client 8-10 ms com a
+		# horda de 200 na tela (teste na VPS, ec6aee7).
+		global_position = target_pos
+	rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 14.0, 1.0))
+	attack_animation_time = maxf(attack_animation_time - delta, 0.0)
+	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
+	if is_dead:
+		return
+	_animate_pose(delta, motion.length_squared() > 0.0001)
+	_update_groan_audio(delta)
+
+
+## Longe e sem alvo: o zumbi so desliza na velocidade atual e pula o tick, menos
+## o lider do cluster (que ainda decide o vagar do grupo) a cada 4 frames.
+## Devolve true quando o tick ja terminou aqui.
+## Uso: if _coasts_while_idle(delta, has_active_target): return
+func _coasts_while_idle(delta: float, has_active_target: bool) -> bool:
+	if lod_level == LodLevel.NEAR or has_active_target:
+		return false
+	lod_tick_skip_counter = (lod_tick_skip_counter + 1) % 4
+	if is_cluster_leader and lod_tick_skip_counter == 0:
+		return false
+	global_position.x += velocity.x * delta
+	global_position.z += velocity.z * delta
+	return true
+
+
+## Tick completo do servidor: fogo, relogios, sentidos, decisao de movimento e
+## fisica. Uso: interno de _run_physics_tick.
+func _simulate_ai(delta: float, dash: RefCounted, leaping: bool) -> void:
 	burn.update(self, delta)
 	if is_dead:
 		return
-	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
-	target_switch_cooldown = maxf(target_switch_cooldown - delta, 0.0)
-	attack_animation_time = maxf(attack_animation_time - delta, 0.0)
-	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
-	if not is_on_floor():
-		velocity.y -= gravity * delta
-
-	# Zumbi em voo nao colide com a horda: voando por cima dos outros ele
-	# pousava/atolava em cabecas de zumbi e ficava perched no ar. O colisor
-	# de zumbis volta no tick seguinte ao aterrissar.
-	if leaping:
-		collision_mask = flight_collision_mask(_ground_collision_mask)
-	elif collision_mask != _ground_collision_mask:
-		collision_mask = _ground_collision_mask
-
+	_advance_tick_clocks(delta, leaping)
 	_update_senses(delta)
 	_update_scream(delta)
 	_update_boss(delta)
 	_update_l4d_cooldowns(delta)
 	_try_absorb_corpse(delta)
 	var target := alert_target
-	var is_walking := false
-	var in_melee_range := false
 	if _bloater_detonates_on(target):
 		return
-	var melee_target := _find_nearest_melee_player() if attack_cooldown <= 0.0 else null
-	if hit_reaction_time > 0.0:
-		velocity.x = move_toward(velocity.x, hit_direction.x * 3.5, 18.0 * delta)
-		velocity.z = move_toward(velocity.z, hit_direction.z * 3.5, 18.0 * delta)
-	elif melee_target != null:
-		in_melee_range = true
-		ZombieCrowdSlots.shared.register_attacker(melee_target.get_instance_id(), get_instance_id(), Engine.get_physics_frames())
-		_perform_melee_attack(melee_target)
-	elif is_instance_valid(target):
-		var target_offset := target.global_position - global_position
-		var horizontal_offset := target_offset
-		horizontal_offset.y = 0.0
-		var distance := horizontal_offset.length()
-		var same_level := absf(target_offset.y) <= MELEE_VERTICAL_RANGE
-		if has_ability(ZombieType.STALKER) and same_level and stalker.try_pounce(target, distance, horizontal_offset.normalized()):
-			attack_animation_time = ATTACK_ANIMATION_DURATION
-			attack_sequence += 1
-		var waits_in_queue: bool = same_level and distance > MELEE_RANGE and (dash == null or not dash.is_leaping()) and ZombieCrowdSlots.shared.should_wait(target.get_instance_id(), get_instance_id(), distance, Engine.get_physics_frames())
-		if waits_in_queue:
-			# Anel de ataque cheio: espera vaga parado de frente para o alvo.
-			in_melee_range = true
-			velocity.x = 0.0
-			velocity.z = 0.0
-			progress_watch.reset()
-			rotation.y = lerp_angle(rotation.y, atan2(-horizontal_offset.x, -horizontal_offset.z), minf(delta * 8.0, 1.0))
-		elif distance > MELEE_RANGE or not same_level:
-			_watch_chase_progress(target, delta)
-			var direction := _chase_direction(target, horizontal_offset, delta)
-			# Na rua nao ha navmesh: contorna muros e predios pela tangente.
-			if not indoor_router.has_route:
-				var line_clear: bool = wall_detour.is_active() and _has_line_of_sight(target)
-				direction = wall_detour.steer(delta, global_position, direction, progress_watch.blocked_seconds, get_wall_normal() if is_on_wall() else Vector3.ZERO, line_clear)
-			# Durante o voo o bote continua mesmo que o alvo mude de nivel;
-			# o voo so termina ao aterrissar (nunca zera velocidade no ar).
-			var dash_velocity := Vector3.ZERO
-			if dash != null and (same_level or dash.is_leaping()):
-				dash_velocity = dash.update(delta, velocity, direction, distance, is_on_floor(), gravity)
-			if dash != null and dash.is_leaping():
-				velocity = dash_velocity
-				_check_charge_hit(target, direction)
-			elif _spitter_holds_position(target, distance, delta) or _smoker_holds_position(target, distance, delta):
-				velocity.x = 0.0
-				velocity.z = 0.0
-			elif is_on_wall() and _try_attack_blocking_door(direction):
-				# Zumbi nao abre porta: fica parado golpeando ate ela quebrar.
-				velocity.x = 0.0
-				velocity.z = 0.0
-			else:
-				velocity.x = direction.x * speed
-				velocity.z = direction.z * speed
-			rotation.y = lerp_angle(rotation.y, atan2(-direction.x, -direction.z), minf(delta * 8.0, 1.0))
-			is_walking = true
-		else:
-			in_melee_range = true
-			ZombieCrowdSlots.shared.register_attacker(target.get_instance_id(), get_instance_id(), Engine.get_physics_frames())
-			velocity.x = move_toward(velocity.x, 0.0, speed)
-			velocity.z = move_toward(velocity.z, 0.0, speed)
-			progress_watch.reset()
-			if attack_cooldown <= 0.0:
-				_attack_target_or_door(target)
-				attack_cooldown = 0.9
-				attack_animation_time = ATTACK_ANIMATION_DURATION
-				attack_sequence += 1
-	elif is_investigating_sound and sound_investigate_timer > 0.0:
-		sound_investigate_timer -= delta
-		var offset := sound_investigate_position - global_position
-		offset.y = 0.0
-		var distance := offset.length()
-		if distance > 1.8:
-			var direction := offset.normalized()
-			var slow_speed: float = speed * 0.60
-			velocity.x = direction.x * slow_speed
-			velocity.z = direction.z * slow_speed
-			if is_on_wall():
-				var wall_normal := get_wall_normal()
-				if wall_normal.length_squared() > 0.0001:
-					velocity = velocity.slide(wall_normal)
-			rotation.y = lerp_angle(rotation.y, atan2(-direction.x, -direction.z), minf(delta * 5.0, 1.0))
-			is_walking = true
-		else:
-			velocity.x = move_toward(velocity.x, 0.0, speed * delta)
-			velocity.z = move_toward(velocity.z, 0.0, speed * delta)
-			if sound_investigate_timer <= 1.0:
-				is_investigating_sound = false
-	else:
-		is_investigating_sound = false
-		if is_cluster_leader:
-			_update_wander(delta)
-		velocity.x = move_toward(velocity.x, wander_direction.x * speed * WANDER_SPEED_FACTOR, 8.0 * delta)
-		velocity.z = move_toward(velocity.z, wander_direction.z * speed * WANDER_SPEED_FACTOR, 8.0 * delta)
-		if wander_direction.length_squared() > 0.01:
-			rotation.y = lerp_angle(rotation.y, atan2(-wander_direction.x, -wander_direction.z), minf(delta * 4.0, 1.0))
-			is_walking = true
-
-	var planted := ZombieTickBudget.holds_ground(in_melee_range, is_on_floor(), leaping, hit_reaction_time > 0.0)
+	_drive_movement(target, delta, dash)
+	var planted := ZombieTickBudget.holds_ground(_tick_in_melee_range, is_on_floor(), leaping, hit_reaction_time > 0.0)
 	if not leaping and not planted:
 		# Boides empurram so quem anda no chao; no voo o arco e sagrado.
 		var flock_push := _flock_push(Vector3(velocity.x, 0.0, velocity.z))
 		velocity.x += flock_push.x
 		velocity.z += flock_push.z
 	_slide_or_hold(delta, planted)
-	_animate_pose(delta, is_walking and (is_on_floor() or leaping))
+	_animate_pose(delta, _tick_is_walking and (is_on_floor() or leaping))
 	_update_groan_audio(delta)
+
+
+## Relogios de golpe/animacao, gravidade e a mascara de colisao do voo.
+## Uso: interno de _simulate_ai, antes de qualquer decisao de movimento.
+func _advance_tick_clocks(delta: float, leaping: bool) -> void:
+	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
+	target_switch_cooldown = maxf(target_switch_cooldown - delta, 0.0)
+	attack_animation_time = maxf(attack_animation_time - delta, 0.0)
+	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
+	if not is_on_floor():
+		velocity.y -= gravity * delta
+	# Zumbi em voo nao colide com a horda: voando por cima dos outros ele
+	# pousava/atolava em cabecas de zumbi e ficava perched no ar. O colisor
+	# de zumbis volta no tick seguinte ao aterrissar.
+	if leaping:
+		collision_mask = flight_collision_mask(_ground_collision_mask)
+		return
+	if collision_mask != _ground_collision_mask:
+		collision_mask = _ground_collision_mask
+
+
+## Escolhe o comportamento do tick e deixa velocity/rotacao prontas para o
+## move_and_slide, por prioridade: recuo do tiro, golpe em quem ja esta colado,
+## perseguicao do alvo, investigacao de barulho e vagar.
+## Uso: _drive_movement(alert_target, delta, _dash_for_type())
+func _drive_movement(target: CharacterBody3D, delta: float, dash: RefCounted) -> void:
+	_tick_is_walking = false
+	_tick_in_melee_range = false
+	var melee_target := _find_nearest_melee_player() if attack_cooldown <= 0.0 else null
+	if hit_reaction_time > 0.0:
+		velocity.x = move_toward(velocity.x, hit_direction.x * 3.5, 18.0 * delta)
+		velocity.z = move_toward(velocity.z, hit_direction.z * 3.5, 18.0 * delta)
+		return
+	if melee_target != null:
+		_tick_in_melee_range = true
+		ZombieCrowdSlots.shared.register_attacker(melee_target.get_instance_id(), get_instance_id(), Engine.get_physics_frames())
+		_perform_melee_attack(melee_target)
+		return
+	if is_instance_valid(target):
+		_pursue_target(target, delta, dash)
+		return
+	if is_investigating_sound and sound_investigate_timer > 0.0:
+		_investigate_sound(delta)
+		return
+	_wander_idle(delta)
+
+
+## Alvo ja visto: bote do espreitador, espera de vaga no anel de ataque, avanco
+## ate encostar ou golpe de perto. Uso: interno de _drive_movement.
+func _pursue_target(target: CharacterBody3D, delta: float, dash: RefCounted) -> void:
+	var target_offset := target.global_position - global_position
+	var horizontal_offset := target_offset
+	horizontal_offset.y = 0.0
+	var distance := horizontal_offset.length()
+	var same_level := absf(target_offset.y) <= MELEE_VERTICAL_RANGE
+	if has_ability(ZombieType.STALKER) and same_level and stalker.try_pounce(target, distance, horizontal_offset.normalized()):
+		attack_animation_time = ATTACK_ANIMATION_DURATION
+		attack_sequence += 1
+	var waits_in_queue: bool = same_level and distance > MELEE_RANGE and (dash == null or not dash.is_leaping()) and ZombieCrowdSlots.shared.should_wait(target.get_instance_id(), get_instance_id(), distance, Engine.get_physics_frames())
+	if waits_in_queue:
+		# Anel de ataque cheio: espera vaga parado de frente para o alvo.
+		_tick_in_melee_range = true
+		velocity.x = 0.0
+		velocity.z = 0.0
+		progress_watch.reset()
+		rotation.y = lerp_angle(rotation.y, atan2(-horizontal_offset.x, -horizontal_offset.z), minf(delta * 8.0, 1.0))
+		return
+	if distance > MELEE_RANGE or not same_level:
+		_advance_toward_target(target, horizontal_offset, same_level, delta, dash)
+		return
+	_attack_from_contact(target)
+
+
+## Caminha ate o alvo: rota interna ou contorno de muro na rua, investida/bote
+## e a porta que bloqueia o caminho. Uso: interno de _pursue_target.
+func _advance_toward_target(target: CharacterBody3D, horizontal_offset: Vector3, same_level: bool, delta: float, dash: RefCounted) -> void:
+	var distance := horizontal_offset.length()
+	_watch_chase_progress(target, delta)
+	var direction := _chase_direction(target, horizontal_offset, delta)
+	# Na rua nao ha navmesh: contorna muros e predios pela tangente.
+	if not indoor_router.has_route:
+		var line_clear: bool = wall_detour.is_active() and _has_line_of_sight(target)
+		direction = wall_detour.steer(delta, global_position, direction, progress_watch.blocked_seconds, get_wall_normal() if is_on_wall() else Vector3.ZERO, line_clear)
+	# Durante o voo o bote continua mesmo que o alvo mude de nivel;
+	# o voo so termina ao aterrissar (nunca zera velocidade no ar).
+	var dash_velocity := Vector3.ZERO
+	if dash != null and (same_level or dash.is_leaping()):
+		dash_velocity = dash.update(delta, velocity, direction, distance, is_on_floor(), gravity)
+	if dash != null and dash.is_leaping():
+		velocity = dash_velocity
+		_check_charge_hit(target, direction)
+	elif _holds_position_for_ability(target, distance, delta):
+		velocity.x = 0.0
+		velocity.z = 0.0
+	elif is_on_wall() and _try_attack_blocking_door(direction):
+		# Zumbi nao abre porta: fica parado golpeando ate ela quebrar.
+		velocity.x = 0.0
+		velocity.z = 0.0
+	else:
+		velocity.x = direction.x * speed
+		velocity.z = direction.z * speed
+	rotation.y = lerp_angle(rotation.y, atan2(-direction.x, -direction.z), minf(delta * 8.0, 1.0))
+	_tick_is_walking = true
+
+
+## Cuspidor e puxador param a distancia para usar a habilidade em vez de
+## encostar no alvo. Uso: interno de _advance_toward_target.
+func _holds_position_for_ability(target: CharacterBody3D, distance: float, delta: float) -> bool:
+	return _spitter_holds_position(target, distance, delta) or _smoker_holds_position(target, distance, delta)
+
+
+## Ja encostado no alvo: freia, ocupa a vaga no anel e bate no intervalo do
+## golpe. Uso: interno de _pursue_target.
+func _attack_from_contact(target: CharacterBody3D) -> void:
+	_tick_in_melee_range = true
+	ZombieCrowdSlots.shared.register_attacker(target.get_instance_id(), get_instance_id(), Engine.get_physics_frames())
+	velocity.x = move_toward(velocity.x, 0.0, speed)
+	velocity.z = move_toward(velocity.z, 0.0, speed)
+	progress_watch.reset()
+	if attack_cooldown > 0.0:
+		return
+	_attack_target_or_door(target)
+	attack_cooldown = 0.9
+	attack_animation_time = ATTACK_ANIMATION_DURATION
+	attack_sequence += 1
+
+
+## Barulho ouvido sem ver ninguem: anda devagar ate o ponto e desiste ao chegar.
+## Uso: interno de _drive_movement.
+func _investigate_sound(delta: float) -> void:
+	sound_investigate_timer -= delta
+	var offset := sound_investigate_position - global_position
+	offset.y = 0.0
+	if offset.length() <= 1.8:
+		velocity.x = move_toward(velocity.x, 0.0, speed * delta)
+		velocity.z = move_toward(velocity.z, 0.0, speed * delta)
+		if sound_investigate_timer <= 1.0:
+			is_investigating_sound = false
+		return
+	var direction := offset.normalized()
+	var slow_speed: float = speed * 0.60
+	velocity.x = direction.x * slow_speed
+	velocity.z = direction.z * slow_speed
+	if is_on_wall():
+		var wall_normal := get_wall_normal()
+		if wall_normal.length_squared() > 0.0001:
+			velocity = velocity.slide(wall_normal)
+	rotation.y = lerp_angle(rotation.y, atan2(-direction.x, -direction.z), minf(delta * 5.0, 1.0))
+	_tick_is_walking = true
+
+
+## Sem alvo e sem barulho: vagar lento na direcao sorteada pelo lider do grupo.
+## Uso: interno de _drive_movement.
+func _wander_idle(delta: float) -> void:
+	is_investigating_sound = false
+	if is_cluster_leader:
+		_update_wander(delta)
+	velocity.x = move_toward(velocity.x, wander_direction.x * speed * WANDER_SPEED_FACTOR, 8.0 * delta)
+	velocity.z = move_toward(velocity.z, wander_direction.z * speed * WANDER_SPEED_FACTOR, 8.0 * delta)
+	if wander_direction.length_squared() <= 0.01:
+		return
+	rotation.y = lerp_angle(rotation.y, atan2(-wander_direction.x, -wander_direction.z), minf(delta * 4.0, 1.0))
+	_tick_is_walking = true
 
 
 ## Mascara de colisao durante o voo do bote: fora a horda e o jogador. Sem isso
@@ -536,28 +649,54 @@ func _should_switch_target(candidate: CharacterBody3D) -> bool:
 	return global_position.distance_to(candidate.global_position) + TARGET_SWITCH_DISTANCE_MARGIN <= global_position.distance_to(alert_target.global_position)
 
 
-func _find_nearest_melee_player() -> CharacterBody3D:
-	var nearest: CharacterBody3D = null
-	var nearest_distance := MELEE_RANGE
+## Alvo de combate: se o jogador esta dentro de um veiculo, quem apanha e o
+## veiculo (o metal protege o boneco). Uso: interno do melee
+func _combat_target(player: Node3D) -> Node3D:
+	if player == null:
+		return null
+	if player.has_method("is_driving") and bool(player.call("is_driving")):
+		var car: Variant = player.get("driving_car")
+		if car != null and is_instance_valid(car):
+			return car as Node3D
+	if player.has_method("is_riding") and bool(player.call("is_riding")):
+		var car: Variant = player.get("riding_car")
+		if car != null and is_instance_valid(car):
+			return car as Node3D
+	return player
+
+
+## Jogador vivo mais proximo ao alcance do golpe. Se ele estiver em um veiculo,
+## o alvo devolvido e o proprio veiculo (com alcance maior, porque o carro e
+## grande). Uso: _drive_movement
+func _find_nearest_melee_player() -> Node3D:
+	var nearest: Node3D = null
+	var nearest_distance := INF
 	for player in ZombieFlockCoordinator.get_living_players(get_tree()):
 		var player_body := player as CharacterBody3D
 		if not _is_living_player(player_body):
 			continue
 		var distance := global_position.distance_to(player_body.global_position)
-		if distance <= nearest_distance and absf(player_body.global_position.y - global_position.y) <= MELEE_VERTICAL_RANGE:
-			nearest = player_body
-			nearest_distance = distance
+		if distance >= nearest_distance:
+			continue
+		if absf(player_body.global_position.y - global_position.y) > MELEE_VERTICAL_RANGE:
+			continue
+		var target := _combat_target(player_body)
+		var reach := VEHICLE_MELEE_RANGE if target != player_body else MELEE_RANGE
+		if distance > reach:
+			continue
+		nearest = target
+		nearest_distance = distance
 	return nearest
 
 
-func _perform_melee_attack(target: CharacterBody3D) -> void:
+func _perform_melee_attack(target: Node3D) -> void:
 	_attack_target_or_door(target)
 	attack_cooldown = 0.9
 	attack_animation_time = ATTACK_ANIMATION_DURATION
 	attack_sequence += 1
 
 
-func _attack_target_or_door(target: CharacterBody3D) -> void:
+func _attack_target_or_door(target: Node3D) -> void:
 	if absf(target.global_position.y - global_position.y) > MELEE_VERTICAL_RANGE:
 		return
 	var ray_start := global_position + Vector3.UP * 0.8
@@ -573,7 +712,7 @@ func _attack_target_or_door(target: CharacterBody3D) -> void:
 		if collider == target:
 			target.take_damage(attack_damage, (target.global_position - global_position).normalized(), "melee", self)
 			return
-		if collider.is_in_group("destructible_door") or (parent != null and parent.has_method("take_damage")):
+		if collider.is_in_group("destructible_door") or collider.has_method("take_damage") or (parent != null and parent.has_method("take_damage")):
 			if collider.has_method("take_damage"):
 				collider.take_damage(attack_damage, (target.global_position - global_position).normalized())
 			else:
@@ -879,13 +1018,20 @@ func _update_wander(delta: float) -> void:
 
 
 ## Applies incoming damage, triggers flinch reaction, and alerts the zombie to attacker.
-## Usage:
-##   zombie.take_damage(35, Vector3.FORWARD, "bullet")
-func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "bullet", source: Node = null) -> void:
+## `hit_position` (mundo) liga o dano localizado por parte do corpo; sem ele
+## (melee, fogo, explosao) tudo conta como torso. Usage:
+##   zombie.take_damage(35, Vector3.FORWARD, "bullet", atirador, ponto_de_impacto)
+func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "bullet", source: Node = null, hit_position: Vector3 = Vector3.INF) -> void:
 	if is_dead or not simulation_enabled:
 		return
 
 	amount = VARIANT_ABILITIES_SCRIPT.adjust_incoming_damage(int(zombie_type), amount, damage_kind, collector.has_ability(ZombieType.ARMORED))
+	if hit_position.is_finite():
+		var local_hit := to_local(hit_position)
+		var zone := body_zone_for_points(local_hit, _visible_zone_points())
+		amount = _apply_hit_zone(zone, amount)
+		if damage_kind == "bullet":
+			_damage_limb_at(zone, local_hit, amount)
 	damage_taken_total += amount
 	health = maxi(health - mini(amount, max_health), 0)
 	_refresh_health_label()
@@ -906,6 +1052,149 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 			alert_target = attacker
 			alert_forget_timer = ALERT_FORGET_TIME
 			_alert_nearby_zombies(attacker)
+
+
+## Aplica o efeito da zona atingida e devolve o dano corrigido (cabeca dobra).
+## Uso: amount = _apply_hit_zone(zona, amount)
+func _apply_hit_zone(zone: String, amount: int) -> int:
+	last_hit_zone = zone
+	if zone == HIT_ZONE_HEAD:
+		return maxi(int(roundf(float(amount) * HEADSHOT_DAMAGE_MULTIPLIER)), amount)
+	if zone == HIT_ZONE_LEG:
+		if not leg_shot:
+			leg_shot = true
+			speed = maxf(speed * LEG_SHOT_SPEED_FACTOR, MIN_LIMP_SPEED)
+	elif zone == HIT_ZONE_ARM:
+		if not arm_shot:
+			arm_shot = true
+			attack_damage = maxi(int(roundf(float(attack_damage) * ARM_SHOT_ATTACK_FACTOR)), 1)
+	return amount
+
+
+func _damage_limb_at(zone: String, local_hit: Vector3, amount: int) -> void:
+	if zone != HIT_ZONE_ARM and zone != HIT_ZONE_LEG:
+		return
+	var limb_name := _nearest_limb_name(zone, local_hit)
+	if limb_name.is_empty():
+		return
+	limb_damage[limb_name] = int(limb_damage[limb_name]) + amount
+	if int(limb_damage[limb_name]) >= LIMB_DAMAGE_TO_SEVER:
+		_sever_limb(limb_name)
+
+
+func _nearest_limb_name(zone: String, local_hit: Vector3) -> String:
+	var limb_names: Array[String] = []
+	if zone == HIT_ZONE_ARM:
+		limb_names.append_array(["left_arm", "right_arm"])
+	else:
+		limb_names.append_array(["left_leg", "right_leg"])
+	var nearest_name := ""
+	var nearest_distance := INF
+	for limb_name in limb_names:
+		var limb := _limb_node(limb_name)
+		if not _body_part_present(limb):
+			continue
+		var distance := to_local(limb.global_position).distance_squared_to(local_hit)
+		if distance < nearest_distance:
+			nearest_name = limb_name
+			nearest_distance = distance
+	return nearest_name
+
+
+func _sever_limb(limb_name: String) -> void:
+	var limb_bit: int = LIMB_STATE_SCRIPT.bit_for_name(limb_name)
+	if limb_bit == 0 or limb_loss_mask & limb_bit != 0:
+		return
+	var limb := _limb_node(limb_name)
+	var mesh := limb.get_node_or_null("Mesh") as MeshInstance3D if limb != null else null
+	if mesh == null:
+		return
+	var scene_root := get_tree().current_scene
+	if scene_root != null:
+		LIMB_DEBRIS_SCRIPT.spawn(scene_root, mesh, hit_direction * 4.0 + Vector3.UP * 3.0)
+	_apply_limb_loss_mask(limb_loss_mask | limb_bit)
+	if limb_name.ends_with("arm"):
+		attack_damage = maxi(int(roundf(float(attack_damage) * ARM_LOSS_ATTACK_FACTOR)), 1)
+		speed = maxf(speed * ARM_LOSS_SPEED_FACTOR, MIN_LIMP_SPEED)
+		return
+	speed = maxf(speed * LEG_LOSS_SPEED_FACTOR, MIN_LIMP_SPEED)
+
+
+func _limb_node(limb_name: String) -> Node3D:
+	match limb_name:
+		"left_arm":
+			return left_arm
+		"right_arm":
+			return right_arm
+		"left_leg":
+			return left_leg
+		"right_leg":
+			return right_leg
+	push_error("No de membro invalido '%s'; esperado left_arm/right_arm/left_leg/right_leg." % limb_name)
+	return null
+
+
+func _natural_limb_loss_mask() -> int:
+	var result := 0
+	for limb_name in ["left_arm", "right_arm", "left_leg", "right_leg"]:
+		if not _body_part_present(_limb_node(limb_name)):
+			result |= LIMB_STATE_SCRIPT.bit_for_name(limb_name)
+	return result
+
+
+func _apply_limb_loss_mask(mask: int) -> void:
+	limb_loss_mask = mask & LIMB_STATE_SCRIPT.ALL
+	for limb_name in ["left_arm", "right_arm", "left_leg", "right_leg"]:
+		var limb := _limb_node(limb_name)
+		var mesh := limb.get_node_or_null("Mesh") as MeshInstance3D if limb != null else null
+		if mesh == null:
+			continue
+		var limb_bit: int = LIMB_STATE_SCRIPT.bit_for_name(limb_name)
+		mesh.visible = natural_limb_loss_mask & limb_bit == 0 and limb_loss_mask & limb_bit == 0
+
+
+## Zona do corpo cuja parte esta mais perto do ponto local atingido. Puro e
+## testavel. Uso: var zona := Zombie.body_zone_for_points(local, {"head": [p], ...})
+static func body_zone_for_points(local_point: Vector3, zone_points: Dictionary) -> String:
+	var best_zone := HIT_ZONE_TORSO
+	var best_distance := INF
+	for zone in zone_points:
+		for point in zone_points[zone]:
+			var distance := (point as Vector3).distance_squared_to(local_point)
+			if distance < best_distance:
+				best_distance = distance
+				best_zone = zone
+	return best_zone
+
+
+## Posicoes locais das partes visiveis; membro ja arrancado nao conta como alvo.
+## Uso: var pontos := _visible_zone_points()
+func _visible_zone_points() -> Dictionary:
+	var points := {"head": [], "torso": [], "arm": [], "leg": []}
+	_add_zone_point(points, HIT_ZONE_HEAD, model.get_node_or_null("Head") as Node3D)
+	_add_zone_point(points, HIT_ZONE_TORSO, model.get_node_or_null("Torso") as Node3D)
+	_add_zone_point(points, HIT_ZONE_ARM, left_arm)
+	_add_zone_point(points, HIT_ZONE_ARM, right_arm)
+	_add_zone_point(points, HIT_ZONE_LEG, left_leg)
+	_add_zone_point(points, HIT_ZONE_LEG, right_leg)
+	return points
+
+
+func _add_zone_point(points: Dictionary, zone: String, part: Node3D) -> void:
+	if not _body_part_present(part):
+		return
+	(points[zone] as Array).append(to_local(part.global_position))
+
+
+## A parte conta se o no existe e o Mesh sob ele (quando ha) esta visivel: o
+## mutilador esconde o Mesh do membro, nao o no da pose.
+func _body_part_present(part: Node3D) -> bool:
+	if part == null or not is_instance_valid(part):
+		return false
+	var mesh := part.get_node_or_null("Mesh") as MeshInstance3D
+	if mesh != null:
+		return mesh.is_visible_in_tree()
+	return part.is_visible_in_tree()
 
 
 ## Incendeia (lanca-chamas); a autoridade avisa os clientes para mostrar o fogo.
@@ -1100,7 +1389,7 @@ func _collect_fade_meshes() -> void:
 func _spawn_ragdoll() -> void:
 	var scene := get_tree().current_scene
 	if scene.has_method("spawn_zombie_ragdoll"):
-		scene.spawn_zombie_ragdoll(global_position, rotation.y, death_velocity, int(zombie_type), appearance_hash, name)
+		scene.spawn_zombie_ragdoll(global_position, rotation.y, death_velocity, int(zombie_type), appearance_hash, name, limb_loss_mask)
 
 
 ## Habilidades efetivas: a do proprio tipo mais as herdadas pelo coletor.
@@ -1196,6 +1485,7 @@ func get_network_state() -> Dictionary:
 		"attack_sequence": attack_sequence,
 		"zombie_type": int(zombie_type),
 		"appearance_hash": appearance_hash,
+		"limb_loss_mask": limb_loss_mask,
 	}
 
 
@@ -1217,7 +1507,10 @@ func apply_network_state(state: Dictionary) -> void:
 		if net_type != int(zombie_type):
 			zombie_type = net_type as ZombieType
 			ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
+			natural_limb_loss_mask = _natural_limb_loss_mask()
 			_collect_fade_meshes()
+	if state.has("limb_loss_mask"):
+		_apply_limb_loss_mask(int(state["limb_loss_mask"]))
 	var received_attack_sequence := int(state.get("attack_sequence", last_applied_attack_sequence))
 	if last_applied_attack_sequence < 0:
 		last_applied_attack_sequence = received_attack_sequence
@@ -1244,4 +1537,3 @@ func apply_network_state(state: Dictionary) -> void:
 		_spawn_ragdoll()
 		if has_ability(ZombieType.BLOATER):
 			_play_bloater_burst()
-

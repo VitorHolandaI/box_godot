@@ -1,0 +1,44 @@
+name: quality
+
+# Analise estatica de GDScript com o addon godot-gdscript-linter.
+# Nao altera o codigo: so le e reporta.
+#
+# O baseline atual tem 19 criticos (arquivos longos e funcoes de alta
+# complexidade). Por isso o passo roda em modo somente-relatorio: as
+# anotacoes aparecem no PR, mas o job nao falha. Para tornar bloqueante,
+# troque `continue-on-error: true` por `false` no passo de analise.
+on:
+  workflow_dispatch:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  gdscript-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Instalar Godot 4.7.2
+        run: |
+          set -euo pipefail
+          VERSION=4.7.2
+          mkdir -p "$HOME/godot"
+          curl -fsSL -o "$HOME/godot/editor.zip" \
+            "https://github.com/godotengine/godot/releases/download/${VERSION}-stable/Godot_v${VERSION}-stable_linux.x86_64.zip"
+          unzip -q -o "$HOME/godot/editor.zip" -d "$HOME/godot"
+          chmod +x "$HOME/godot/Godot_v${VERSION}-stable_linux.x86_64"
+          sudo ln -sf "$HOME/godot/Godot_v${VERSION}-stable_linux.x86_64" /usr/local/bin/godot
+
+      - name: Registrar classes globais (cache .godot)
+        run: godot --headless --path . --import
+
+      - name: Linter - anotacoes no PR
+        continue-on-error: true
+        run: scripts/lint_gdscript.sh --severity critical --format github
+
+      - name: Linter - resumo no console
+        if: always()
+        continue-on-error: true
+        run: scripts/lint_gdscript.sh --top 20

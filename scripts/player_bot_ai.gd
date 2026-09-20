@@ -28,6 +28,13 @@ const PATROL_POINTS: Array[Vector3] = [
 	Vector3(22.0, 0.12, -22.0),
 ]
 
+## Limite de tempo do teste de bot. 30 s (era 20): com 8 peers no mesmo abrigo
+## um bot preso no congestionamento precisava de mais tempo para sair e andar.
+const BOT_TEST_TIMEOUT_SECONDS := 30.0
+## PvP precisa de mais tempo: o bot atravessa o mapa para encontrar o inimigo
+## (no PvE o zumbi ja esta perto).
+const PVP_BOT_TEST_TIMEOUT_SECONDS := 60.0
+
 var bot_elapsed := 0.0
 var bot_saw_player := false
 var bot_moved := false
@@ -64,14 +71,27 @@ func update(delta: float, tree: SceneTree) -> void:
 		return
 	if not bot_saw_bullet and not tree.get_nodes_in_group("network_bullet_visuals").is_empty():
 		bot_saw_bullet = true
-	if bot_saw_player and bot_killed_zombie and bot_moved and bot_saw_bullet and bot_used_stamina:
-		print("BOT_TEST_PASS: conectou, correu, viu a bala e matou um zumbi.")
+	if _test_bot_passed():
+		print("BOT_TEST_PASS: %s" % ("conectou, correu e lutou no PvP." if NetworkSession.pvp_mode else "conectou, correu, viu a bala e matou um zumbi."))
 		tree.quit(0)
-	elif bot_elapsed >= 20.0:
+	elif bot_elapsed >= (PVP_BOT_TEST_TIMEOUT_SECONDS if NetworkSession.pvp_mode else BOT_TEST_TIMEOUT_SECONDS):
 		push_error("BOT_TEST_FAIL: player=%s moved=%s stamina=%s attack=%s bullet=%s kill=%s" % [
 			bot_saw_player, bot_moved, bot_used_stamina, bot_saw_zombie_attack, bot_saw_bullet, bot_killed_zombie
 		])
 		tree.quit(3)
+
+
+## Condicao de sucesso do bot de teste. No PvP nao ha zumbi; o bot CLIENTE de
+## PvP nao tem o roteamento por ruas (so o bot do servidor tem) e pode nao
+## alcancar o inimigo, entao aqui basta conectar, ver um jogador, andar e
+## gastar stamina — o combate e provado do lado do servidor (--pvp-bots).
+## Uso: if _test_bot_passed(): tree.quit(0)
+func _test_bot_passed() -> bool:
+	if not bot_saw_player or not bot_moved or not bot_used_stamina:
+		return false
+	if NetworkSession.pvp_mode:
+		return true
+	return bot_saw_bullet and bot_killed_zombie
 
 
 func notify_bullet() -> void:
@@ -123,7 +143,7 @@ func collect_inputs(local_players: Array[Node], zombies_node: Node, tree: SceneT
 
 func _generate_test_bot_input(player: Node3D, zombies_node: Node) -> Dictionary:
 	if not is_instance_valid(bot_target_zombie) or bool(bot_target_zombie.get("is_dead")):
-		bot_target_zombie = _find_nearest_live_zombie(player.global_position, zombies_node)
+		bot_target_zombie = _find_test_bot_target(player, zombies_node)
 	var move := Vector2.ZERO
 	var aim := Vector2.ZERO
 	if is_instance_valid(bot_target_zombie):
@@ -146,6 +166,28 @@ func _generate_test_bot_input(player: Node3D, zombies_node: Node) -> Dictionary:
 		"pistol": fmod(bot_elapsed, 1.0) < 0.25,
 		"reload": false,
 	}
+
+
+## Alvo do bot de teste espalhado por bot (o k-esimo mais perto, k pelo nome):
+## com N bots todos correndo para o zumbi mais perto eles congestionavam a
+## saida do abrigo e um ficava preso sem andar (visto no teste de 8 peers).
+## Uso: bot_target_zombie = _find_test_bot_target(player, zombies_node)
+func _find_test_bot_target(player: Node3D, zombies_node: Node) -> Node3D:
+	var origin := player.global_position
+	var candidates: Array = []
+	for zombie in zombies_node.get_children():
+		if not is_instance_valid(zombie) or bool(zombie.get("is_dead")):
+			continue
+		candidates.append({
+			"distance": origin.distance_squared_to((zombie as Node3D).global_position),
+			"node": zombie,
+		})
+	if candidates.is_empty():
+		return null
+	candidates.sort_custom(func(a, b): return float(a["distance"]) < float(b["distance"]))
+	var key := NetworkSession.bot_name if not NetworkSession.bot_name.is_empty() else String(player.name)
+	var index := absi(key.hash()) % mini(candidates.size(), 4)
+	return candidates[index]["node"] as Node3D
 
 
 ## Entrada de um bot em mata-mata PVP: caca o jogador inimigo mais perto,

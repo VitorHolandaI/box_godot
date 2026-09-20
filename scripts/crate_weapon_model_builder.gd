@@ -4,10 +4,38 @@ extends RefCounted
 ## Modelos de caixas das armas de crate na mao do jogador, pelo campo "model"
 ## de WeaponStats. Armado ao longo do Z: -Z e a frente do boneco (senao a arma
 ## vira uma "tabua" atravessada no corpo). Armas futuristas ganham faixas que
-## brilham na cor do tracer.
+## brilham na cor do tracer. A ORIGEM do no e o grip (a mao segura ali); as
+## pecas sao deslocadas por -MODEL_HOLD_LOCAL[model].
 ## Uso: var node := CrateWeaponModelBuilder.build(WeaponStats.Kind.RAILGUN, muzzle_material)
 
 const WOOD_COLOR := Color(0.45, 0.3, 0.16)
+## Ponto do GRIP (onde a mao segura) no espaco do modelo. As pecas sao
+## deslocadas por -grip para a ORIGEM da arma ficar no grip: sem isso a mao
+## segurava o meio do corpo (a arma atravessava a mao/braco). Padrao do Unturned:
+## o osso da mao vai no "Grip" da arma (docs.smartlydressedgames.com gun-asset).
+## Uso: var grip := MODEL_HOLD_LOCAL.get(model, DEFAULT_HOLD_LOCAL)
+const DEFAULT_HOLD_LOCAL := Vector3(0.0, -0.12, 0.1)
+const MODEL_HOLD_LOCAL := {
+	"shotgun": Vector3(0.0, -0.12, 0.1),
+	"smg": Vector3(0.0, -0.12, 0.05),
+	"revolver": Vector3(0.0, -0.14, 0.06),
+	"double_barrel": Vector3(0.0, -0.12, 0.12),
+	"short_shotgun": Vector3(0.0, -0.12, 0.15),
+	"auto_shotgun": Vector3(0.0, -0.12, 0.05),
+	"sci_rifle": Vector3(0.0, -0.12, 0.2),
+	"sci_smg": Vector3(0.0, -0.12, 0.12),
+	"railgun": Vector3(0.0, -0.12, 0.2),
+	"ak": Vector3(0.0, -0.12, 0.0),
+	"assault_rifle": Vector3(0.0, -0.12, 0.05),
+	"bullpup": Vector3(0.0, -0.12, 0.25),
+	"handgun": Vector3(0.0, -0.12, 0.1),
+	"sniper": Vector3(0.0, -0.12, 0.2),
+	"launcher": Vector3(0.0, -0.12, 0.1),
+	"chainsaw": Vector3(0.0, -0.12, 0.2),
+	"flamethrower": Vector3(0.0, -0.12, 0.2),
+	"crossbow": Vector3(0.0, -0.12, 0.1),
+	"grenade_launcher": Vector3(0.0, -0.12, 0.16),
+}
 
 
 ## No da arma (invisivel) com as pecas e o "Flash" do cano.
@@ -28,8 +56,15 @@ static func build(kind: int, muzzle_material: Material) -> Node3D:
 	glow.emission_enabled = true
 	glow.emission = WeaponStats.tracer_color_for(kind)
 	glow.emission_energy_multiplier = 2.5
-	_add_parts(weapon_node, String(WeaponStats.stats_for(kind).get("model", "rifle")), body, wood, glow)
-	var flash := add_box(weapon_node, Vector3(0.12, 0.08, 0.08), Vector3(0.0, 0.0, -0.55), muzzle_material)
+	var model := String(WeaponStats.stats_for(kind).get("model", "rifle"))
+	var grip: Vector3 = MODEL_HOLD_LOCAL.get(model, DEFAULT_HOLD_LOCAL)
+	# As pecas ficam sob "Parts" deslocado por -grip; a origem da arma vira o grip.
+	var parts := Node3D.new()
+	parts.name = "Parts"
+	parts.position = -grip
+	weapon_node.add_child(parts)
+	_add_parts(parts, model, body, wood, glow)
+	var flash := add_box(weapon_node, Vector3(0.12, 0.08, 0.08), Vector3(0.0, 0.0, -0.55) - grip, muzzle_material)
 	flash.name = "Flash"
 	flash.visible = false
 	# Clarao do tamanho da arma: bazuca e escopeta serrada estouram, SMG pisca.
@@ -40,23 +75,28 @@ static func build(kind: int, muzzle_material: Material) -> Node3D:
 static func _add_parts(node: Node3D, model: String, body: Material, wood: Material, glow: Material) -> void:
 	match model:
 		"shotgun":
-			# Cano longo para frente, bombeamento embaixo e coronha atras.
-			add_box(node, Vector3(0.14, 0.14, 0.95), Vector3(0.0, 0.0, 0.12), body)
-			add_box(node, Vector3(0.16, 0.1, 0.24), Vector3(0.0, -0.11, 0.18), body)
-			add_box(node, Vector3(0.16, 0.18, 0.3), Vector3(0.0, -0.06, -0.42), wood)
-			add_box(node, Vector3(0.12, 0.22, 0.14), Vector3(0.0, -0.13, -0.62), wood)
+			# Cano longo para FRENTE (-Z), bombeamento embaixo e coronha atras (+Z).
+			add_box(node, Vector3(0.13, 0.13, 0.9), Vector3(0.0, 0.02, -0.45), body)
+			add_box(node, Vector3(0.15, 0.11, 0.24), Vector3(0.0, -0.09, -0.45), body)
+			add_box(node, Vector3(0.14, 0.15, 0.3), Vector3(0.0, 0.0, 0.08), body)
+			add_box(node, Vector3(0.12, 0.16, 0.44), Vector3(0.0, -0.03, 0.52), wood)
 		"smg":
-			add_box(node, Vector3(0.16, 0.16, 0.55), Vector3.ZERO, body)
-			add_box(node, Vector3(0.12, 0.3, 0.12), Vector3(0.0, -0.2, 0.05), body)
-			add_box(node, Vector3(0.08, 0.34, 0.08), Vector3(0.0, 0.22, 0.06), body)
+			# Uzi: corpo, PENTE PARA BAIXO e mira baixinha em cima. Antes tinha uma
+			# caixa fina alta em +Y (pente pra cima) e a arma parecia de cabeca
+			# pra baixo.
+			add_box(node, Vector3(0.16, 0.16, 0.5), Vector3(0.0, 0.04, -0.05), body)
+			add_box(node, Vector3(0.12, 0.26, 0.12), Vector3(0.0, -0.19, 0.02), body)
+			add_box(node, Vector3(0.06, 0.06, 0.16), Vector3(0.0, 0.14, -0.05), body)
 		"revolver":
-			add_box(node, Vector3(0.13, 0.15, 0.5), Vector3(0.0, 0.0, 0.1), body)
-			add_box(node, Vector3(0.13, 0.24, 0.1), Vector3(0.0, -0.16, -0.14), wood)
-			add_box(node, Vector3(0.11, 0.11, 0.11), Vector3(0.0, -0.03, -0.02), body)
+			# Cano para FRENTE (-Z), tambor no meio e cabo atras/embaixo.
+			add_box(node, Vector3(0.1, 0.11, 0.42), Vector3(0.0, 0.03, -0.26), body)
+			add_box(node, Vector3(0.12, 0.13, 0.14), Vector3(0.0, 0.0, 0.0), body)
+			add_box(node, Vector3(0.09, 0.2, 0.12), Vector3(0.0, -0.14, 0.13), wood)
 		"double_barrel":
-			add_box(node, Vector3(0.24, 0.12, 0.85), Vector3(0.0, 0.0, 0.1), body)
-			add_box(node, Vector3(0.16, 0.16, 0.28), Vector3(0.0, -0.06, -0.42), wood)
-			add_box(node, Vector3(0.12, 0.2, 0.12), Vector3(0.0, -0.14, -0.6), wood)
+			# Dois canos para FRENTE (-Z) e coronha atras (+Z).
+			add_box(node, Vector3(0.22, 0.12, 0.8), Vector3(0.0, 0.02, -0.35), body)
+			add_box(node, Vector3(0.16, 0.15, 0.28), Vector3(0.0, 0.0, 0.12), body)
+			add_box(node, Vector3(0.12, 0.15, 0.42), Vector3(0.0, -0.03, 0.5), wood)
 		"short_shotgun":
 			# Serrada: dois canos curtos e cabo de pistola.
 			add_box(node, Vector3(0.24, 0.13, 0.5), Vector3(0.0, 0.0, -0.05), body)

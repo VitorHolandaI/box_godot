@@ -6,6 +6,24 @@ extends RefCounted
 ##   PlayerAnimator.animate_pose(player, delta, is_walking)
 
 const KNIFE_ATTACK_DURATION := 0.4
+## Duracao da animacao de recarga; espelha PlayerCharacter.RELOAD_ANIM_SECONDS.
+const RELOAD_ANIM_SECONDS := 1.0
+## Ponta do braco (a mao) no espaco do braco; a arma e presa ali (o -Z avanca a
+## arma pra frente da mao). Antes a arma ficava num offset fixo e flutuava.
+const HAND_ANCHOR_LOCAL := Vector3(0.0, -0.72, -0.12)
+## Ajuste fino por ARMA (achado no tuner do --armas-lab): desloca no referencial
+## do Model e gira, somando por cima da ancora da mao. Chave = WeaponStats.Kind.
+## Uso: var tuned := WEAPON_HOLD_TUNE.get(kind, {})
+const WEAPON_HOLD_TUNE := {
+	1: {"pos": Vector3(-0.08, -0.02, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},   # pistol
+	6: {"pos": Vector3(0.0, 0.05, -0.05), "rot": Vector3(0.0, -PI, 0.0)},    # carbine (modelo invertido)
+	16: {"pos": Vector3(0.0, 0.0, 0.0), "rot": Vector3(0.0, PI / 24.0, -PI / 24.0)},  # sniper (tuner: +7.5 Y, -7.5 Z)
+	11: {"pos": Vector3(-0.05, 0.0, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},    # railgun
+	14: {"pos": Vector3(-0.05, 0.05, 0.05), "rot": Vector3(0.0, 0.0, 0.0)},  # aug
+	17: {"pos": Vector3(0.0, 0.05, 0.05), "rot": Vector3(0.0, 0.0, 0.0)},    # bazooka
+	20: {"pos": Vector3(0.0, -0.25, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},    # chainsaw
+	21: {"pos": Vector3(-0.05, 0.0, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},    # flamethrower
+}
 
 
 static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void:
@@ -45,22 +63,23 @@ static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void
 		if right_arm != null:
 			_set_arm_pose(right_arm, Vector3(1.28, 0.0, -0.38), delta)
 		var recoil: float = 0.12 if float(player.get("pistol_recoil_time")) > 0.0 else 0.0
-		if weapon_holder != null:
-			weapon_holder.position = weapon_holder.position.lerp(Vector3(0.0, 0.68, -0.9 + recoil), minf(delta * 16.0, 1.0))
+		_anchor_weapon_to_hand(right_arm, weapon_holder, recoil, delta)
 	elif cur_weapon >= 2 and float(player.get("crate_weapon_stance_time")) > 0.0:
-		# Arma de crate: mira com as DUAS maos esticadas na arma (nao fica
-		# na postura tatica da pistola).
+		# Arma de crate: armas longas (fuzil, escopeta, sniper...) vao com as
+		# DUAS maos na arma (a esquerda alcanca o guarda-mao); pistola/revolver/
+		# serrada seguem de uma mao so.
+		var two_hands := WeaponStats.uses_two_hands(cur_weapon)
 		if left_arm != null:
-			_set_arm_pose(left_arm, Vector3(1.35, 0.0, 0.3), delta)
+			_set_arm_pose(left_arm, Vector3(1.45, 0.0, 0.52) if two_hands else Vector3(0.72, 0.0, 0.4), delta)
 		if right_arm != null:
 			_set_arm_pose(right_arm, Vector3(1.35, 0.0, -0.3), delta)
+		# Recuo proprio de cada arma, dirigido pelo clarao do cano (que ja viaja
+		# no snapshot): a arma segue a mao e o coice entra no offset (cano sobe).
+		var kick := clampf(float(player.get("muzzle_flash_time")) / 0.08, 0.0, 1.0)
+		var recoil := WeaponStats.recoil_for(cur_weapon) * kick
+		var settle := 40.0 if kick > 0.0 else 16.0
+		_anchor_weapon_to_hand(right_arm, weapon_holder, recoil.x, delta, settle)
 		if weapon_holder != null:
-			# Recuo proprio de cada arma, dirigido pelo clarao do cano (que ja
-			# viaja no snapshot): coice para tras e cano subindo, e volta rapido.
-			var kick := clampf(float(player.get("muzzle_flash_time")) / 0.08, 0.0, 1.0)
-			var recoil := WeaponStats.recoil_for(cur_weapon) * kick
-			var settle := 40.0 if kick > 0.0 else 16.0
-			weapon_holder.position = weapon_holder.position.lerp(Vector3(0.0, 0.62, -1.0 + recoil.x), minf(delta * settle, 1.0))
 			weapon_holder.rotation.x = lerpf(weapon_holder.rotation.x, recoil.y, minf(delta * settle, 1.0))
 	else:
 		if left_arm != null:
@@ -77,7 +96,55 @@ static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void
 	if model != null:
 		model.rotation.x = lerpf(model.rotation.x, -0.14 if is_sprint else 0.0, minf(delta * 10.0, 1.0))
 
+	_apply_reload_pose(player, delta)
 	_animate_hit_reaction(player, delta)
+	_apply_hold_tuning(player)
+
+
+## Pose de ajuste por arma vinda do tuner (--armas-lab): desloca na mao e gira,
+## para achar o grip certo sem recompilar. Uso: lido de player.weapon_holds.
+static func _apply_hold_tuning(player: Node3D) -> void:
+	var kind := int(player.get("current_weapon"))
+	var offset := Vector3.ZERO
+	var rot := Vector3.ZERO
+	var tuned: Dictionary = WEAPON_HOLD_TUNE.get(kind, {})
+	offset += tuned.get("pos", Vector3.ZERO)
+	rot += tuned.get("rot", Vector3.ZERO)
+	# O tuner do --armas-lab soma por cima do ajuste fixo (permite continuar
+	# refinando sem recompilar).
+	var table: Variant = player.get("weapon_holds")
+	if table is Dictionary and (table as Dictionary).has(kind):
+		var hold: Dictionary = (table as Dictionary)[kind]
+		offset += hold.get("pos", Vector3.ZERO)
+		rot += hold.get("rot", Vector3.ZERO)
+	if offset.is_zero_approx() and rot.is_zero_approx():
+		return
+	var weapon_holder := player.get_node_or_null("Model/Weapons") as Node3D
+	var model := player.get_node_or_null("Model") as Node3D
+	if weapon_holder == null:
+		return
+	# Offset no referencial do MODEL (cima/lados/frente intuitivos), nao no
+	# referencial do braco (que fica girado na mira).
+	if model != null and not offset.is_zero_approx():
+		weapon_holder.global_position += model.global_transform.basis * offset
+	weapon_holder.rotation = rot
+
+
+## Recarga (cosmetica): a mao esquerda desce ate a arma e o cano baixa, com pico
+## no meio da animacao; sempre volta a zero (inclusive quando nao recarrega).
+## Uso: chamado dentro de animate_pose apos as posturas.
+static func _apply_reload_pose(player: Node3D, delta: float) -> void:
+	var weapon_holder := player.get_node_or_null("Model/Weapons") as Node3D
+	var reload_t: float = float(player.get("reload_anim_time"))
+	var weight: float = 0.0
+	if reload_t > 0.0 and int(player.get("current_weapon")) >= 1:
+		var progress: float = 1.0 - reload_t / RELOAD_ANIM_SECONDS
+		weight = sin(clampf(progress, 0.0, 1.0) * PI)
+		var left_arm := player.get_node_or_null("Model/LeftArm") as Node3D
+		if left_arm != null:
+			_set_arm_pose(left_arm, Vector3(0.72, 0.0, 0.55).lerp(Vector3(0.95, 0.0, 0.7), weight), delta)
+	if weapon_holder != null:
+		weapon_holder.rotation.z = lerpf(weapon_holder.rotation.z, 0.5 * weight, minf(delta * 12.0, 1.0))
 
 
 static func _animate_hit_reaction(player: Node3D, delta: float) -> void:
@@ -119,3 +186,13 @@ static func _animate_hit_reaction(player: Node3D, delta: float) -> void:
 
 static func _set_arm_pose(arm: Node3D, target_rotation: Vector3, delta: float) -> void:
 	arm.rotation = arm.rotation.lerp(target_rotation, minf(delta * 12.0, 1.0))
+
+
+## Prende a arma na ponta do braco direito (a mao); o coice empurra pra tras no
+## eixo do braco. Uso: _anchor_weapon_to_hand(right_arm, weapon_holder, coice, delta)
+static func _anchor_weapon_to_hand(arm: Node3D, weapon_holder: Node3D, recoil_back: float, delta: float, rate: float = 18.0) -> void:
+	if arm == null or weapon_holder == null or not arm.is_inside_tree() or not weapon_holder.is_inside_tree():
+		return
+	var arm_basis := arm.global_transform.basis
+	var target := arm.global_position + arm_basis * (HAND_ANCHOR_LOCAL + Vector3(0.0, 0.0, recoil_back))
+	weapon_holder.global_position = weapon_holder.global_position.lerp(target, minf(delta * rate, 1.0))

@@ -1,5 +1,7 @@
 extends Node3D
 
+const LIMB_STATE_SCRIPT: GDScript = preload("res://scripts/zombie_limb_state.gd")
+
 const SKIN_COLOR := Color(0.3, 0.58, 0.24)
 const SHIRT_COLOR := Color(0.28, 0.16, 0.12)
 const PANTS_COLOR := Color(0.18, 0.2, 0.22)
@@ -27,10 +29,10 @@ var froze := false
 func _ready() -> void:
 	torso_body = _create_torso()
 	var head := _create_head()
-	var left_arm := _create_limb("LeftArm", Vector3(0.3, 0.84, 0.34), Vector3(-0.56, 0.42, 0.0), SKIN_COLOR, 0.8)
-	var right_arm := _create_limb("RightArm", Vector3(0.3, 0.84, 0.34), Vector3(0.56, 0.42, 0.0), SKIN_COLOR, 0.8)
-	var left_leg := _create_limb("LeftLeg", Vector3(0.34, 0.84, 0.36), Vector3(-0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
-	var right_leg := _create_limb("RightLeg", Vector3(0.34, 0.84, 0.36), Vector3(0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
+	_create_limb("LeftArm", Vector3(0.3, 0.84, 0.34), Vector3(-0.56, 0.42, 0.0), SKIN_COLOR, 0.8)
+	_create_limb("RightArm", Vector3(0.3, 0.84, 0.34), Vector3(0.56, 0.42, 0.0), SKIN_COLOR, 0.8)
+	_create_limb("LeftLeg", Vector3(0.34, 0.84, 0.36), Vector3(-0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
+	_create_limb("RightLeg", Vector3(0.34, 0.84, 0.36), Vector3(0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
 
 	_create_neck_joint()
 	_create_joint("LeftShoulderJoint", NodePath("../Torso"), NodePath("../LeftArm"), Vector3(-0.56, 0.84, 0.0))
@@ -75,7 +77,7 @@ func _freeze_all() -> void:
 ## Sets initial velocity and angular momentum to make the corpse fall realistically.
 ## Usage:
 ##   ragdoll.setup(Vector3(0.0, 1.0, -2.5), 0)
-func setup(initial_velocity: Vector3, z_type: int = 0, appearance_hash: int = 0) -> void:
+func setup(initial_velocity: Vector3, z_type: int = 0, appearance_hash: int = 0, limb_loss_mask: int = 0) -> void:
 	_apply_appearance_colors(appearance_hash)
 	match z_type:
 		1: # ONE_ARM
@@ -97,6 +99,7 @@ func setup(initial_velocity: Vector3, z_type: int = 0, appearance_hash: int = 0)
 				for child in head.get_children():
 					if child is MeshInstance3D and child.position.x > 0.05:
 						child.queue_free()
+	_apply_limb_loss_mask(limb_loss_mask)
 
 	if is_instance_valid(torso_body):
 		torso_body.linear_velocity = initial_velocity * 1.1 + Vector3(
@@ -151,6 +154,17 @@ func _remove_limb_and_joint(limb_name: String, joint_name: String) -> void:
 		joint.queue_free()
 
 
+func _apply_limb_loss_mask(limb_loss_mask: int) -> void:
+	if limb_loss_mask & LIMB_STATE_SCRIPT.LEFT_ARM != 0:
+		_remove_limb_and_joint("LeftArm", "LeftShoulderJoint")
+	if limb_loss_mask & LIMB_STATE_SCRIPT.RIGHT_ARM != 0:
+		_remove_limb_and_joint("RightArm", "RightShoulderJoint")
+	if limb_loss_mask & LIMB_STATE_SCRIPT.LEFT_LEG != 0:
+		_remove_limb_and_joint("LeftLeg", "LeftHipJoint")
+	if limb_loss_mask & LIMB_STATE_SCRIPT.RIGHT_LEG != 0:
+		_remove_limb_and_joint("RightLeg", "RightHipJoint")
+
+
 func _shorten_rigid_limb(limb_name: String) -> void:
 	var limb := get_node_or_null(limb_name) as RigidBody3D
 	if not is_instance_valid(limb):
@@ -161,7 +175,7 @@ func _shorten_rigid_limb(limb_name: String) -> void:
 
 ## Um tiro no cadaver remove o corpo do chao, evitando montanhas de corpos
 ## presas dentro de casa. Uso: ragdoll.take_damage(35, Vector3.FORWARD, "bullet")
-func take_damage(_amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null) -> void:
+func take_damage(_amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null, _hit_position: Vector3 = Vector3.INF) -> void:
 	if is_queued_for_deletion():
 		return
 	queue_free()

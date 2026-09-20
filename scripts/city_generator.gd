@@ -48,6 +48,18 @@ const RUIN_INNER_RADIUS := 78.0
 const RUIN_OUTER_RADIUS := 95.0
 const PLAYER_ONLY_BOUNDARY_LAYER := 16
 const CAR_RUST_SHADER: Shader = preload("res://shaders/car_rust.gdshader")
+## Os carros do pacote tem ~1,8 m de altura e o boneco do jogo tem 2,22 m, entao
+## pareciam de brinquedo ao lado dele. Este fator casa os veiculos com o boneco.
+const VEHICLE_SCALE := 1.3
+## Carros abandonados sao RigidBody empurraveis: massa abaixo do jipe (650) para
+## ele conseguir bater e mover no impacto em vez de travar.
+const WRECK_MASS := 450.0
+const DRIVABLE_CAR_SCENE: PackedScene = preload("res://scenes/drivable_car.tscn")
+## So nasce 1 carro dirigivel no mapa (o jipe militar). Fica no meio de uma rua
+## larga, longe dos pontos dos carros abandonados (car_spots) para nao empilhar.
+const DRIVABLE_CAR_SPOTS := [
+	Vector3(-24.0, 0.4, 6.0),
+]
 const BUILDING_COLORS := [
 	Color(0.48, 0.25, 0.18),
 	Color(0.25, 0.36, 0.46),
@@ -63,6 +75,11 @@ const BUILDING_COLORS := [
 ## esta flag levanta. Veja is_city_ready().
 var city_ready := false
 
+## Ruas e pegadas dos predios para o minimapa desenhar o mapa de fundo.
+## {"roads": [{"start": Vector2, "finish": Vector2, "width": float}],
+##  "buildings": [{"center": Vector2, "size": Vector2}]} em (x, z).
+var minimap_layout: Dictionary = {}
+
 var road_material: StandardMaterial3D
 var line_material: StandardMaterial3D
 var boundary_material: StandardMaterial3D
@@ -75,6 +92,11 @@ func is_city_ready() -> bool:
 
 
 func _ready() -> void:
+	if NetworkSession.weapons_lab:
+		# Campo de testes: sem cidade. O main.tscn ja tem o chao e o main monta
+		# a arena; deixar vazio evita gerar predios em volta.
+		city_ready = true
+		return
 	if NetworkSession.procedural_city_enabled:
 		_build_procedural_city.call_deferred()
 		return
@@ -84,7 +106,50 @@ func _ready() -> void:
 	_create_street_props()
 	_create_boundaries()
 	_create_forest()
+	minimap_layout = legacy_minimap_layout()
 	city_ready = true
+
+
+## Layout do minimapa quando a cidade procedural esta desligada (--legacy-city):
+## ruas nas colunas fixas e os 36 lotes da grade, sem blueprint para consultar.
+## Uso: city.minimap_layout = legacy_minimap_layout()
+static func legacy_minimap_layout() -> Dictionary:
+	var half := ROAD_LENGTH * 0.5
+	var roads: Array = []
+	for offset in ROAD_OFFSETS:
+		roads.append({"start": Vector2(offset, -half), "finish": Vector2(offset, half), "width": 8.0})
+		roads.append({"start": Vector2(-half, offset), "finish": Vector2(half, offset), "width": 8.0})
+	var buildings: Array = []
+	for x in LOT_CENTERS:
+		for z in LOT_CENTERS:
+			buildings.append({"center": Vector2(x, z), "size": Vector2(18.0, 18.0)})
+	return {"roads": roads, "buildings": buildings}
+
+
+## Layout estatico do minimapa a partir do blueprint procedural: um segmento
+## por lance de rua e uma pegada por lote com predio. Dado puro (sem cena).
+## Uso: city_generator.minimap_layout = build_minimap_layout(cidade)
+static func build_minimap_layout(city) -> Dictionary:
+	var roads: Array = []
+	for road in city.roads:
+		roads.append({"start": road.start, "finish": road.finish, "width": road.width})
+	var buildings: Array = []
+	for block in city.blocks:
+		for lot in block.lots:
+			if lot.building == null:
+				continue
+			var footprint: Vector2 = lot.building_footprint_size()
+			buildings.append({
+				"center": lot.position,
+				"size": footprint,
+			})
+	return {"roads": roads, "buildings": buildings}
+
+
+## Layout do minimapa; vazio ate a cidade terminar de montar.
+## Uso: var layout := city.get_minimap_layout()
+func get_minimap_layout() -> Dictionary:
+	return minimap_layout
 
 
 ## Montagem em etapas: o blueprint (dado puro, sem cena) roda na thread pool,
@@ -96,6 +161,7 @@ func _build_procedural_city() -> void:
 	_hide_legacy_center_roads()
 	_create_procedural_safehouse()
 	var city = await _generate_blueprint_async(NetworkSession.world_seed, NetworkSession.survival_mode, NetworkSession.pvp_mode)
+	minimap_layout = build_minimap_layout(city)
 	PROCEDURAL_CITY_ASSEMBLER.assemble_roads(city, self)
 	var safehouse_area: Array[Rect2] = [SAFEHOUSE_LOT_AREA]
 	STREET_LIGHT_ASSEMBLER.assemble(city, self, safehouse_area)
@@ -110,6 +176,7 @@ func _build_procedural_city() -> void:
 			budget -= 1
 		await get_tree().process_frame
 	_create_abandoned_cars(_street_props_rng())
+	_create_drivable_cars(_street_props_rng())
 	_create_boundaries()
 	_create_forest()
 	city_ready = true
@@ -252,6 +319,20 @@ func _create_streetlights(rng: RandomNumberGenerator) -> void:
 			add_child(light_inst)
 
 
+## Carros dirigiveis: o jogador entra com E e dirige. Chamado junto dos props de
+## rua, mas depois de a cidade existir, para o carro cair no asfalto.
+## Uso: interno de _build_procedural_city
+func _create_drivable_cars(rng: RandomNumberGenerator) -> void:
+	for index in DRIVABLE_CAR_SPOTS.size():
+		var car := DRIVABLE_CAR_SCENE.instantiate() as VehicleBody3D
+		if car == null:
+			continue
+		car.name = "DrivableCar%d" % index
+		car.position = DRIVABLE_CAR_SPOTS[index]
+		car.rotation.y = rng.randf_range(0.0, TAU)
+		add_child(car)
+
+
 func _create_abandoned_cars(rng: RandomNumberGenerator) -> void:
 	var vehicle_configs: Array[Dictionary] = [
 		{"path": "res://assets/models/city/car_police.gltf", "scale": 5.0, "size": Vector3(2.1, 1.8, 4.7)},
@@ -277,16 +358,25 @@ func _create_abandoned_cars(rng: RandomNumberGenerator) -> void:
 		Vector3(-60.0, 0.12, 24.0),
 		Vector3(60.0, 0.12, -24.0),
 	]
+	var wreck_material := PhysicsMaterial.new()
+	wreck_material.friction = 0.6
+	wreck_material.bounce = 0.05
 	for spot in car_spots:
 		var cfg: Dictionary = vehicle_configs[rng.randi_range(0, vehicle_configs.size() - 1)]
 		var car_scene := load(cfg["path"] as String) as PackedScene
 		if car_scene == null:
 			continue
-		var car_body := StaticBody3D.new()
+		# Corpo fisico (era StaticBody): assim o jipe dirigivel bate e empurra.
+		var car_body := RigidBody3D.new()
+		car_body.mass = WRECK_MASS
+		car_body.physics_material_override = wreck_material
+		car_body.continuous_cd = true
+		car_body.linear_damp = 0.6
+		car_body.angular_damp = 1.0
 		car_body.position = spot
 		car_body.rotation.y = rng.randf_range(-0.4, 0.4) if rng.randf() < 0.7 else rng.randf() * TAU
 		var car_inst := car_scene.instantiate() as Node3D
-		car_inst.scale = Vector3.ONE * (cfg["scale"] as float)
+		car_inst.scale = Vector3.ONE * (cfg["scale"] as float) * VEHICLE_SCALE
 
 		var is_burnt: bool = rng.randf() < 0.25
 		_apply_corrosion_to_vehicle(car_inst, rng, is_burnt)
@@ -299,9 +389,10 @@ func _create_abandoned_cars(rng: RandomNumberGenerator) -> void:
 
 		var col := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
-		shape.size = cfg["size"] as Vector3
+		var collision_size: Vector3 = (cfg["size"] as Vector3) * VEHICLE_SCALE
+		shape.size = collision_size
 		col.shape = shape
-		col.position = Vector3(0.0, (cfg["size"] as Vector3).y * 0.5, 0.0)
+		col.position = Vector3(0.0, collision_size.y * 0.5, 0.0)
 		car_body.add_child(col)
 		add_child(car_body)
 
@@ -420,7 +511,7 @@ func _create_forest() -> void:
 	rng.seed = city_seed + 1701
 	var tree_index := 0
 	var tree_count := GameConfig.get_forest_tree_count()
-	for tree_step in tree_count:
+	for _tree_step in tree_count:
 		_spawn_tree(tree_index, _random_forest_position(rng), rng)
 		tree_index += 1
 	_scatter_undergrowth(rng, tree_count)

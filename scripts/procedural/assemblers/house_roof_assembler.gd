@@ -14,6 +14,9 @@ const SLOPE_THICKNESS := 0.22
 const GABLE_THICKNESS := 0.14
 # Faixa entre o topo das paredes (3.28 m) e a base do telhado (3.4 m).
 const GABLE_BAND_HEIGHT := 0.2
+## Altura de cada fiada de telha na agua do telhado (metros).
+const SHINGLE_PERIOD := 0.32
+const ROOF_TEXTURE: Texture2D = preload("res://assets/models/modular_urban/Textures/roof.png")
 const ROOF_PALETTE: Array[Color] = [
 	Color(0.52, 0.24, 0.15), # telha ceramica
 	Color(0.22, 0.23, 0.26), # ardosia
@@ -35,7 +38,10 @@ static func add_gable_roof(body: StaticBody3D, building, wall_material: Material
 	var roof_y: float = float(building.floors) * building.floor_height
 	var ridge_height := width * 0.5 * slope
 	var roof_depth := depth + OVERHANG * 2.0
-	var roof_material: Material = BUILDING_MATERIALS.opaque(ROOF_PALETTE[absi(int(building.seed)) % ROOF_PALETTE.size()], building.floor_height, true)
+	var roof_material: Material = BUILDING_MATERIALS.textured_opaque(ROOF_PALETTE[absi(int(building.seed)) % ROOF_PALETTE.size()], building.floor_height, ROOF_TEXTURE, 1.1, true)
+	# Fiada de telha: sem ela a agua do telhado vira uma chapa de cor unica, que
+	# e o que mais chama atencao na vista de cima.
+	roof_material.set_shader_parameter("shingle_period", SHINGLE_PERIOD)
 	var trim_material: Material = BUILDING_MATERIALS.opaque(Color(0.16, 0.14, 0.12), building.floor_height, true)
 	_add_slopes(body, width, depth, roof_y, slope, roof_material)
 	_add_gables(body, width, depth, roof_y, ridge_height, wall_material)

@@ -35,11 +35,30 @@ const SONAR_INTERVAL := 10.0
 const SONAR_REVEAL_RADIUS := 45.0
 ## Raio de coleta por interacao de armas no chao (crates e dropadas).
 const GROUND_INTERACT_RADIUS := 2.8
+## Alcance um pouco maior que o do item no chao: o carro e grande e o boneco
+## precisa encostar na porta para entrar.
+const VEHICLE_INTERACT_RADIUS := 3.4
+## Pose sentada enquanto dirige (o animador nao roda no modo carro).
+const SEATED_LEG_ANGLE := 1.45
+const SEATED_ARM_ANGLE := 0.95
+## Bracos girados para dentro para as maos caírem no aro do volante (as maos
+## ficam ~0,6 m uma da outra, casando com o volante de raio 0,3).
+const SEATED_ARM_INWARD := 0.3
+## Dirigindo em primeira pessoa, o mouse vira a cabeca em relacao ao rumo do
+## carro (nao um yaw absoluto): ao olhar pra frente o jogador ve o para-brisa,
+## nao um ponto fixo do mundo. Limite evita virar a nuca.
+const DRIVE_LOOK_YAW_LIMIT := 2.35
+## Quanto os bracos giram no eixo do volante por radiano de esterco, para as maos
+## acompanharem o aro enquanto dirige.
+const STEERING_ARM_SWING := 0.6
 ## Porta pode ser usada antes de encostar nela; ainda exige o raycast estar na
 ## frente do boneco, para nao abrir porta atraves de parede.
 const DOOR_INTERACT_REACH := 3.5
 ## Segurando interagir ao lado do caido, reanimacao completa em ~3s.
 const REVIVE_DURATION := 3.0
+## Duracao da animacao de recarga (cosmetica: a municao entra na hora; o valor
+## espelha PlayerAnimator.RELOAD_ANIM_SECONDS).
+const RELOAD_ANIM_SECONDS := 1.0
 ## Pellet tracer: menor/mais curto que o tracer da pistola.
 const PELLET_VISUAL_SCALE := Vector3(0.55, 0.55, 0.45)
 const UNSTUCK_LOCATOR_SCRIPT: GDScript = preload("res://scripts/player_unstuck_locator.gd")
@@ -65,6 +84,13 @@ var is_eliminated := false
 ## Ninguem salva? Rodada nova devolve a todos (restore_wave_lives).
 var is_downed := false
 var revive_progress := 0.0
+## Carro dirigivel ocupado por este jogador; null quando a pe. Enquanto dirige
+## o boneco fica preso ao assento e a camera isometrica segue o carro.
+var driving_car: Node = null
+## Carro em que este jogador vai de passageiro (assento traseiro do atirador);
+## null quando nao esta de carona. Diferente de `driving_car`: o passageiro nao
+## controla o veiculo, mas continua podendo mirar e atirar.
+var riding_car: Node = null
 
 var owner_peer_id := 1
 var input_action_prefix := "player_1_"
@@ -115,6 +141,13 @@ var gunshot_noise_time := 0.0
 var noise_radius := 0.0
 var pistol_stance_time := 0.0
 var pistol_recoil_time := 0.0
+## Tempo restante da animacao de recarga (cosmetica; ver PlayerAnimator).
+var reload_anim_time := 0.0
+## Tuner da pose das armas (--armas-lab): ajusta a posicao/rotacao da arma na
+## mao com o teclado e imprime os valores. Uso: teclas I/K (Y), J/L (X), U/O (Z),
+## setas (rot X/Y), virgula/ponto (rot Z), P imprime, 0 reseta a arma atual.
+var weapon_holds: Dictionary = {}
+var hold_tuner_enabled := false
 ## Arma de crate em maos mantem a pose de mira com duas maos por um tempo.
 var crate_weapon_stance_time := 0.0
 var knife_attack_time := 0.0
@@ -124,14 +157,27 @@ var walk_time := 0.0
 var spawn_position := Vector3.ZERO
 var move_input := Vector2.ZERO
 var aim_input := Vector2.ZERO
+## Direcao de mira 3D no mundo (unitaria). FPS: frente da camera (retículo no
+## centro da tela); 3a pessoa: do cano ao ponto sob o cursor (raycast, estilo
+## Foxhole); sem mouse/analogico: horizontal do aim_input. E o que os tiros usam.
+## ZERO = ainda nao mirada; os disparos caem para a frente do corpo.
+var aim_direction := Vector3.ZERO
 ## Mira pelo cursor (isometrica) e primeira pessoa. `camera_yaw` e o yaw livre
 ## do modo FPS (o corpo segue ele); `view_pitch` inclina so a camera.
 const AIM_SENSITIVITY := 0.0022
 const AIM_PITCH_LIMIT := 1.35
+## Velocidade com que o corpo vira para a mira (por segundo). Baixo demais e o
+## boneco "arrasta" atras do cursor; usado tambem na previsao local do cliente.
+const AIM_TURN_RATE := 22.0
+## Alcance do raycast que acha o ponto do cursor na 3a pessoa.
+const MOUSE_AIM_RANGE := 80.0
 var mouse_aim := true
 var first_person := false
 var camera_yaw := 0.0
 var view_pitch := 0.0
+## Dirigindo em primeira pessoa: giro horizontal da cabeca relativo ao carro
+## (0 = olhando para o para-brisa). Ver DRIVE_LOOK_YAW_LIMIT.
+var drive_look_yaw := 0.0
 ## Camera/viewport do jogador, setados pelo split_screen_manager, para projetar
 ## o cursor no chao. `mouse_owner` diz quem controla o unico cursor (P1).
 var aim_camera: Camera3D = null
@@ -184,6 +230,7 @@ var zombie_kills := 0
 
 
 func _ready() -> void:
+	hold_tuner_enabled = NetworkSession.weapons_lab
 	health = max_health
 	stamina = max_stamina
 	safe_margin = 0.08
@@ -198,41 +245,38 @@ func _ready() -> void:
 	_update_weapon_models()
 
 
+## Tick do jogador, por papel: eliminado nao faz nada, o proxy do cliente so
+## interpola, o caido espera ser reanimado e o resto joga.
 func _physics_process(delta: float) -> void:
 	if is_eliminated:
 		velocity = Vector3.ZERO
 		return
-
-	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
-	unstuck_cooldown = maxf(unstuck_cooldown - delta, 0.0)
-	crate_weapon_stance_time = maxf(crate_weapon_stance_time - delta, 0.0)
-	muzzle_flash_time = maxf(muzzle_flash_time - delta, 0.0)
-	pistol_stance_time = maxf(pistol_stance_time - delta, 0.0)
-	pistol_recoil_time = maxf(pistol_recoil_time - delta, 0.0)
-	knife_attack_time = maxf(knife_attack_time - delta, 0.0)
-	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
-	sonar_pulse_time = maxf(sonar_pulse_time - delta, 0.0)
-	sonar_interval_timer = maxf(sonar_interval_timer - delta, 0.0)
-	if sonar_interval_timer <= 0.0:
-		trigger_sonar()
-	_poll_local_sonar()
+	# A troca de camera (H) vale a pe e dirigindo; por isso nao fica nos ramos.
 	_poll_view_toggle()
-	muzzle_flash.visible = muzzle_flash_time > 0.0
-	if not simulation_enabled:
-		var previous_position := global_position
-		# Interpolacao por buffer com atraso adaptativo; o move_and_collide segue
-		# no caminho do alvo para nao atravessar parede.
-		snapshot_buffer.sample(float(Time.get_ticks_msec()))
-		var target_pos := snapshot_buffer.position
-		var motion := target_pos - global_position
-		if motion.length_squared() > 0.00001:
-			var col := move_and_collide(motion)
-			if col != null:
-				move_and_collide(col.get_remainder().slide(col.get_normal()))
-		rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
-		PlayerAnimator.animate_pose(self, delta, previous_position.distance_squared_to(global_position) > 0.0001)
+	if is_driving():
+		_sync_to_vehicle()
+		_handle_vehicle_exit()
+		_clear_transient_input()
 		return
-
+	if is_riding():
+		# Passageiro: preso ao assento traseiro, mas ainda mira e atira (sem
+		# andar). No cliente o proxy segue o snapshot (posicao + mira que o
+		# servidor calculou); na autoridade o assento e sincronizado depois do
+		# input para o corpo seguir a mira.
+		_advance_action_clocks(delta)
+		if not simulation_enabled:
+			_interpolate_proxy(delta)
+			return
+		_handle_vehicle_exit()
+		_collect_tick_input(delta)
+		_sync_to_gunner_seat()
+		_handle_weapon_input()
+		_clear_transient_input()
+		return
+	_advance_action_clocks(delta)
+	if not simulation_enabled:
+		_interpolate_proxy(delta)
+		return
 	if is_downed:
 		# Caido (so onde e simulado: offline/servidor): sem acao; o aliado
 		# segurando interagir reanima em ~3s. O proxy do cliente apenas
@@ -240,53 +284,122 @@ func _physics_process(delta: float) -> void:
 		velocity = Vector3.ZERO
 		_update_revive_by_others(delta)
 		return
-
-	if reads_local_input:
-		_poll_input()
-	else:
-		remote_input_age += delta
-		if remote_input_age > 0.3:
-			move_input = Vector2.ZERO
-			aim_input = Vector2.ZERO
+	_collect_tick_input(delta)
 	_handle_interaction_input()
 	_handle_weapon_input()
 	equipment_cooldown = maxf(equipment_cooldown - delta, 0.0)
 	_handle_equipment_input()
 	_update_revive_by_others(delta)
-
-	if not is_on_floor():
-		velocity.y -= gravity * delta
-
-	if jump_pressed and is_on_floor():
-		velocity.y = jump_velocity
-
 	var direction := Vector3(move_input.x, 0.0, move_input.y).normalized()
 	_update_stamina(delta, not direction.is_zero_approx() and sprint_pressed)
 	_update_noise(delta, direction)
-	if first_person:
-		# FPS: o yaw vem do mouse (sem suavizar), o corpo inteiro segue.
-		rotation.y = camera_yaw
-	elif not aim_input.is_zero_approx():
-		var target_rotation := atan2(-aim_input.x, -aim_input.y)
-		rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
-	elif not direction.is_zero_approx():
-		var target_rotation := atan2(-direction.x, -direction.z)
-		rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
-	var target_velocity := direction * (sprint_speed if is_sprinting else speed)
-
-	velocity.x = move_toward(velocity.x, target_velocity.x, acceleration * delta)
-	velocity.z = move_toward(velocity.z, target_velocity.z, acceleration * delta)
-	if forced_move_time > 0.0:
-		forced_move_time = maxf(forced_move_time - delta, 0.0)
-		velocity.x = forced_move_velocity.x
-		velocity.z = forced_move_velocity.z
-
+	_face_aim_or_movement(direction, delta)
+	_drive_body(direction, delta)
 	move_and_slide()
 	PlayerAnimator.animate_pose(self, delta, direction.length() > 0.0 and is_on_floor())
 	_clear_transient_input()
 
 
+## Relogios de golpe, animacao e sonar; andam em qualquer papel, ate no proxy,
+## porque o gesto visual continua rodando no cliente.
+func _advance_action_clocks(delta: float) -> void:
+	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
+	unstuck_cooldown = maxf(unstuck_cooldown - delta, 0.0)
+	crate_weapon_stance_time = maxf(crate_weapon_stance_time - delta, 0.0)
+	muzzle_flash_time = maxf(muzzle_flash_time - delta, 0.0)
+	pistol_stance_time = maxf(pistol_stance_time - delta, 0.0)
+	pistol_recoil_time = maxf(pistol_recoil_time - delta, 0.0)
+	reload_anim_time = maxf(reload_anim_time - delta, 0.0)
+	knife_attack_time = maxf(knife_attack_time - delta, 0.0)
+	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
+	sonar_pulse_time = maxf(sonar_pulse_time - delta, 0.0)
+	sonar_interval_timer = maxf(sonar_interval_timer - delta, 0.0)
+	if sonar_interval_timer <= 0.0:
+		trigger_sonar()
+	_poll_local_sonar()
+	muzzle_flash.visible = muzzle_flash_time > 0.0
+
+
+## Proxy no cliente: interpolacao por buffer com atraso adaptativo; o
+## move_and_collide segue no caminho do alvo para nao atravessar parede.
+func _interpolate_proxy(delta: float) -> void:
+	var previous_position := global_position
+	snapshot_buffer.sample(float(Time.get_ticks_msec()))
+	var motion := snapshot_buffer.position - global_position
+	if motion.length_squared() > 0.00001:
+		var col := move_and_collide(motion)
+		if col != null:
+			move_and_collide(col.get_remainder().slide(col.get_normal()))
+	# O jogador LOCAL preve a rotacao: no cliente a do servidor chega a 10 Hz e o
+	# boneco "arrastava" atras da mira. So a rotacao e prevista (cosmetica); a
+	# posicao continua vindo do snapshot autoritativo.
+	if is_local_controller and first_person:
+		rotation.y = camera_yaw
+	elif is_local_controller:
+		var local_aim := _local_aim_input()
+		if not local_aim.is_zero_approx():
+			rotation.y = lerp_angle(rotation.y, atan2(-local_aim.x, -local_aim.y), minf(delta * AIM_TURN_RATE, 1.0))
+		else:
+			rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
+	else:
+		rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
+	# Dentro do carro o proxy usa a pose do assento (sentado dirigindo / em pe no
+	# bed), nao a marcha.
+	if is_driving() or is_riding():
+		_apply_seated_pose(is_driving())
+		return
+	PlayerAnimator.animate_pose(self, delta, previous_position.distance_squared_to(global_position) > 0.0001)
+
+
+## Input do teclado local, ou o que chegou pela rede. Pacote atrasado demais
+## zera o movimento, senao o boneco seguiria andando sozinho.
+func _collect_tick_input(delta: float) -> void:
+	if reads_local_input:
+		_poll_input()
+		return
+	remote_input_age += delta
+	if remote_input_age > 0.3:
+		move_input = Vector2.ZERO
+		aim_input = Vector2.ZERO
+		aim_direction = -global_transform.basis.z
+
+
+## Para onde o boneco olha: mouse em primeira pessoa, mira do analogico, ou a
+## propria direcao de caminhada.
+func _face_aim_or_movement(direction: Vector3, delta: float) -> void:
+	if first_person:
+		# FPS: o yaw vem do mouse (sem suavizar), o corpo inteiro segue.
+		rotation.y = camera_yaw
+		return
+	var target_rotation := 0.0
+	if not aim_input.is_zero_approx():
+		target_rotation = atan2(-aim_input.x, -aim_input.y)
+	elif not direction.is_zero_approx():
+		target_rotation = atan2(-direction.x, -direction.z)
+	else:
+		return
+	rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * AIM_TURN_RATE, 1.0))
+
+
+## Gravidade, pulo e a velocidade horizontal; o empurrao forcado (lingua do
+## puxador, bote do espreitador) manda por cima do input.
+func _drive_body(direction: Vector3, delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= gravity * delta
+	if jump_pressed and is_on_floor():
+		velocity.y = jump_velocity
+	var target_velocity := direction * (sprint_speed if is_sprinting else speed)
+	velocity.x = move_toward(velocity.x, target_velocity.x, acceleration * delta)
+	velocity.z = move_toward(velocity.z, target_velocity.z, acceleration * delta)
+	if forced_move_time <= 0.0:
+		return
+	forced_move_time = maxf(forced_move_time - delta, 0.0)
+	velocity.x = forced_move_velocity.x
+	velocity.z = forced_move_velocity.z
+
+
 func get_local_input_state() -> Dictionary:
+	var aim_dir := _local_aim_direction()
 	return {
 		"slot": local_slot,
 		"move": _aim_relative_move(Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down")),
@@ -308,8 +421,20 @@ func get_local_input_state() -> Dictionary:
 		"throw_knife": Input.is_action_pressed(input_action_prefix + "throw_knife"),
 		"air_strike": Input.is_action_pressed(input_action_prefix + "air_strike"),
 		"swat": Input.is_action_pressed(input_action_prefix + "swat"),
-		"aim": _local_aim_input(),
+		"aim": _horizontal_from_direction(aim_dir),
+		"aim_dir": aim_dir,
+		"aim_point": _local_aim_target(),
+		"vehicle": _read_vehicle_input(),
 	}
+
+
+## Trava de clique da rede: o botao fica marcado ate o tick de fisica consumir.
+## Dois pacotes de input no mesmo frame (jitter da internet) faziam o segundo
+## apagar o clique do primeiro, perdendo tiro, recarga ou coleta. A chamada a
+## _network_button_just_pressed vem antes do "or" para sempre atualizar o estado
+## anterior do botao. Uso: attack_pressed = _latched_button(state, "attack", attack_pressed)
+func _latched_button(state: Dictionary, key: String, current: bool) -> bool:
+	return _network_button_just_pressed(key, bool(state.get(key, false))) or current
 
 
 func apply_network_input(state: Dictionary) -> void:
@@ -317,28 +442,44 @@ func apply_network_input(state: Dictionary) -> void:
 	move_input = requested_move.limit_length(1.0) if requested_move is Vector2 else Vector2.ZERO
 	var requested_aim: Variant = state.get("aim", Vector2.ZERO)
 	aim_input = requested_aim.limit_length(1.0) if requested_aim is Vector2 else Vector2.ZERO
-	# Cliques acumulam ate o tick de fisica consumir (_clear_transient_input):
-	# dois pacotes de input no mesmo frame (jitter da internet) faziam o segundo
-	# apagar o clique do primeiro, perdendo tiro, recarga ou coleta. A funcao vem
-	# antes do "or" para sempre atualizar o estado anterior do botao.
-	jump_pressed = _network_button_just_pressed("jump", bool(state.get("jump", false))) or jump_pressed
+	# Mira 3D: "aim_point" (ponto do retículo/cursor) e o principal — o servidor
+	# converge do cano DELE ate o ponto. "aim_dir" fica para bots/versoes antigas.
+	var requested_point: Variant = state.get("aim_point", null)
+	var requested_dir: Variant = state.get("aim_dir", null)
+	if requested_point is Vector3:
+		var to_point: Vector3 = (requested_point as Vector3) - _muzzle_origin()
+		aim_direction = to_point.normalized() if to_point.length_squared() > 0.0001 else -global_transform.basis.z
+	elif requested_dir is Vector3 and not (requested_dir as Vector3).is_zero_approx():
+		aim_direction = (requested_dir as Vector3).normalized()
+	elif not aim_input.is_zero_approx():
+		aim_direction = Vector3(aim_input.x, 0.0, aim_input.y).normalized()
+	else:
+		aim_direction = -global_transform.basis.z
+	# Comando do carro: sem ele (bots/versoes antigas) o motorista nao acelera.
+	var requested_vehicle: Variant = state.get("vehicle", null)
+	if requested_vehicle is Dictionary:
+		vehicle_input = _sanitize_vehicle_input(requested_vehicle as Dictionary)
+	else:
+		vehicle_input = {"steer": 0.0, "throttle": 0.0, "brake": true}
+	# Cada botao guarda o clique ate o tick de fisica consumir; ver _latched_button.
+	jump_pressed = _latched_button(state, "jump", jump_pressed)
 	sprint_pressed = bool(state.get("sprint", false))
-	attack_pressed = _network_button_just_pressed("attack", bool(state.get("attack", false))) or attack_pressed
-	knife_pressed = _network_button_just_pressed("knife", bool(state.get("knife", false))) or knife_pressed
-	pistol_pressed = _network_button_just_pressed("pistol", bool(state.get("pistol", false))) or pistol_pressed
-	reload_pressed = _network_button_just_pressed("reload", bool(state.get("reload", false))) or reload_pressed
-	interact_pressed = _network_button_just_pressed("interact", bool(state.get("interact", false))) or interact_pressed
-	shotgun_pressed = _network_button_just_pressed("shotgun", bool(state.get("shotgun", false))) or shotgun_pressed
-	uzi_pressed = _network_button_just_pressed("uzi", bool(state.get("uzi", false))) or uzi_pressed
-	magnum_pressed = _network_button_just_pressed("magnum", bool(state.get("magnum", false))) or magnum_pressed
-	double_barrel_pressed = _network_button_just_pressed("double_barrel", bool(state.get("double_barrel", false))) or double_barrel_pressed
-	carbine_pressed = _network_button_just_pressed("carbine", bool(state.get("carbine", false))) or carbine_pressed
-	drop_pressed = _network_button_just_pressed("drop", bool(state.get("drop", false))) or drop_pressed
-	cycle_weapon_pressed = _network_button_just_pressed("cycle", bool(state.get("cycle", false))) or cycle_weapon_pressed
-	grenade_pressed = _network_button_just_pressed("grenade", bool(state.get("grenade", false))) or grenade_pressed
-	throw_knife_pressed = _network_button_just_pressed("throw_knife", bool(state.get("throw_knife", false))) or throw_knife_pressed
-	air_strike_pressed = _network_button_just_pressed("air_strike", bool(state.get("air_strike", false))) or air_strike_pressed
-	swat_pressed = _network_button_just_pressed("swat", bool(state.get("swat", false))) or swat_pressed
+	attack_pressed = _latched_button(state, "attack", attack_pressed)
+	knife_pressed = _latched_button(state, "knife", knife_pressed)
+	pistol_pressed = _latched_button(state, "pistol", pistol_pressed)
+	reload_pressed = _latched_button(state, "reload", reload_pressed)
+	interact_pressed = _latched_button(state, "interact", interact_pressed)
+	shotgun_pressed = _latched_button(state, "shotgun", shotgun_pressed)
+	uzi_pressed = _latched_button(state, "uzi", uzi_pressed)
+	magnum_pressed = _latched_button(state, "magnum", magnum_pressed)
+	double_barrel_pressed = _latched_button(state, "double_barrel", double_barrel_pressed)
+	carbine_pressed = _latched_button(state, "carbine", carbine_pressed)
+	drop_pressed = _latched_button(state, "drop", drop_pressed)
+	cycle_weapon_pressed = _latched_button(state, "cycle", cycle_weapon_pressed)
+	grenade_pressed = _latched_button(state, "grenade", grenade_pressed)
+	throw_knife_pressed = _latched_button(state, "throw_knife", throw_knife_pressed)
+	air_strike_pressed = _latched_button(state, "air_strike", air_strike_pressed)
+	swat_pressed = _latched_button(state, "swat", swat_pressed)
 	remote_input_age = 0.0
 
 
@@ -373,57 +514,98 @@ func get_network_state() -> Dictionary:
 	}
 
 
+## Aplica no proxy o estado que veio do servidor, em blocos: posicao, vitais,
+## arma, relogios de animacao, caido e os extras (itens, PVP, eliminado).
+## Uso: chamado ao receber o snapshot de jogadores.
 func apply_network_state(state: Dictionary) -> void:
+	_apply_network_transform(state)
+	_apply_network_vitals(state)
+	_apply_network_weapon(state)
+	_apply_network_clocks(state)
+	_apply_network_downed(state)
+	_apply_network_extras(state)
+
+
+## Posicao e rotacao pelo buffer de interpolacao, com o salto do teleporte.
+func _apply_network_transform(state: Dictionary) -> void:
 	var position_value: Variant = state.get("position")
 	var received_teleport := int(state.get("teleport_sequence", teleport_sequence))
-	if position_value is Vector3:
-		var next_position: Vector3 = position_value
-		var next_rotation := float(state.get("rotation", snapshot_buffer.rotation))
-		if received_teleport != teleport_sequence:
-			# Teleporte autorizado (destravar/respawn): o buffer reinicia e o no
-			# pula, senao o proxy deslizaria atravessando o mapa.
-			snapshot_buffer.reset(float(Time.get_ticks_msec()), next_position, next_rotation)
-			global_position = next_position
-			rotation.y = next_rotation
-			velocity = Vector3.ZERO
-		elif snapshot_buffer.push(float(Time.get_ticks_msec()), next_position, next_rotation, global_position, rotation.y):
-			global_position = snapshot_buffer.position
-			rotation.y = snapshot_buffer.rotation
+	if not (position_value is Vector3):
+		teleport_sequence = received_teleport
+		return
+	var next_position: Vector3 = position_value
+	var next_rotation := float(state.get("rotation", snapshot_buffer.rotation))
+	if received_teleport != teleport_sequence:
+		# Teleporte autorizado (destravar/respawn): o buffer reinicia e o no
+		# pula, senao o proxy deslizaria atravessando o mapa.
+		snapshot_buffer.reset(float(Time.get_ticks_msec()), next_position, next_rotation)
+		global_position = next_position
+		rotation.y = next_rotation
+		velocity = Vector3.ZERO
+	elif snapshot_buffer.push(float(Time.get_ticks_msec()), next_position, next_rotation, global_position, rotation.y):
+		global_position = snapshot_buffer.position
+		rotation.y = snapshot_buffer.rotation
 	teleport_sequence = received_teleport
+
+
+func _apply_network_vitals(state: Dictionary) -> void:
 	health = clampi(int(state.get("health", health)), 0, max_health)
 	stamina = clampf(float(state.get("stamina", stamina)), 0.0, max_stamina)
 	is_sprinting = bool(state.get("sprinting", false))
 	pistol_ammo = clampi(int(state.get("pistol_ammo", pistol_ammo)), 0, 12)
 	reserve_ammo = maxi(int(state.get("reserve_ammo", reserve_ammo)), 0)
+	lives = clampi(int(state.get("lives", lives)), 0, MAX_LIVES)
+	zombie_kills = maxi(zombie_kills, int(state.get("zombie_kills", zombie_kills)))
+	revive_progress = clampf(float(state.get("revive_progress", revive_progress)), 0.0, 1.0)
+
+
+## Arma na mao e os pentes das vagas; so remonta o modelo quando algo mudou.
+func _apply_network_weapon(state: Dictionary) -> void:
 	var next_weapon := clampi(int(state.get("weapon", int(current_weapon))), 0, Weapon.size() - 1) as Weapon
 	if next_weapon != current_weapon:
 		current_weapon = next_weapon
 		_update_weapon_models()
 	var net_slots: Variant = state.get("weapon_slots")
-	if net_slots is Dictionary and int((net_slots as Dictionary).get("revision", -1)) != slots_revision:
-		weapon_slots.from_dict(net_slots)
-		slots_revision = int((net_slots as Dictionary).get("revision", slots_revision))
-		_update_weapon_models()
+	if not (net_slots is Dictionary):
+		return
+	if int((net_slots as Dictionary).get("revision", -1)) == slots_revision:
+		return
+	weapon_slots.from_dict(net_slots)
+	slots_revision = int((net_slots as Dictionary).get("revision", slots_revision))
+	_update_weapon_models()
+
+
+## Relogios de animacao: ficam com o MAIOR valor para o gesto nao ser cortado
+## por um snapshot que chegou no meio dele.
+func _apply_network_clocks(state: Dictionary) -> void:
 	pistol_stance_time = maxf(float(state.get("pistol_stance", 0.0)), pistol_stance_time)
 	pistol_recoil_time = maxf(float(state.get("pistol_recoil", 0.0)), pistol_recoil_time)
 	knife_attack_time = maxf(float(state.get("knife_attack", 0.0)), knife_attack_time)
 	muzzle_flash_time = maxf(float(state.get("muzzle_flash", 0.0)), muzzle_flash_time)
 	hit_reaction_time = maxf(float(state.get("hit_reaction", 0.0)), hit_reaction_time)
 	hit_direction.x = float(state.get("hit_dir_x", hit_direction.x))
-	lives = clampi(int(state.get("lives", lives)), 0, MAX_LIVES)
-	zombie_kills = maxi(zombie_kills, int(state.get("zombie_kills", zombie_kills)))
+
+
+## Caiu ou levantou: so age na TRANSICAO, senao o modelo seria deitado de novo
+## a cada snapshot.
+func _apply_network_downed(state: Dictionary) -> void:
 	var next_downed := bool(state.get("downed", is_downed))
-	if next_downed != is_downed:
-		if next_downed:
-			is_downed = true
-			visible = true
-			collision_layer = 2
-			collision_mask = 0
-			if model != null:
-				model.rotation.x = deg_to_rad(-86.0)
-		else:
-			_clear_downed()
-	revive_progress = clampf(float(state.get("revive_progress", revive_progress)), 0.0, 1.0)
+	if next_downed == is_downed:
+		return
+	if not next_downed:
+		_clear_downed()
+		return
+	is_downed = true
+	visible = true
+	collision_layer = 2
+	collision_mask = 0
+	if model != null:
+		model.rotation.x = deg_to_rad(-86.0)
+
+
+## Itens arremessaveis, placar do mata-mata e a eliminacao (tambem so na
+## transicao, que e quando o colisor e a visibilidade mudam).
+func _apply_network_extras(state: Dictionary) -> void:
 	var equipment_counts: Variant = state.get("equipment")
 	if equipment_counts is PackedByteArray:
 		equipment.apply_counts(equipment_counts)
@@ -433,11 +615,12 @@ func apply_network_state(state: Dictionary) -> void:
 		pvp_deaths = maxi(pvp_deaths, int(state.get("pvp_deaths", pvp_deaths)))
 		pvp_buy_left = float(state.get("pvp_buy_left", pvp_buy_left))
 	var next_eliminated := bool(state.get("eliminated", is_eliminated))
-	if next_eliminated != is_eliminated:
-		is_eliminated = next_eliminated
-		visible = not is_eliminated
-		collision_layer = 0 if is_eliminated else 1
-		collision_mask = 0 if is_eliminated else 1
+	if next_eliminated == is_eliminated:
+		return
+	is_eliminated = next_eliminated
+	visible = not is_eliminated
+	collision_layer = 0 if is_eliminated else 1
+	collision_mask = 0 if is_eliminated else 1
 
 
 func _handle_weapon_input() -> void:
@@ -448,6 +631,7 @@ func _handle_weapon_input() -> void:
 		_reload_pistol()
 	elif reload_pressed and WeaponStats.is_crate_weapon(current_weapon):
 		weapon_slots.reload(current_weapon)
+		reload_anim_time = RELOAD_ANIM_SECONDS
 	# Armas automaticas (Uzi) atiram segurando; as outras sao por aperto.
 	var wants_to_attack := attack_pressed
 	if bool(WeaponStats.stats_for(current_weapon).get("is_auto", false)):
@@ -503,6 +687,7 @@ func _fire_crate_weapon() -> void:
 		return
 	if int(state["mag"]) <= 0:
 		weapon_slots.reload(current_weapon)
+		reload_anim_time = RELOAD_ANIM_SECONDS
 		return
 	if weapon_slots.is_degraded(current_weapon) and crate_weapon_rng.randf() < float(WeaponStats.stats_for(current_weapon)["jam_chance"]):
 		# Falha de mecanismo: gasta cooldown, nao gasta bala nem durabilidade.
@@ -523,10 +708,11 @@ func _fire_pellets(weapon_kind: int) -> void:
 	var stats := WeaponStats.stats_for(weapon_kind)
 	var pellet_count := int(stats["pellets"])
 	var spread_deg := float(stats["degraded_spread_deg"] if weapon_slots.is_degraded(weapon_kind) else stats["spread_deg"])
-	var base_direction := Vector3(aim_input.x, 0.0, aim_input.y).normalized()
+	var base_direction := aim_direction
 	if base_direction.is_zero_approx():
 		base_direction = -global_transform.basis.z
-	var origin := global_position + Vector3.UP * 0.55
+	var origin := _muzzle_origin()
+	var shot_exclude := _shot_exclude_rids()
 	if stats.has("cone_range"):
 		_fire_cone_weapon(weapon_kind, stats, origin, base_direction)
 		return
@@ -537,10 +723,10 @@ func _fire_pellets(weapon_kind: int) -> void:
 		var pellet_direction := base_direction.rotated(Vector3.UP, angle_offset)
 		# Hitscan: 1 ray por pellet, dano na hora; sem node por pellet.
 		if stats.has("explosive_radius"):
-			var impact := Bullet.explosive_shot(origin + pellet_direction * 0.12, pellet_direction, int(stats["damage"]), self, float(stats["explosive_radius"]))
+			var impact := Bullet.explosive_shot(origin + pellet_direction * 0.12, pellet_direction, int(stats["damage"]), self, float(stats["explosive_radius"]), shot_exclude)
 			get_tree().current_scene.call("show_explosion", impact, float(stats["explosive_radius"]))
 		else:
-			Bullet.hitscan_damage(origin + pellet_direction * 0.12, pellet_direction, int(stats["damage"]), self, int(stats.get("pierce", 1)))
+			Bullet.hitscan_damage(origin + pellet_direction * 0.12, pellet_direction, int(stats["damage"]), self, int(stats.get("pierce", 1)), shot_exclude)
 		if NetworkSession.is_offline():
 			_spawn_pellet_visual(origin + pellet_direction * 0.12, pellet_direction, pellet_index, pellet_count, weapon_kind)
 	ZombieFlockCoordinator.relay_sound(get_tree(), origin, float(stats["noise_radius"]))
@@ -569,6 +755,7 @@ func _spawn_pellet_visual(origin: Vector3, direction: Vector3, pellet_index: int
 	bullet.scale = PELLET_VISUAL_SCALE
 	bullet.global_position = origin + _pellet_side_offset(direction, pellet_index, pellet_count)
 	bullet.setup(direction, 0, false)
+	_ignore_occupied_vehicle(bullet)
 	Bullet.style_tracer(bullet, weapon_kind)
 	bullet.add_to_group("network_bullet_visuals")
 
@@ -740,6 +927,22 @@ func _is_interact_held() -> bool:
 func _handle_interaction_input() -> void:
 	if not interact_pressed:
 		return
+	# Dirigindo ou de carona: o mesmo E desce (quem limpa o estado e o carro).
+	if is_driving():
+		driving_car.call("exit_car")
+		return
+	if is_riding():
+		riding_car.call("exit_gunner")
+		return
+	# Carro com assento livre por perto vence a porta: entrar e a acao mais obvia.
+	# Motorista primeiro; se o banco do motorista ja tem dono, vai de atirador.
+	var car := _find_nearest_drivable_car()
+	if car != null:
+		if not bool(car.call("is_occupied")):
+			car.call("enter", self)
+		else:
+			car.call("enter_gunner", self)
+		return
 	# Coleta por interacao tem prioridade: crates airdrop e armas dropadas
 	# proximas sao pegue pelo tecla E, sem depender de raycast de porta.
 	var ground_weapon := _find_nearest_ground_weapon()
@@ -783,16 +986,273 @@ func _find_nearest_ground_weapon() -> Node:
 	return best
 
 
+## Carro dirigivel com assento livre mais proximo dentro do raio de interacao
+## (motorista ou atirador). Carro destruido e ignorado.
+## Uso: var carro := player._find_nearest_drivable_car()
+func _find_nearest_drivable_car() -> Node:
+	var best: Node = null
+	var best_distance := VEHICLE_INTERACT_RADIUS
+	for node in get_tree().get_nodes_in_group("drivable_cars"):
+		var car := node as Node3D
+		if car == null or not is_instance_valid(car) or bool(car.get("is_destroyed")):
+			continue
+		var driver_free := not bool(car.call("is_occupied"))
+		var gunner_free := car.has_method("is_gunner_occupied") and not bool(car.call("is_gunner_occupied"))
+		if not driver_free and not gunner_free:
+			continue
+		var distance := Vector2(global_position.x - car.global_position.x, global_position.z - car.global_position.z).length()
+		if distance < best_distance:
+			best_distance = distance
+			best = car
+	return best
+
+
+## true enquanto este jogador esta dentro de um carro.
+## Uso: if player.is_driving(): return
+func is_driving() -> bool:
+	return driving_car != null and is_instance_valid(driving_car)
+
+
+## Linha de HUD do veiculo (vida/gasolina) quando dirigindo ou de carona; vazia
+## a pe. Uso: split_screen_manager._update_hud_text
+func get_vehicle_hud_text() -> String:
+	var car: Node = null
+	if is_driving():
+		car = driving_car
+	elif is_riding():
+		car = riding_car
+	if car != null and car.has_method("get_car_hud_text"):
+		return String(car.call("get_car_hud_text"))
+	return ""
+
+
+## Chamado pelo carro: senta o boneco (visivel) no assento e tira a colisao do
+## caminho do chassi. A pose fica estatica porque o PlayerAnimator nao roda
+## enquanto dirige.
+## Uso: interno de DrivableCar.enter
+func enter_vehicle(car) -> void:
+	if is_driving() or car == null:
+		return
+	driving_car = car
+	velocity = Vector3.ZERO
+	drive_look_yaw = 0.0
+	_apply_seated_pose(true)
+	collision_shape.set_deferred("disabled", true)
+	_sync_to_vehicle()
+
+
+## Chamado pelo carro: levanta o boneco, devolve a pose de pe e reativa a
+## colisao. Uso: interno de DrivableCar.exit_car
+func exit_vehicle() -> void:
+	if not is_driving():
+		return
+	var car := driving_car
+	driving_car = null
+	_apply_seated_pose(false)
+	collision_shape.set_deferred("disabled", false)
+	if is_instance_valid(car):
+		# Desce em pe: zera o pitch/roll herdado do assento, senao o boneco
+		# continuaria inclinado junto com o carro.
+		var exit_position: Vector3 = car.call("exit_position")
+		global_transform = Transform3D(Basis.from_euler(Vector3(0.0, car.global_rotation.y, 0.0)), exit_position)
+
+
+## Pose sentada simples: pernas dobradas para a frente e bracos a frente, como
+## quem segura o volante. Em `false` volta a pose de pe (o animador reassume).
+## Uso: interno de enter/exit_vehicle
+func _apply_seated_pose(seated: bool) -> void:
+	var leg_angle := SEATED_LEG_ANGLE if seated else 0.0
+	var arm_angle := SEATED_ARM_ANGLE if seated else 0.0
+	var inward := SEATED_ARM_INWARD if seated else 0.0
+	for limb in [left_leg, right_leg]:
+		if limb != null:
+			limb.rotation = Vector3(leg_angle, 0.0, 0.0)
+	if left_arm != null:
+		left_arm.rotation = Vector3(arm_angle, 0.0, inward)
+	if right_arm != null:
+		right_arm.rotation = Vector3(arm_angle, 0.0, -inward)
+
+
+## As maos seguem o volante: gira os bracos no eixo do aro conforme o esterco do
+## carro. Uso: interno de _sync_to_vehicle
+func _apply_steering_pose(steering: float) -> void:
+	var swing := steering * STEERING_ARM_SWING
+	if left_arm != null:
+		left_arm.rotation.z = SEATED_ARM_INWARD + swing
+	if right_arm != null:
+		right_arm.rotation.z = -SEATED_ARM_INWARD + swing
+
+
+## Mantem o boneco preso ao assento enquanto dirige. Copia o transform inteiro
+## (e nao so posicao/yaw) para o quadril acompanhar a suspensao: em lombada o
+## boneco sobe junto com o carro em vez de flutuar solto. A camera isometrica que
+## segue o player passa a seguir o carro.
+## Uso: interno de _physics_process
+func _sync_to_vehicle() -> void:
+	var seat_xf: Variant = driving_car.call("seat_transform")
+	if seat_xf is Transform3D:
+		global_transform = seat_xf
+	else:
+		global_position = driving_car.call("seat_position")
+		rotation.y = driving_car.global_rotation.y
+	velocity = Vector3.ZERO
+	var steer_value: Variant = driving_car.get("steering")
+	if steer_value is float:
+		_apply_steering_pose(steer_value)
+
+
+## true enquanto este jogador vai de passageiro (assento traseiro do atirador).
+## Uso: if player.is_riding(): return
+func is_riding() -> bool:
+	return riding_car != null and is_instance_valid(riding_car)
+
+
+## Chamado pelo carro: sobe o boneco no assento traseiro em PE (sem pose sentada),
+## visivel e sem colisao, atirando como a pe. Uso: interno de DrivableCar.enter_gunner
+func enter_vehicle_as_gunner(car) -> void:
+	if is_driving() or is_riding() or car == null:
+		return
+	riding_car = car
+	velocity = Vector3.ZERO
+	# Em pe: o atirador atira como a pe (pose normal, sem dobrar as pernas).
+	_apply_seated_pose(false)
+	collision_shape.set_deferred("disabled", true)
+	_sync_to_gunner_seat()
+
+
+## Chamado pelo carro: levanta o passageiro e devolve a pose de pe.
+## Uso: interno de DrivableCar.exit_gunner
+func exit_gunner_seat() -> void:
+	if not is_riding():
+		return
+	var car := riding_car
+	riding_car = null
+	_apply_seated_pose(false)
+	collision_shape.set_deferred("disabled", false)
+	if is_instance_valid(car):
+		var exit_position: Vector3 = car.call("exit_position")
+		global_transform = Transform3D(Basis.from_euler(Vector3(0.0, car.global_rotation.y, 0.0)), exit_position)
+
+
+## Mantem o passageiro preso ao assento traseiro, mas com o corpo livre para
+## girar na mira (o atirador varre 360 graus). Uso: interno de _physics_process
+func _sync_to_gunner_seat() -> void:
+	var seat_xf: Variant = riding_car.call("gunner_seat_transform")
+	if seat_xf is Transform3D:
+		var seat: Transform3D = seat_xf
+		global_position = seat.origin
+	velocity = Vector3.ZERO
+	rotation.y = _gunner_facing_yaw()
+
+
+## Yaw do atirador: segue o olhar no FPS, a mira horizontal no resto e, sem mira,
+## fica virado para a frente do carro. Uso: _sync_to_gunner_seat
+func _gunner_facing_yaw() -> float:
+	if first_person:
+		return camera_yaw
+	if not aim_input.is_zero_approx():
+		return atan2(-aim_input.x, -aim_input.y)
+	if is_riding():
+		return riding_car.global_rotation.y
+	return rotation.y
+
+
+## Descer do carro com o mesmo "interagir" (E). O tick normal retorna cedo
+## enquanto dirige/anda de carona, entao o input de saida e lido aqui.
+## Uso: interno de _physics_process
+func _handle_vehicle_exit() -> void:
+	# Entrar/sair e autoridade do servidor: no cliente o `interact` vai no pacote
+	# de input e o carro so aparece ocupado pelo snapshot. Sair localmente aqui
+	# brigaria com o servidor (o snapshot re-prenderia o jogador).
+	if not simulation_enabled:
+		return
+	# O host le o Input na hora; o avatar remoto usa o `interact` que veio da
+	# rede (antes o `reads_local_input` barrava o cliente e ele ficava preso).
+	var wants_exit := interact_pressed
+	if reads_local_input:
+		wants_exit = Input.is_action_just_pressed(input_action_prefix + "interact")
+	if not wants_exit:
+		return
+	if is_driving():
+		driving_car.call("exit_car")
+	elif is_riding():
+		riding_car.call("exit_gunner")
+
+
+## Entrada de direcao do carro. Raw (sem girar pela camera): o volante nao pode
+## depender do olhar. `steer` vai negado porque no Godot `steering` positivo
+## vira a esquerda, e o jogador espera D = direita. Uso: DrivableCar.driver_input()
+## Comando cru do carro (steer/throttle/brake) do motorista. No host local vem do
+## Input; para avatares remotos vem no pacote de input, porque o servidor nao tem
+## Input local deles. Uso: DrivableCar.driver_input()
+var vehicle_input := {"steer": 0.0, "throttle": 0.0, "brake": true}
+
+
+## Comando do carro para a autoridade: local le o Input na hora; remoto usa o que
+## chegou pela rede. Uso: DrivableCar.driver_input()
+func get_vehicle_input() -> Dictionary:
+	if reads_local_input:
+		return _read_vehicle_input()
+	return vehicle_input
+
+
+## Comando cru do carro lido do Input local (sem girar pela camera). `steer` vai
+## negado porque no Godot `steering` positivo vira a esquerda, e o jogador espera
+## D = direita. Uso: get_vehicle_input e get_local_input_state.
+func _read_vehicle_input() -> Dictionary:
+	var raw := Input.get_vector(
+		input_action_prefix + "left",
+		input_action_prefix + "right",
+		input_action_prefix + "up",
+		input_action_prefix + "down"
+	)
+	return {
+		"steer": -raw.x,
+		"throttle": -raw.y,
+		"brake": Input.is_action_pressed(input_action_prefix + "jump"),
+	}
+
+
+## Normaliza o comando do carro vindo da rede (o cliente pode mandar qualquer
+## coisa). Uso: apply_network_input
+func _sanitize_vehicle_input(raw: Dictionary) -> Dictionary:
+	return {
+		"steer": clampf(float(raw.get("steer", 0.0)), -1.0, 1.0),
+		"throttle": clampf(float(raw.get("throttle", 0.0)), -1.0, 1.0),
+		"brake": bool(raw.get("brake", false)),
+	}
+
+
+## Origem do disparo. A pe e o peito; dentro do carro e a ancora dos olhos (acima
+## do chassi), senao a bala nasce dentro do colisor do proprio carro e o acerta.
+## Uso: interno de _fire_pistol e _fire_pellets
+func _shot_origin() -> Vector3:
+	if is_driving() and driving_car.has_method("driver_eye_transform"):
+		var driver_eye: Transform3D = driving_car.call("driver_eye_transform")
+		return driver_eye.origin
+	return global_position + Vector3.UP * 0.55
+
+
 func _attack_with_knife() -> void:
 	attack_cooldown = 0.45
 	knife_attack_time = KNIFE_ATTACK_DURATION
+	var forward := _knife_forward()
 	var target := _find_knife_target()
 	if target != null and target.has_method("take_damage"):
-		target.take_damage(knife_damage, -global_transform.basis.z, "knife", self)
+		target.take_damage(knife_damage, forward, "knife", self)
 		return
 	var door := _find_knife_door()
 	if door != null:
-		door.take_damage(knife_damage, -global_transform.basis.z, "knife", self)
+		door.take_damage(knife_damage, forward, "knife", self)
+
+
+## Direcao horizontal da facada: segue a mira (cursor/reticulo) quando existe,
+## senao a frente do corpo. Antes usava so o corpo, que fica atras do cursor com
+## o modo de mira novo. Uso: _attack_with_knife/_find_knife_target/_find_knife_door
+func _knife_forward() -> Vector3:
+	if not aim_input.is_zero_approx():
+		return Vector3(aim_input.x, 0.0, aim_input.y)
+	return -global_transform.basis.z
 
 
 ## Porta inteira logo a frente, ao alcance da faca. Bater repetidamente
@@ -800,7 +1260,7 @@ func _attack_with_knife() -> void:
 ## Uso: var door := _find_knife_door()
 func _find_knife_door() -> Node:
 	var ray_start := global_position + Vector3.UP * 0.2
-	var ray_end := ray_start - global_transform.basis.z * KNIFE_DOOR_REACH
+	var ray_end := ray_start + _knife_forward() * KNIFE_DOOR_REACH
 	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	var collider: Node = hit.get("collider")
@@ -814,7 +1274,7 @@ func _find_knife_door() -> Node:
 func _find_knife_target() -> Node3D:
 	var best_target: Node3D = null
 	var best_distance := 1.7
-	var forward := -global_transform.basis.z
+	var forward := _knife_forward()
 	# No maximo 4 rays por facada: cercado, os 4 mais proximos bastam.
 	# Varre os grupos direto (sem montar array de 600 alvos por facada).
 	var rays_used := 0
@@ -853,15 +1313,17 @@ func _fire_pistol() -> Node3D:
 	gunshot_noise_time = 0.6
 	pistol_stance_time = 8.0
 	pistol_recoil_time = 0.12
-	# Nasce dentro do colisor para uma arma atravessando a parede nao disparar do lado de fora.
-	var origin := global_position + Vector3.UP * 0.55
-	var bullet_direction := Vector3(aim_input.x, 0.0, aim_input.y).normalized()
+	# Sai da boca do cano (a bala nasce na arma); o carro do atirador entra no
+	# ignore para o cano dentro do chassi nao acertar o proprio veiculo.
+	var origin := _muzzle_origin()
+	var bullet_direction := aim_direction
 	if bullet_direction.is_zero_approx():
 		bullet_direction = -global_transform.basis.z
 	var bullet := BULLET_SCENE.instantiate() as Node3D
 	get_tree().current_scene.add_child(bullet)
 	bullet.global_position = origin + bullet_direction * 0.12
 	bullet.setup(bullet_direction, pistol_damage, true, self)
+	_ignore_occupied_vehicle(bullet)
 	ZombieFlockCoordinator.relay_sound(get_tree(), origin, 65.0)
 	if NetworkSession.is_offline():
 		AudioFeedback.play_gunshot(origin)
@@ -871,6 +1333,7 @@ func _fire_pistol() -> Node3D:
 
 
 func _reload_pistol() -> void:
+	reload_anim_time = RELOAD_ANIM_SECONDS
 	var bullets_needed := 12 - pistol_ammo
 	var bullets_loaded := mini(bullets_needed, reserve_ammo)
 	pistol_ammo += bullets_loaded
@@ -929,7 +1392,7 @@ func can_pickup_health() -> bool:
 ## Aplica dano ao jogador, acionando flinch de impacto e empurrao fisico.
 ## Uso:
 ##   player.take_damage(25, Vector3.FORWARD, "bullet")
-func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", source: Node = null) -> void:
+func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", source: Node = null, _hit_position: Vector3 = Vector3.INF) -> void:
 	if is_swat_bot:
 		# Soldado do esquadrao e suporte, nao baixa: nada machuca ele.
 		return
@@ -1250,7 +1713,8 @@ func _update_stamina(delta: float, wants_to_sprint: bool) -> void:
 
 func _poll_input() -> void:
 	move_input = _aim_relative_move(Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down"))
-	aim_input = _local_aim_input()
+	aim_direction = _local_aim_direction()
+	aim_input = _horizontal_from_direction(aim_direction)
 	jump_pressed = Input.is_action_just_pressed(input_action_prefix + "jump")
 	sprint_pressed = Input.is_action_pressed(input_action_prefix + "sprint")
 	attack_pressed = Input.is_action_just_pressed(input_action_prefix + "attack")
@@ -1318,6 +1782,46 @@ func _clear_transient_input() -> void:
 	swat_pressed = false
 
 
+## Tuner de pose das armas (dev, --armas-lab). Uso: I/K Y, J/L X, U/O Z,
+## setas rot X/Y, virgula/ponto rot Z, P imprime o JSON, 0 reseta a arma atual.
+func _unhandled_input(event: InputEvent) -> void:
+	if not hold_tuner_enabled or not is_local_controller or local_slot != 0:
+		return
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var step := 0.05
+	var rot_step := deg_to_rad(7.5)
+	var hold: Dictionary = weapon_holds.get(current_weapon, {"pos": Vector3.ZERO, "rot": Vector3.ZERO})
+	var pos: Vector3 = hold["pos"]
+	var rot: Vector3 = hold["rot"]
+	match (event as InputEventKey).keycode:
+		KEY_I: pos.y += step
+		KEY_K: pos.y -= step
+		KEY_J: pos.x -= step
+		KEY_L: pos.x += step
+		KEY_U: pos.z -= step
+		KEY_O: pos.z += step
+		KEY_RIGHT: rot.y += rot_step
+		KEY_LEFT: rot.y -= rot_step
+		KEY_UP: rot.x -= rot_step
+		KEY_DOWN: rot.x += rot_step
+		KEY_COMMA: rot.z -= rot_step
+		KEY_PERIOD: rot.z += rot_step
+		KEY_P:
+			print(JSON.stringify({"event": "weapon_hold", "kind": current_weapon, "pos": [snappedf(pos.x, 0.001), snappedf(pos.y, 0.001), snappedf(pos.z, 0.001)], "rot_deg": [snappedf(rad_to_deg(rot.x), 0.1), snappedf(rad_to_deg(rot.y), 0.1), snappedf(rad_to_deg(rot.z), 0.1)]}))
+			get_viewport().set_input_as_handled()
+			return
+		KEY_0:
+			weapon_holds.erase(current_weapon)
+			print(JSON.stringify({"event": "weapon_hold_reset", "kind": current_weapon}))
+			get_viewport().set_input_as_handled()
+			return
+		_:
+			return
+	weapon_holds[current_weapon] = {"pos": pos, "rot": rot}
+	get_viewport().set_input_as_handled()
+
+
 ## Look do FPS: o movimento do mouse gira o corpo (yaw) e inclina a camera
 ## (pitch). So o dono do cursor aplica, para nao girar todos os jogadores juntos.
 func _input(event: InputEvent) -> void:
@@ -1327,19 +1831,127 @@ func _input(event: InputEvent) -> void:
 		return
 	if event is InputEventMouseMotion:
 		var motion := event as InputEventMouseMotion
-		camera_yaw = wrapf(camera_yaw - motion.relative.x * AIM_SENSITIVITY, -PI, PI)
+		if is_driving():
+			# Na direcao em primeira pessoa a cabeca gira em relacao ao carro.
+			drive_look_yaw = clampf(drive_look_yaw - motion.relative.x * AIM_SENSITIVITY, -DRIVE_LOOK_YAW_LIMIT, DRIVE_LOOK_YAW_LIMIT)
+		else:
+			camera_yaw = wrapf(camera_yaw - motion.relative.x * AIM_SENSITIVITY, -PI, PI)
 		view_pitch = clampf(view_pitch - motion.relative.y * AIM_SENSITIVITY, -AIM_PITCH_LIMIT, AIM_PITCH_LIMIT)
 
 
-## Direcao de mira local (XZ no mundo). O FPS usa o yaw do mouse; a isometrica
-## projeta o cursor no chao. Sem mira o corpo volta a virar para o movimento.
-## Uso: chamado por _poll_input e por get_local_input_state.
+## Direcao de mira local no plano XZ (compatibilidade: corpo, granada, rede
+## "aim"). Derivada da mira 3D. Uso: get_local_input_state e testes.
 func _local_aim_input() -> Vector2:
+	return _horizontal_from_direction(_local_aim_direction())
+
+
+## Direcao de mira 3D no mundo. FPS: do cano ate o ponto do retículo (centro da
+## tela), entao a bala sai da arma e converge no que a cruz aponta. 3a pessoa:
+## do cano ao ponto sob o cursor (raycast, estilo Foxhole). Sem mira: horizontal
+## do aim_input/analogico. Uso: _poll_input e os disparos.
+func _local_aim_direction() -> Vector3:
+	var muzzle := _muzzle_origin()
+	var point: Variant = _local_aim_target()
+	if point is Vector3:
+		var to_point: Vector3 = (point as Vector3) - muzzle
+		if to_point.length_squared() > 0.0001:
+			return to_point.normalized()
 	if first_person:
-		return Vector2(-sin(camera_yaw), -cos(camera_yaw))
+		return _fps_forward()
+	if not aim_input.is_zero_approx():
+		return Vector3(aim_input.x, 0.0, aim_input.y).normalized()
+	return -global_transform.basis.z
+
+
+## Ponto do mundo que a mira aponta (retículo no FPS, cursor na 3a pessoa), ou
+## null quando nao ha mira. Vai no pacote de input como "aim_point": o servidor
+## converge do cano DELE ate esse ponto, senao o cano do cliente (outro) mandava
+## a direcao e a bala desviava do retículo. Uso: _local_aim_direction e pacote.
+func _local_aim_target() -> Variant:
+	if first_person:
+		if aim_camera != null and is_instance_valid(aim_camera):
+			return _fps_target_point(_fps_forward())
+		return null
 	if GameConfig.mouse_aim_enabled and mouse_aim and mouse_owner:
-		return _mouse_ground_direction()
-	return Vector2.ZERO
+		return _mouse_world_point()
+	return null
+
+
+## Frente da camera em FPS (com pitch). Sem camera (testes) cai na pose.
+## Uso: _local_aim_direction.
+func _fps_forward() -> Vector3:
+	if aim_camera != null and is_instance_valid(aim_camera):
+		return -aim_camera.global_transform.basis.z
+	return Basis.from_euler(Vector3(view_pitch, camera_yaw, 0.0)) * Vector3(0.0, 0.0, -1.0)
+
+
+## Ponto que o retículo (centro da tela) aponta: raycast da camera pela cruz. Sem
+## acerto, um ponto distante na frente. A bala sai do cano rumo a ESTE ponto, por
+## isso acerta exatamente a cruz mesmo a poucos metros (nao so a 80 m).
+## Uso: _local_aim_direction.
+func _fps_target_point(forward: Vector3) -> Vector3:
+	if aim_viewport == null or not is_instance_valid(aim_viewport):
+		return aim_camera.global_position + forward * MOUSE_AIM_RANGE
+	var viewport_size := Vector2(aim_viewport.size)
+	if viewport_size.x < 1.0 or viewport_size.y < 1.0:
+		return aim_camera.global_position + forward * MOUSE_AIM_RANGE
+	var center := viewport_size * 0.5
+	var from := aim_camera.project_ray_origin(center)
+	var to := from + aim_camera.project_ray_normal(center) * MOUSE_AIM_RANGE
+	var exclude: Array[RID] = [get_rid()]
+	var vehicle := _occupied_vehicle()
+	if vehicle is CollisionObject3D:
+		exclude.append((vehicle as CollisionObject3D).get_rid())
+	var query := PhysicsRayQueryParameters3D.create(from, to, Bullet.BULLET_MASK, exclude)
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if hit.is_empty():
+		return to
+	return hit.get("position", to)
+
+
+## Boca do cano da arma ativa: a bala sai da arma, nao do torso. Cai para a
+## origem antiga (olho/peito) quando a arma nao tem cano (faca/melee).
+## Uso: disparos e _local_aim_direction.
+func _muzzle_origin() -> Vector3:
+	var muzzle := _active_muzzle_node()
+	if muzzle != null and is_instance_valid(muzzle):
+		return muzzle.global_position
+	return _shot_origin()
+
+
+## No do muzzle da arma equipada: pistola usa `MuzzleFlash`; armas de crate usam
+## o `Flash` do modelo. Faca/melee nao tem cano (null). Uso: _muzzle_origin.
+func _active_muzzle_node() -> Node3D:
+	if current_weapon == Weapon.PISTOL:
+		return muzzle_flash
+	var crate_model := crate_weapon_models.get(current_weapon) as Node3D
+	if crate_model != null:
+		return crate_model.get_node_or_null("Flash") as Node3D
+	return null
+
+
+## Faz o projetil ignorar o carro em que o atirador esta (o cano fica dentro do
+## chassi). Uso: interno dos disparos.
+func _ignore_occupied_vehicle(bullet: Node3D) -> void:
+	var vehicle := _occupied_vehicle()
+	if vehicle is CollisionObject3D and bullet is Bullet:
+		(bullet as Bullet).ignore_collider(vehicle as CollisionObject3D)
+
+
+## RIDs a ignorar nos tiros hitscan/explosivos (o carro do atirador). Uso:
+## interno dos disparos.
+func _shot_exclude_rids() -> Array[RID]:
+	var vehicle := _occupied_vehicle()
+	if vehicle is CollisionObject3D:
+		return [(vehicle as CollisionObject3D).get_rid()]
+	return []
+
+
+## Achata uma direcao 3D para a horizontal (XZ) unitaria; zero se for vertical.
+## Uso: interno da mira.
+func _horizontal_from_direction(direction: Vector3) -> Vector2:
+	var flat := Vector2(direction.x, direction.z)
+	return flat.normalized() if not flat.is_zero_approx() else Vector2.ZERO
 
 
 ## No FPS o WASD vira relativo ao olhar (W = frente da camera); na isometrica o
@@ -1350,22 +1962,36 @@ func _aim_relative_move(raw: Vector2) -> Vector2:
 	return raw.rotated(-camera_yaw)
 
 
-## Projeta o cursor do viewport do jogador no plano do chao e devolve a direcao
-## (XZ) do boneco ate o ponto. Uso: interno da mira.
-func _mouse_ground_direction() -> Vector2:
+## Ponto do mundo sob o cursor do jogador. Raycast da camera pelo cursor com a
+## mesma mascara das balas; exclui o proprio corpo e o carro em que esta. Sem
+## acerto cai no plano do chao. Uso: interno da mira em 3a pessoa.
+func _mouse_world_point() -> Variant:
 	if aim_camera == null or not is_instance_valid(aim_camera) or aim_viewport == null or not is_instance_valid(aim_viewport):
-		return Vector2.ZERO
+		return null
 	var screen_point := aim_viewport.get_mouse_position()
-	var ray_origin := aim_camera.project_ray_origin(screen_point)
+	var from := aim_camera.project_ray_origin(screen_point)
 	var ray_direction := aim_camera.project_ray_normal(screen_point)
+	var to := from + ray_direction * MOUSE_AIM_RANGE
+	var exclude: Array[RID] = [get_rid()]
+	var vehicle := _occupied_vehicle()
+	if vehicle != null and vehicle is CollisionObject3D:
+		exclude.append((vehicle as CollisionObject3D).get_rid())
+	var query := PhysicsRayQueryParameters3D.create(from, to, Bullet.BULLET_MASK, exclude)
+	var hit := get_world_3d().direct_space_state.intersect_ray(query)
+	if not hit.is_empty():
+		return hit.get("position", null)
 	var ground := Plane(Vector3.UP, global_position.y + 0.1)
-	var hit: Variant = ground.intersects_ray(ray_origin, ray_direction)
-	if hit == null:
-		return Vector2.ZERO
-	var offset := Vector2((hit as Vector3).x - global_position.x, (hit as Vector3).z - global_position.z)
-	if offset.length_squared() < 0.04:
-		return Vector2.ZERO
-	return offset.normalized()
+	return ground.intersects_ray(from, ray_direction)
+
+
+## Carro em que este jogador esta (dirigindo ou de carona), ou null.
+## Uso: interno da mira e da origem do tiro.
+func _occupied_vehicle() -> Node3D:
+	if is_driving():
+		return driving_car
+	if is_riding():
+		return riding_car
+	return null
 
 
 ## Alterna isometrica <-> primeira pessoa. Uso: tecla "view" e menu.
@@ -1380,6 +2006,7 @@ func set_first_person(enabled: bool) -> void:
 	first_person = enabled
 	if first_person:
 		camera_yaw = rotation.y
+		drive_look_yaw = 0.0
 		view_pitch = 0.0
 	first_person_changed.emit(first_person)
 	_apply_mouse_capture()

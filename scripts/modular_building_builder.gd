@@ -219,51 +219,100 @@ static func _create_staircase(body: StaticBody3D, floor_idx: int, w: int, _d: in
 	body.add_child(rail_inst)
 
 
+## Um andar a montar: a grade ja resolvida em metros mais o estilo, os
+## materiais e o RNG. Existe para as tres paredes nao repassarem nove
+## parametros entre si.
+class FloorBuild extends RefCounted:
+	var body: StaticBody3D
+	var y_pos: float
+	var width: int
+	var depth: int
+	var half_w: float
+	var half_d: float
+	var style: String
+	var door_x: int
+	var material: Material
+	var trim_material: Material
+	var rng: RandomNumberGenerator
+	## Andar terreo: a porta da frente e a entrada; nos de cima ela vira sacada.
+	var is_ground: bool
+
+	func piece_or_window(chance: float) -> String:
+		return "wall-%s-window.glb" % style if rng.randf() < chance else "wall-%s.glb" % style
+
+	func corner_piece() -> String:
+		return "wall-%s-corner.glb" % style
+
+	func open_piece() -> String:
+		return "wall-%s-open.glb" % style
+
+
 static func _assemble_floor(
 		body: StaticBody3D, floor_idx: int, w: int, d: int,
 		style: String, door_x: int, mat: Material, trim_mat: Material, rng: RandomNumberGenerator
 ) -> void:
-	var y_pos := float(floor_idx) * TILE_SCALE
-	var half_w := float(w - 1) * 0.5
-	var half_d := float(d - 1) * 0.5
+	var plan := FloorBuild.new()
+	plan.body = body
+	plan.y_pos = float(floor_idx) * TILE_SCALE
+	plan.width = w
+	plan.depth = d
+	plan.half_w = float(w - 1) * 0.5
+	plan.half_d = float(d - 1) * 0.5
+	plan.style = style
+	plan.door_x = door_x
+	plan.material = mat
+	plan.trim_material = trim_mat
+	plan.rng = rng
+	plan.is_ground = floor_idx == 0
+	# A ordem importa: o RNG e o mesmo da cidade inteira, entao trocar a ordem
+	# das paredes mudaria todos os predios gerados dali para a frente.
+	_build_front_facade(plan)
+	_build_back_wall(plan)
+	_build_side_walls(plan)
 
-	# Fachada frontal (Z = half_d, virada para +Z)
-	for gx in w:
-		var px := (float(gx) - half_w) * TILE_SCALE
-		var pz := half_d * TILE_SCALE
-		if gx == 0 or gx == w - 1:
+
+## Fachada da frente (Z = +half_d): cantos, a porta (entrada no terreo, sacada
+## nos andares de cima) e janelas no resto.
+static func _build_front_facade(plan: FloorBuild) -> void:
+	var pz := plan.half_d * TILE_SCALE
+	for gx in plan.width:
+		var px := (float(gx) - plan.half_w) * TILE_SCALE
+		var position := Vector3(px, plan.y_pos, pz)
+		if gx == 0 or gx == plan.width - 1:
 			var corner_rot := 0.0 if gx == 0 else -PI * 0.5
-			_add_piece(body, "wall-%s-corner.glb" % style, Vector3(px, y_pos, pz), corner_rot, mat, trim_mat)
-		elif floor_idx == 0 and gx == door_x:
-			_add_piece(body, "wall-%s-open.glb" % style, Vector3(px, y_pos, pz), 0.0, mat, trim_mat)
-		elif floor_idx > 0 and gx == door_x:
-			# Porta aberta para sacada no andar superior
-			_add_piece(body, "wall-%s-open.glb" % style, Vector3(px, y_pos, pz), 0.0, mat, trim_mat)
-			_add_piece(body, "balcony-type-a.glb", Vector3(px, y_pos, pz), 0.0)
-			_add_box_shape(body, Vector3(2.6, 0.12, 1.4), Vector3(px, y_pos - 0.06, pz + 0.8))
-			_add_box_shape(body, Vector3(2.6, 1.1, 0.1), Vector3(px, y_pos + 0.55, pz + 1.5))
-		else:
-			var piece := "wall-%s-window.glb" % style if rng.randf() < 0.65 else "wall-%s.glb" % style
-			_add_piece(body, piece, Vector3(px, y_pos, pz), 0.0, mat, trim_mat)
+			_add_piece(plan.body, plan.corner_piece(), position, corner_rot, plan.material, plan.trim_material)
+			continue
+		if gx != plan.door_x:
+			_add_piece(plan.body, plan.piece_or_window(0.65), position, 0.0, plan.material, plan.trim_material)
+			continue
+		_add_piece(plan.body, plan.open_piece(), position, 0.0, plan.material, plan.trim_material)
+		if plan.is_ground:
+			continue
+		# Porta aberta para sacada no andar superior
+		_add_piece(plan.body, "balcony-type-a.glb", position, 0.0)
+		_add_box_shape(plan.body, Vector3(2.6, 0.12, 1.4), Vector3(px, plan.y_pos - 0.06, pz + 0.8))
+		_add_box_shape(plan.body, Vector3(2.6, 1.1, 0.1), Vector3(px, plan.y_pos + 0.55, pz + 1.5))
 
-	# Parede traseira (Z = -half_d, virada para -Z)
-	for gx in w:
-		var px := (float(gx) - half_w) * TILE_SCALE
-		var pz := -half_d * TILE_SCALE
-		if gx == 0 or gx == w - 1:
+
+## Parede traseira (Z = -half_d, virada para -Z): cantos e janelas.
+static func _build_back_wall(plan: FloorBuild) -> void:
+	var pz := -plan.half_d * TILE_SCALE
+	for gx in plan.width:
+		var px := (float(gx) - plan.half_w) * TILE_SCALE
+		var position := Vector3(px, plan.y_pos, pz)
+		if gx == 0 or gx == plan.width - 1:
 			var corner_rot := PI * 0.5 if gx == 0 else PI
-			_add_piece(body, "wall-%s-corner.glb" % style, Vector3(px, y_pos, pz), corner_rot, mat, trim_mat)
-		else:
-			var piece := "wall-%s-window.glb" % style if rng.randf() < 0.5 else "wall-%s.glb" % style
-			_add_piece(body, piece, Vector3(px, y_pos, pz), PI, mat, trim_mat)
+			_add_piece(plan.body, plan.corner_piece(), position, corner_rot, plan.material, plan.trim_material)
+			continue
+		_add_piece(plan.body, plan.piece_or_window(0.5), position, PI, plan.material, plan.trim_material)
 
-	# Paredes laterais (X = -half_w e X = half_w)
-	for gz in range(1, d - 1):
-		var pz := (float(gz) - half_d) * TILE_SCALE
-		var piece_l := "wall-%s-window.glb" % style if rng.randf() < 0.5 else "wall-%s.glb" % style
-		_add_piece(body, piece_l, Vector3(-half_w * TILE_SCALE, y_pos, pz), PI * 0.5, mat, trim_mat)
-		var piece_r := "wall-%s-window.glb" % style if rng.randf() < 0.5 else "wall-%s.glb" % style
-		_add_piece(body, piece_r, Vector3(half_w * TILE_SCALE, y_pos, pz), -PI * 0.5, mat, trim_mat)
+
+## Paredes laterais (X = -half_w e X = +half_w), sem os cantos ja postos.
+static func _build_side_walls(plan: FloorBuild) -> void:
+	for gz in range(1, plan.depth - 1):
+		var pz := (float(gz) - plan.half_d) * TILE_SCALE
+		_add_piece(plan.body, plan.piece_or_window(0.5), Vector3(-plan.half_w * TILE_SCALE, plan.y_pos, pz), PI * 0.5, plan.material, plan.trim_material)
+		_add_piece(plan.body, plan.piece_or_window(0.5), Vector3(plan.half_w * TILE_SCALE, plan.y_pos, pz), -PI * 0.5, plan.material, plan.trim_material)
 
 
 static func _assemble_roof(
