@@ -60,3 +60,16 @@ static func glass(floor_height: float) -> ShaderMaterial:
 	material.set_shader_parameter("floor_height", floor_height)
 	material.set_shader_parameter("cutout_radius", AURA_CUTOUT_RADIUS)
 	return material
+
+
+## Vidro da vitrine de loja: translucido simples, SEM o shader de visibilidade
+## por andar — aquele tem `depth_draw_opaque` e `cull_disabled`, que numa caixa
+## fina de vitrine vira aureola. Uso:
+##   var glass := ProceduralBuildingMaterials.storefront_glass()
+static func storefront_glass() -> StandardMaterial3D:
+	var material := StandardMaterial3D.new()
+	material.albedo_color = Color(0.62, 0.78, 0.88, 0.34)
+	material.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	material.roughness = 0.1
+	material.metallic = 0.1
+	return material

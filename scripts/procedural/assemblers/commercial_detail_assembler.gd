@@ -19,6 +19,14 @@ const DECOMPRESSION_HALF_WIDTH := 2.2
 const CHECKOUT_Z := 2.4
 const CHECKOUT_HALF_WIDTH := 2.1
 const ATM_SIZE := Vector2(0.8, 0.62)
+## Vitrine: vao livre da porta, altura do vidro, plano da fachada e a faixa.
+const DOOR_CLEAR_HALF := 1.4
+const GLASS_BOTTOM := 0.5
+const GLASS_TOP := 2.35
+const STOREFRONT_Z := -0.16
+const FASCIA_Y := 3.05
+const FASCIA_HEIGHT := 0.6
+const CANOPY_Y := 2.4
 
 
 static func add_details(body: StaticBody3D, building) -> void:
@@ -86,13 +94,51 @@ static func _fixture_clear(building, layout: Dictionary, center: Vector2, size: 
 
 
 static func _add_front(body: StaticBody3D, building, accent: Color, entrance_x: float) -> void:
-	var material: Material = BUILDING_MATERIALS.opaque(accent, building.floor_height)
-	var sign_material: Material = BUILDING_MATERIALS.opaque(accent.lightened(0.2), building.floor_height)
 	var prefix := "Grocery" if building.archetype == "Grocery_A" else "GunShop" if building.archetype == "GunShop_A" else "Store"
-	var canopy_width := minf(6.0, building.width - 0.6)
-	var center_x := clampf(entrance_x, canopy_width * 0.5 + 0.3, building.width - canopy_width * 0.5 - 0.3)
-	BOX_BUILDER.add_box(body, "%sAwning" % prefix, Vector3(canopy_width, 0.22, 0.9), Vector3(center_x, 2.2, -0.38), material, false)
-	BOX_BUILDER.add_box(body, "%sSign" % prefix, Vector3(canopy_width * 0.72, 0.55, 0.08), Vector3(center_x, 2.52, -0.08), sign_material, false)
+	var glass: Material = BUILDING_MATERIALS.storefront_glass()
+	var frame_material: Material = BUILDING_MATERIALS.opaque(Color(0.13, 0.14, 0.15), building.floor_height, false, 0.45, 0.42)
+	var base_material: Material = BUILDING_MATERIALS.opaque(Color(0.19, 0.18, 0.17), building.floor_height, false, 0.2, 0.62)
+	var fascia_material: Material = BUILDING_MATERIALS.opaque(accent, building.floor_height, false, 0.05, 0.5)
+	var sign_material: Material = BUILDING_MATERIALS.opaque(accent.lightened(0.25), building.floor_height, false, 0.0, 0.35)
+	var canopy_material: Material = BUILDING_MATERIALS.opaque(accent.darkened(0.3), building.floor_height, false, 0.15, 0.55)
+
+	var storefront_width := minf(10.0, building.width - 0.8)
+	var center_x := clampf(entrance_x, storefront_width * 0.5 + 0.4, building.width - storefront_width * 0.5 - 0.4)
+	var left := center_x - storefront_width * 0.5
+	var right := center_x + storefront_width * 0.5
+	# A vitrine ladeia a porta: o vao central de DOOR_CLEAR_HALF fica livre.
+	_add_storefront_bay(body, "%sBayL" % prefix, glass, frame_material, base_material, left, center_x - DOOR_CLEAR_HALF)
+	_add_storefront_bay(body, "%sBayR" % prefix, glass, frame_material, base_material, center_x + DOOR_CLEAR_HALF, right)
+
+	# Faixa e letreiro acima da vitrine (cobrem a largura toda, inclusive a porta).
+	BOX_BUILDER.add_box(body, "%sFascia" % prefix, Vector3(storefront_width, FASCIA_HEIGHT, 0.18), Vector3(center_x, FASCIA_Y, -0.18), fascia_material, true)
+	BOX_BUILDER.add_box(body, "%sSign" % prefix, Vector3(storefront_width * 0.6, 0.32, 0.07), Vector3(center_x, FASCIA_Y, -0.29), sign_material, false)
+
+	# Marquise fina sobre a vitrine, com duas colunas nas pontas (nao flutua).
+	BOX_BUILDER.add_box(body, "%sAwning" % prefix, Vector3(storefront_width, 0.1, 0.8), Vector3(center_x, CANOPY_Y, -0.55), canopy_material, true)
+	for side in [-1.0, 1.0]:
+		var post_x: float = center_x + float(side) * (storefront_width * 0.5 - 0.18)
+		BOX_BUILDER.add_box(body, "%sPost%s" % [prefix, "L" if side < 0.0 else "R"], Vector3(0.09, CANOPY_Y, 0.09), Vector3(post_x, CANOPY_Y * 0.5, -0.9), frame_material, true)
+
+
+## Uma lateral da vitrine: base solida, vidro, peitoril, verga e montantes. O
+## vao da porta nao entra (as duas laterais param em DOOR_CLEAR_HALF). Uso:
+## interno de _add_front.
+static func _add_storefront_bay(body: StaticBody3D, prefix: String, glass: Material, frame: Material, base: Material, from_x: float, to_x: float) -> void:
+	var width := to_x - from_x
+	if width <= 0.5:
+		return
+	var center_x := (from_x + to_x) * 0.5
+	var height := GLASS_TOP - GLASS_BOTTOM
+	var center_y := (GLASS_TOP + GLASS_BOTTOM) * 0.5
+	BOX_BUILDER.add_box(body, "%sBase" % prefix, Vector3(width, GLASS_BOTTOM, 0.16), Vector3(center_x, GLASS_BOTTOM * 0.5, STOREFRONT_Z), base, true)
+	BOX_BUILDER.add_box(body, "%sGlass" % prefix, Vector3(width - 0.12, height - 0.16, 0.05), Vector3(center_x, center_y, STOREFRONT_Z), glass, false)
+	BOX_BUILDER.add_box(body, "%sSill" % prefix, Vector3(width, 0.08, 0.14), Vector3(center_x, GLASS_BOTTOM + 0.04, STOREFRONT_Z), frame, true)
+	BOX_BUILDER.add_box(body, "%sLintel" % prefix, Vector3(width, 0.08, 0.14), Vector3(center_x, GLASS_TOP - 0.04, STOREFRONT_Z), frame, true)
+	var mullions := maxi(int(round(width / 1.6)), 1)
+	for index in range(1, mullions):
+		var x := from_x + width * float(index) / float(mullions)
+		BOX_BUILDER.add_box(body, "%sMullion%d" % [prefix, index], Vector3(0.08, height, 0.14), Vector3(x, center_y, STOREFRONT_Z), frame, false)
 
 
 static func _add_atm(body: StaticBody3D, building, layout: Dictionary) -> void:
