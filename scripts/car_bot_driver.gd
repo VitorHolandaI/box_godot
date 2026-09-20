@@ -15,6 +15,9 @@ extends Node
 @export var waypoint_reach := 7.0
 ## Angulo (rad) em que o bot ja esterça o maximo; acima disso so freia.
 @export var full_steer_angle := 0.7
+## Centro da rota circular. No servidor o bot recebe a posicao inicial do carro,
+## para circular perto de onde ele nasceu em vez da origem do mundo.
+@export var route_center := Vector3.ZERO
 
 var car: VehicleBody3D = null
 var _waypoints: Array[Vector3] = []
@@ -27,7 +30,7 @@ func _ready() -> void:
 	var count := maxi(waypoint_count, 1)
 	for step in count:
 		var angle := TAU * float(step) / float(count)
-		_waypoints.append(Vector3(cos(angle) * waypoint_radius, 0.0, sin(angle) * waypoint_radius))
+		_waypoints.append(route_center + Vector3(cos(angle) * waypoint_radius, 0.0, sin(angle) * waypoint_radius))
 
 
 func _physics_process(_delta: float) -> void:

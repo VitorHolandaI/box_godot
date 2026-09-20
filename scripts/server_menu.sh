@@ -13,6 +13,7 @@
 #   scripts/server_menu.sh logs               # segue o log
 #   scripts/server_menu.sh status             # o que esta no ar
 #   PVP_BOTS=4 scripts/server_menu.sh pvp up  # mata-mata com 4 bots (teste)
+#   CAR_BOT=0 scripts/server_menu.sh survival up  # sem bot dirigindo o carro
 #   PORT=32000 scripts/server_menu.sh pvp up  # outra porta (2o servidor)
 #   DRY_RUN=1 scripts/server_menu.sh pvp up   # so mostra o comando
 #   scripts/server_menu.sh self-test          # testa o script (sem docker)
@@ -24,6 +25,9 @@ cd "$project_dir"
 godot_server_bin="dist/box-godot-linux.x86_64"
 ## PVP sem bots por padrao (jogo de verdade). PVP_BOTS=N pede bots de teste.
 default_pvp_bots="${PVP_BOTS:-0}"
+## Bot dirigindo o carro no servidor local (teste da rede do veiculo). CAR_BOT=0
+## desliga; CAR_BOT=N poe bot em ate N carros.
+default_car_bot="${CAR_BOT:-1}"
 
 usage() {
 	cat <<'TXT'
@@ -33,7 +37,7 @@ Uso: scripts/server_menu.sh [modo] [acao]
   acao: up (rebuild+sobe) | start (sobe) | restart | stop | logs | status
         self-test (checa o script sem docker)
 
-Sem argumentos abre o menu interativo. Variaveis: PVP_BOTS, PORT, DRY_RUN.
+Sem argumentos abre o menu interativo. Variaveis: PVP_BOTS, CAR_BOT, PORT, DRY_RUN.
 TXT
 }
 
@@ -80,6 +84,8 @@ export_mode_env() {
 			export GAME_SERVER_PVP_BOTS="--pvp-bots=$default_pvp_bots"
 			;;
 	esac
+	[[ "$default_car_bot" =~ ^[0-9]+$ ]] || die "CAR_BOT invalido: '$default_car_bot' (esperado inteiro >= 0)"
+	export GAME_SERVER_CAR_BOT="--car-bot=$default_car_bot"
 	if [[ -n "${PORT:-}" ]]; then
 		[[ "$PORT" =~ ^[0-9]+$ ]] || die "PORT invalido: '$PORT' (esperado inteiro)"
 		export GAME_SERVER_PORT="$PORT"
@@ -92,7 +98,7 @@ export_mode_env() {
 mode_env_prefix() {
 	local prefix=""
 	local name
-	for name in GAME_SERVER_GAME_MODE GAME_SERVER_PVP_BOTS GAME_SERVER_PORT GAME_SERVER_NAME; do
+	for name in GAME_SERVER_GAME_MODE GAME_SERVER_PVP_BOTS GAME_SERVER_CAR_BOT GAME_SERVER_PORT GAME_SERVER_NAME; do
 		if [[ -n "${!name:-}" ]]; then
 			prefix+="$name=${!name} "
 		fi
