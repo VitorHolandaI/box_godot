@@ -394,7 +394,7 @@ func _find_function_range(lines: Array, start_idx: int) -> Dictionary:
 	# Find the next func declaration after the ignore comment
 	for i in range(start_idx + 1, lines.size()):
 		var trimmed: String = lines[i].strip_edges()
-		if trimmed.begins_with("func "):
+		if trimmed.begins_with("func ") or trimmed.begins_with("static func "):
 			func_start = i + 1  # Convert to 1-based line number
 			break
 
@@ -404,7 +404,7 @@ func _find_function_range(lines: Array, start_idx: int) -> Dictionary:
 	# Find where the function ends (next func or end of file)
 	for i in range(func_start, lines.size()):
 		var trimmed: String = lines[i].strip_edges()
-		if trimmed.begins_with("func "):
+		if trimmed.begins_with("func ") or trimmed.begins_with("static func "):
 			func_end = i  # Line before next func (0-based, so already correct as 1-based end)
 			break
 

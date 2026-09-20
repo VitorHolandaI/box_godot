@@ -21,7 +21,7 @@ func analyze_functions(lines: Array, file_result, add_issue_callback: Callable, 
 
 	for i in range(lines.size()):
 		var line: String = lines[i]
-		var trimmed := line.strip_edges()
+		var trimmed := line.strip_edges().trim_prefix("static ")
 
 		if trimmed.begins_with("func "):
 			# Finalize previous function
