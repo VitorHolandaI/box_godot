@@ -473,7 +473,7 @@ func _create_forest() -> void:
 	rng.seed = city_seed + 1701
 	var tree_index := 0
 	var tree_count := GameConfig.get_forest_tree_count()
-	for tree_step in tree_count:
+	for _tree_step in tree_count:
 		_spawn_tree(tree_index, _random_forest_position(rng), rng)
 		tree_index += 1
 	_scatter_undergrowth(rng, tree_count)

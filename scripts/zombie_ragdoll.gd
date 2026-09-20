@@ -27,10 +27,10 @@ var froze := false
 func _ready() -> void:
 	torso_body = _create_torso()
 	var head := _create_head()
-	var left_arm := _create_limb("LeftArm", Vector3(0.3, 0.84, 0.34), Vector3(-0.56, 0.42, 0.0), SKIN_COLOR, 0.8)
-	var right_arm := _create_limb("RightArm", Vector3(0.3, 0.84, 0.34), Vector3(0.56, 0.42, 0.0), SKIN_COLOR, 0.8)
-	var left_leg := _create_limb("LeftLeg", Vector3(0.34, 0.84, 0.36), Vector3(-0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
-	var right_leg := _create_limb("RightLeg", Vector3(0.34, 0.84, 0.36), Vector3(0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
+	_create_limb("LeftArm", Vector3(0.3, 0.84, 0.34), Vector3(-0.56, 0.42, 0.0), SKIN_COLOR, 0.8)
+	_create_limb("RightArm", Vector3(0.3, 0.84, 0.34), Vector3(0.56, 0.42, 0.0), SKIN_COLOR, 0.8)
+	_create_limb("LeftLeg", Vector3(0.34, 0.84, 0.36), Vector3(-0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
+	_create_limb("RightLeg", Vector3(0.34, 0.84, 0.36), Vector3(0.2, -0.4, 0.0), PANTS_COLOR, 1.2)
 
 	_create_neck_joint()
 	_create_joint("LeftShoulderJoint", NodePath("../Torso"), NodePath("../LeftArm"), Vector3(-0.56, 0.84, 0.0))
