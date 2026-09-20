@@ -19,6 +19,9 @@ const DESTRUCTIBLE_DOOR_SCRIPT: GDScript = preload("res://scripts/destructible_d
 const COMMERCIAL_DETAIL_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/commercial_detail_assembler.gd")
 const APARTMENT_DETAIL_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/apartment_detail_assembler.gd")
 const WAVE_SUPPLY_SCENE: PackedScene = preload("res://scenes/wave_supply_pickup.tscn")
+const BRICK_TEXTURE: Texture2D = preload("res://assets/models/modular_urban/Textures/wall.png")
+const CONCRETE_TEXTURE: Texture2D = preload("res://assets/models/modular_urban/Textures/concrete.png")
+const METAL_WALL_TEXTURE: Texture2D = preload("res://assets/models/modular_urban/Textures/metal_wall.png")
 # Moveis acompanham o tamanho do boneco (2.34 m) e a planta ampliada das casas.
 const FURNITURE_SCALE := 1.3
 ## Largura do boneco: o mobiliario nao pode invadir o vao mais meio boneco de
@@ -36,7 +39,7 @@ static func assemble(building) -> StaticBody3D:
 	var body := StaticBody3D.new()
 	body.name = building.archetype
 	var facade_color := _facade_color(building.seed)
-	var wall_material: Material = BUILDING_MATERIALS.opaque(facade_color, building.floor_height)
+	var wall_material: Material = BUILDING_MATERIALS.textured_opaque(facade_color, building.floor_height, _facade_texture(building), _facade_texture_meters(building))
 	var floor_material: Material = BUILDING_MATERIALS.opaque(Color(0.27, 0.29, 0.31), building.floor_height, true)
 	var trim_material: Material = BUILDING_MATERIALS.opaque(facade_color.darkened(0.45), building.floor_height)
 	var ceiling_material: Material = BUILDING_MATERIALS.opaque(facade_color.darkened(0.45), building.floor_height, true)
@@ -670,8 +673,24 @@ static func _furniture_materials(seed: int) -> Array[Material]:
 
 static func _facade_color(seed: int) -> Color:
 	var palette: Array[Color] = [
-		Color(0.58, 0.37, 0.26), Color(0.30, 0.43, 0.53),
-		Color(0.60, 0.48, 0.27), Color(0.35, 0.48, 0.31),
-		Color(0.52, 0.34, 0.47), Color(0.46, 0.46, 0.48),
+		Color(0.54, 0.43, 0.34), Color(0.42, 0.48, 0.50),
+		Color(0.56, 0.51, 0.38), Color(0.42, 0.51, 0.39),
+		Color(0.48, 0.40, 0.46), Color(0.52, 0.52, 0.52),
 	]
 	return palette[absi(seed) % palette.size()]
+
+
+static func _facade_texture(building) -> Texture2D:
+	if building.archetype.begins_with("House"):
+		return BRICK_TEXTURE if posmod(int(building.seed), 3) == 0 else CONCRETE_TEXTURE
+	if building.archetype.begins_with("ApartmentBuilding"):
+		return CONCRETE_TEXTURE
+	return METAL_WALL_TEXTURE
+
+
+static func _facade_texture_meters(building) -> float:
+	if building.archetype.begins_with("House"):
+		return 1.1
+	if building.archetype.begins_with("ApartmentBuilding"):
+		return 1.8
+	return 1.4

@@ -9,6 +9,8 @@ const BUILDING_ASSEMBLER_SCRIPT := preload("res://scripts/procedural/assemblers/
 const ROOF_ASSEMBLER_SCRIPT := preload("res://scripts/procedural/assemblers/house_roof_assembler.gd")
 const STREET_LIGHT_ASSEMBLER_SCRIPT := preload("res://scripts/procedural/assemblers/street_light_assembler.gd")
 const MESH_BATCHER_SCRIPT := preload("res://scripts/procedural/assemblers/mesh_batcher.gd")
+const BUILDING_MATERIALS_SCRIPT := preload("res://scripts/procedural/assemblers/building_materials.gd")
+const CONCRETE_TEXTURE: Texture2D = preload("res://assets/models/modular_urban/Textures/concrete.png")
 const PLAYER_HEIGHT := 2.34
 
 
@@ -16,6 +18,7 @@ func run(test_root: Node) -> void:
 	_test_street_lights_tower_over_player_on_sidewalks(test_root)
 	_test_house_roof_is_closed_and_pitched(test_root)
 	_test_house_rooms_fit_player_size(test_root)
+	_test_facade_material_uses_world_texture(test_root)
 	_test_building_meshes_merge_without_touching_doors(test_root)
 	_test_enterable_buildings_have_interior_loot_anchors(test_root)
 
@@ -49,7 +52,7 @@ func _test_street_lights_tower_over_player_on_sidewalks(test_root: Node) -> void
 			for lot in block.lots:
 				if lot.building == null:
 					continue
-				var size := Vector2(lot.building.width, lot.building.depth)
+				var size: Vector2 = lot.building_footprint_size()
 				if Rect2(lot.position - size * 0.5, size).has_point(point):
 					_fail(test_root, "Poste em %s caiu dentro do lote %s." % [point, lot.id])
 					parent.free()
@@ -92,6 +95,24 @@ func _test_house_rooms_fit_player_size(test_root: Node) -> void:
 					_fail(test_root, "Porta %s com %.2f m e estreita para o boneco." % [door["center"], float(door["width"])])
 					return
 	print("PASS: Casa de %.0fx%.0f m com comodos e portas proporcionais ao boneco." % [blueprint.width, blueprint.depth])
+
+
+func _test_facade_material_uses_world_texture(test_root: Node) -> void:
+	print("Testando textura real de fachada projetada no mundo...")
+	var material: ShaderMaterial = BUILDING_MATERIALS_SCRIPT.textured_opaque(Color.WHITE, 3.4, CONCRETE_TEXTURE, 1.8)
+	var texture_ok: bool = material.get_shader_parameter("albedo_texture") == CONCRETE_TEXTURE
+	var enabled := bool(material.get_shader_parameter("use_texture"))
+	var meters := float(material.get_shader_parameter("texture_meters"))
+	# CompressedTexture2D.has_mipmaps() e false mesmo apos gerar; a imagem e a
+	# fonte da verdade (mipmaps/generate=true no .import).
+	var concrete_image := CONCRETE_TEXTURE.get_image()
+	if concrete_image == null or not concrete_image.has_mipmaps():
+		_fail(test_root, "Textura de fachada sem mipmaps; o filtro anisotropico do shader nao teria niveis inferiores para amostrar (mipmaps/generate=false no .import).")
+		return
+	if not texture_ok or not enabled or not is_equal_approx(meters, 1.8):
+		_fail(test_root, "Fachada deveria usar textura concreta em 1.8m; textura=%s ativa=%s escala=%.2f." % [texture_ok, enabled, meters])
+		return
+	print("PASS: Fachada combina imagem real com detalhe procedural em escala de 1.8m.")
 
 
 func _test_building_meshes_merge_without_touching_doors(test_root: Node) -> void:
