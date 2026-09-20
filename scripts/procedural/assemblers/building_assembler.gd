@@ -86,12 +86,12 @@ static func _draw_unit(body: StaticBody3D, unit, origin: Vector2, floor_y: float
 
 
 static func _draw_room_walls(body: StaticBody3D, unit, room, origin: Vector2, floor_y: float, wall_material: Material) -> void:
-	_draw_wall_edge(body, unit, room, "vertical", room.bounds.position.x, room.bounds.position.y, room.bounds.end.y, origin, floor_y, wall_material)
-	_draw_wall_edge(body, unit, room, "horizontal", room.bounds.position.y, room.bounds.position.x, room.bounds.end.x, origin, floor_y, wall_material)
+	_draw_wall_edge(body, unit, WallEdge.vertical(room.bounds.position.x, room.bounds.position.y, room.bounds.end.y, origin, floor_y), wall_material)
+	_draw_wall_edge(body, unit, WallEdge.horizontal(room.bounds.position.y, room.bounds.position.x, room.bounds.end.x, origin, floor_y), wall_material)
 	if is_zero_approx(room.bounds.end.x - unit.width):
-		_draw_wall_edge(body, unit, room, "vertical", room.bounds.end.x, room.bounds.position.y, room.bounds.end.y, origin, floor_y, wall_material)
+		_draw_wall_edge(body, unit, WallEdge.vertical(room.bounds.end.x, room.bounds.position.y, room.bounds.end.y, origin, floor_y), wall_material)
 	if is_zero_approx(room.bounds.end.y - unit.depth):
-		_draw_wall_edge(body, unit, room, "horizontal", room.bounds.end.y, room.bounds.position.x, room.bounds.end.x, origin, floor_y, wall_material)
+		_draw_wall_edge(body, unit, WallEdge.horizontal(room.bounds.end.y, room.bounds.position.x, room.bounds.end.x, origin, floor_y), wall_material)
 
 
 ## Nome deterministico e valido (sem ponto) da porta de um vao, em coordenadas
@@ -124,19 +124,67 @@ static func _window_overlaps_door(unit, window: Dictionary) -> bool:
 	return false
 
 
-static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: float, start: float, finish: float, origin: Vector2, floor_y: float, material: Material) -> void:
-	var openings: Array[Dictionary] = []
+## Um trecho de parede a desenhar: o eixo, a linha onde ela corre, o pedaco
+## coberto (start..finish) e a origem/piso do lote. Junta os seis parametros
+## que andavam sempre juntos entre a coleta de vaos e a pintura dos paineis.
+class WallEdge extends RefCounted:
+	## "vertical" (parede correndo em Y, na coluna X=line) ou "horizontal".
+	var axis: String
+	var line: float
+	var start: float
+	var finish: float
+	var origin: Vector2
+	var floor_y: float
+
+	static func vertical(line_value: float, start_value: float, finish_value: float, origin_value: Vector2, floor_value: float) -> WallEdge:
+		return _make("vertical", line_value, start_value, finish_value, origin_value, floor_value)
+
+	static func horizontal(line_value: float, start_value: float, finish_value: float, origin_value: Vector2, floor_value: float) -> WallEdge:
+		return _make("horizontal", line_value, start_value, finish_value, origin_value, floor_value)
+
+	static func _make(axis_value: String, line_value: float, start_value: float, finish_value: float, origin_value: Vector2, floor_value: float) -> WallEdge:
+		var edge := WallEdge.new()
+		edge.axis = axis_value
+		edge.line = line_value
+		edge.start = start_value
+		edge.finish = finish_value
+		edge.origin = origin_value
+		edge.floor_y = floor_value
+		return edge
+
+	## Um vao (porta ou janela) so interessa se estiver NESTA linha de parede.
+	func matches_line(center: Vector2) -> bool:
+		return is_equal_approx(center.x if axis == "vertical" else center.y, line)
+
+	## Posicao do centro do vao ao longo da parede.
+	func along(center: Vector2) -> float:
+		return center.y if axis == "vertical" else center.x
+
+
+## Desenha um trecho de parede: junta os vaos de porta e janela que caem nele,
+## cria as portas que ainda nao existem e pinta os paineis em volta dos vaos.
+static func _draw_wall_edge(body: StaticBody3D, unit, edge: WallEdge, material: Material) -> void:
 	var door_ranges: Array[Vector2] = []
+	var openings := _door_openings(body, unit, edge, material, door_ranges)
+	openings.append_array(_window_openings(unit, edge, door_ranges))
+	openings.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return left["start"] < right["start"])
+	_paint_wall_panels(body, edge, openings, material)
+
+
+## Vaos de porta do trecho. Tambem cria a porta e o batente de cada vao uma
+## unica vez, mesmo que salas ou unidades vizinhas desenhem a mesma linha.
+## `door_ranges` sai preenchido para a janela saber o que evitar.
+static func _door_openings(body: StaticBody3D, unit, edge: WallEdge, material: Material, door_ranges: Array[Vector2]) -> Array[Dictionary]:
+	var openings: Array[Dictionary] = []
 	for door in unit.doors:
-		if door.get("axis", "") != axis:
+		if door.get("axis", "") != edge.axis:
 			continue
 		var center: Vector2 = door["center"]
-		var door_line := center.x if axis == "vertical" else center.y
-		if not is_equal_approx(door_line, line):
+		if not edge.matches_line(center):
 			continue
-		var along := center.y if axis == "vertical" else center.x
+		var along := edge.along(center)
 		var half_width := float(door["width"]) * 0.5
-		if along + half_width <= start or along - half_width >= finish:
+		if along + half_width <= edge.start or along - half_width >= edge.finish:
 			continue
 		door_ranges.append(Vector2(along - half_width, along + half_width))
 		openings.append({
@@ -146,34 +194,32 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 			"top": DOOR_HEIGHT,
 			"fill_top": false,
 		})
-		# Cada vao recebe porta e batente uma unica vez, mesmo que a mesma
-		# linha de parede seja desenhada por salas ou unidades vizinhas.
-		var door_name := door_node_name(axis, origin + center, floor_y)
+		var door_name := door_node_name(edge.axis, edge.origin + center, edge.floor_y)
 		if not body.has_node(door_name):
-			_add_door(body, door, axis, line, along, origin, floor_y, material, door_name)
+			_add_door(body, door, edge.axis, edge.line, along, edge.origin, edge.floor_y, material, door_name)
 		var header_name := door_name.replace("Door_", "DoorHeader_")
 		if not body.has_node(header_name):
-			_add_door_header(body, door, axis, line, along, origin, floor_y, material, header_name)
+			_add_door_header(body, door, edge.axis, edge.line, along, edge.origin, edge.floor_y, material, header_name)
+	return openings
+
+
+## Vaos de janela do trecho, pulando os que uma porta ja ocupa: janela
+## sobreposta por porta deixaria parede dentro do vao da porta.
+static func _window_openings(unit, edge: WallEdge, door_ranges: Array[Vector2]) -> Array[Dictionary]:
+	var openings: Array[Dictionary] = []
 	for window in unit.windows:
-		if window.get("axis", "") != axis:
+		if window.get("axis", "") != edge.axis:
 			continue
-		var window_center: Vector2 = window["center"]
-		var window_line := window_center.x if axis == "vertical" else window_center.y
-		if not is_equal_approx(window_line, line):
+		var center: Vector2 = window["center"]
+		if not edge.matches_line(center):
 			continue
-		var window_along := window_center.y if axis == "vertical" else window_center.x
-		var window_half_width := float(window["width"]) * 0.5
-		var window_start := window_along - window_half_width
-		var window_end := window_along + window_half_width
-		if window_end <= start or window_start >= finish:
+		var along := edge.along(center)
+		var half_width := float(window["width"]) * 0.5
+		var window_start := along - half_width
+		var window_end := along + half_width
+		if window_end <= edge.start or window_start >= edge.finish:
 			continue
-		# Janela sobreposta por porta deixaria parede dentro do vao da porta.
-		var overlaps_door := false
-		for door_range in door_ranges:
-			if window_start < door_range.y and door_range.x < window_end:
-				overlaps_door = true
-				break
-		if overlaps_door:
+		if _overlaps_any_door(window_start, window_end, door_ranges):
 			continue
 		openings.append({
 			"start": window_start,
@@ -182,18 +228,30 @@ static func _draw_wall_edge(body: StaticBody3D, unit, room, axis: String, line: 
 			"top": WINDOW_SILL + WINDOW_HEIGHT,
 			"fill_top": true,
 		})
-	openings.sort_custom(func(left: Dictionary, right: Dictionary) -> bool: return left["start"] < right["start"])
-	var cursor := start
+	return openings
+
+
+static func _overlaps_any_door(window_start: float, window_end: float, door_ranges: Array[Vector2]) -> bool:
+	for door_range in door_ranges:
+		if window_start < door_range.y and door_range.x < window_end:
+			return true
+	return false
+
+
+## Pinta a parede cheia entre os vaos ja ordenados, mais a faixa abaixo do
+## peitoril e a acima da verga de cada vao.
+static func _paint_wall_panels(body: StaticBody3D, edge: WallEdge, openings: Array[Dictionary], material: Material) -> void:
+	var cursor := edge.start
 	for opening in openings:
-		var opening_start: float = maxf(float(opening["start"]), start)
-		var opening_end: float = minf(float(opening["end"]), finish)
-		_add_wall_panel(body, axis, line, cursor, minf(opening_start, finish), 0.0, WALL_HEIGHT, origin, floor_y, material)
+		var opening_start: float = maxf(float(opening["start"]), edge.start)
+		var opening_end: float = minf(float(opening["end"]), edge.finish)
+		_add_wall_panel(body, edge.axis, edge.line, cursor, minf(opening_start, edge.finish), 0.0, WALL_HEIGHT, edge.origin, edge.floor_y, material)
 		if float(opening["bottom"]) > 0.0:
-			_add_wall_panel(body, axis, line, opening_start, opening_end, 0.0, float(opening["bottom"]), origin, floor_y, material)
+			_add_wall_panel(body, edge.axis, edge.line, opening_start, opening_end, 0.0, float(opening["bottom"]), edge.origin, edge.floor_y, material)
 		if bool(opening["fill_top"]) and float(opening["top"]) < WALL_HEIGHT:
-			_add_wall_panel(body, axis, line, opening_start, opening_end, float(opening["top"]), WALL_HEIGHT, origin, floor_y, material)
+			_add_wall_panel(body, edge.axis, edge.line, opening_start, opening_end, float(opening["top"]), WALL_HEIGHT, edge.origin, edge.floor_y, material)
 		cursor = maxf(cursor, float(opening["end"]))
-	_add_wall_panel(body, axis, line, cursor, finish, 0.0, WALL_HEIGHT, origin, floor_y, material)
+	_add_wall_panel(body, edge.axis, edge.line, cursor, edge.finish, 0.0, WALL_HEIGHT, edge.origin, edge.floor_y, material)
 
 
 static func _add_door(body: StaticBody3D, door_data: Dictionary, axis: String, line: float, along: float, origin: Vector2, floor_y: float, _material: Material, door_name: String) -> void:
