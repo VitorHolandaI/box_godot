@@ -126,9 +126,10 @@ static func build_minimap_layout(city) -> Dictionary:
 		for lot in block.lots:
 			if lot.building == null:
 				continue
+			var footprint: Vector2 = lot.building_footprint_size()
 			buildings.append({
 				"center": lot.position,
-				"size": Vector2(lot.building.width, lot.building.depth),
+				"size": footprint,
 			})
 	return {"roads": roads, "buildings": buildings}
 
