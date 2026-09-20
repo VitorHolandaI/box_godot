@@ -83,17 +83,9 @@ var pending_zombie_names: Dictionary = {}
 var last_sent_wave_progress: Array[int] = []
 var zombie_cache: Dictionary = {}
 var smoke_test_mode := false
-## --smoke-test-swat: chama o esquadrao perto do jogador e imprime o estado dos
-## 4 soldados a cada 2 s, para testar a chamada sem esperar a onda 5.
-var smoke_swat_mode := false
-var smoke_swat_elapsed := 0.0
-var smoke_swat_called := false
-var smoke_swat_report_in := 0.0
-## Alvos criados pelo smoke, para medir o dano do esquadrao.
-var smoke_swat_targets: Array[Node] = []
-var smoke_swat_done_in := -1.0
-## Cliente: primeira posicao vista de cada soldado, para medir deslocamento.
-var smoke_swat_first_seen: Dictionary = {}
+## --smoke-test-swat: harness de dev que chama o esquadrao e reporta; nulo
+## quando o argumento nao veio (ver SwatSmokeTest).
+var swat_smoke: SwatSmokeTest = null
 ## watch() do replicador de portas precisa re-agir quando a cidade em etapas
 ## termina de montar; false evita re-watch repetido a cada frame.
 var _city_doors_watched := false
@@ -128,13 +120,10 @@ var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
 var ammo_loot_director = AMMO_LOOT_DIRECTOR_SCRIPT.new()
 var player_slots_replication := PlayerSlotsReplication.new()
 var player_snapshot_sequence := 0
-## Esquadroes SWAT ativos: id -> {"keys": Array[String], "anchor": Node3D,
-## "elapsed": float}. Cada soldado e um jogador de verdade simulado no servidor
-## (ver SwatSquadBot) e replicado pelo snapshot de jogadores.
-var swat_squads: Dictionary = {}
-var swat_squad_index := 0
-## Cerebro dos soldados: mesma IA do bot de teste, em modo esquadrao.
-var swat_bot_ai := PlayerBotAI.new()
+## Esquadrao SWAT: cada soldado e um jogador de verdade simulado no servidor
+## (ver SwatSquadBot) e replicado pelo snapshot de jogadores. A conducao inteira
+## vive em SwatSquadDirector; aqui ficam so os RPCs.
+var swat := SwatSquadDirector.new(self)
 ## Mata-mata (--pvp): bots, rodadas, economia e rota entre as bases vivem em
 ## PvpServerDirector. Aqui ficam so os RPCs e o estado replicado abaixo.
 var pvp := PvpServerDirector.new(self)
@@ -212,7 +201,8 @@ func _ready() -> void:
 	_configure_network_zombies()
 	_reconcile_network_players()
 	smoke_test_mode = NetworkSession.is_server() and "--smoke-test-zombie" in OS.get_cmdline_user_args()
-	smoke_swat_mode = "--smoke-test-swat" in OS.get_cmdline_user_args()
+	if "--smoke-test-swat" in OS.get_cmdline_user_args():
+		swat_smoke = SwatSmokeTest.new(self, swat)
 	if smoke_test_mode:
 		_spawn_zombie(Vector3(-8.5, 1.0, 9.5))
 		var smoke_zombie := zombies.get_child(-1) as CharacterBody3D
@@ -364,10 +354,11 @@ func _physics_process(delta: float) -> void:
 		buy_menu.setup(local_players[0], Callable(self, "request_purchase_local"), Callable(self, "pvp_status_text"))
 	if not NetworkSession.is_client():
 		# Servidor e offline simulam o esquadrao; o cliente so aplica snapshot.
-		_update_swat_squads(delta)
+		swat.update(delta)
 	# O smoke roda nos dois papeis: no servidor cria o esquadrao, no cliente
 	# confere que os soldados aparecem e se movem.
-	_tick_swat_smoke(delta)
+	if swat_smoke != null:
+		swat_smoke.tick(delta)
 	if pvp.is_active():
 		pvp.tick(delta)
 	if NetworkSession.is_client():
@@ -513,115 +504,37 @@ func _spawn_air_strike_marker(target: Vector3, direction: Vector3) -> void:
 	strike.setup(target, direction, false)
 
 
-## SWAT pedido pelo jogador (autoridade): 4 soldados por 20 s, que sao
-## jogadores de verdade simulados no servidor (IA do bot de teste, Uzi,
-## municao infinita e leash do dono).
+## Ponte de rede do esquadrao SWAT. A simulacao (soldados, formacao, leash do
+## dono, expiracao) vive em SwatSquadDirector; aqui ficam os RPCs, que precisam
+## de um no na arvore para o Godot rotear.
 ## Uso: chamado por PlayerThrowables via has_method("call_swat").
 func call_swat(caller: Node3D, _direction: Vector3) -> void:
 	if NetworkSession.is_client():
 		return
-	swat_squad_index += 1
-	_enlist_swat_squad(swat_squad_index, caller)
+	var squad_id := swat.begin_squad(caller)
 	if not NetworkSession.is_server():
 		return
 	# Todos os conectados, nao so os "loaded": o esquadrao dura 20 s e quem
 	# entrou agora tambem precisa ver os soldados (o snapshot so vai para
 	# loaded_peers, e sem o no o cliente ignoraria os estados).
 	for peer_id in multiplayer.get_peers():
-		_enlist_swat_squad_rpc.rpc_id(int(peer_id), swat_squad_index)
-
-
-## Cria os 4 soldados do esquadrao (servidor/offline e, pelo RPC, nos clientes).
-## No cliente o dono nao existe: quem manda na posicao e o snapshot de jogadores.
-func _enlist_swat_squad(squad_id: int, anchor: Node3D) -> void:
-	var keys := SwatSquadBot.keys_for(squad_id)
-	for index in keys.size():
-		_spawn_swat_bot(keys[index], index, anchor)
-	# WeakRef, nao o no: depois que o dono desconecta o objeto liberado segue no
-	# dicionario e comparar/castar ele levanta "Trying to cast a freed object".
-	swat_squads[squad_id] = {"keys": keys, "anchor": weakref(anchor) if is_instance_valid(anchor) else null, "elapsed": 0.0}
+		_enlist_swat_squad_rpc.rpc_id(int(peer_id), squad_id)
 
 
 @rpc("authority", "call_remote", "reliable")
 func _enlist_swat_squad_rpc(squad_id: int) -> void:
 	if not NetworkSession.is_client():
 		return
-	_enlist_swat_squad(squad_id, null)
+	swat.enlist(squad_id, null)
 
 
-func _spawn_swat_bot(key: String, index: int, anchor: Node3D) -> void:
-	var bot = PLAYER_SCENE.instantiate()
-	bot.name = "SwatBot_%s" % key.replace(":", "_")
-	bot.set("owner_peer_id", int(key.split(":")[0]))
-	bot.local_slot = index
-	bot.simulation_enabled = NetworkSession.is_server() or NetworkSession.is_offline()
-	SwatSquadBot.configure(bot, index)
-	var spawn_position := global_position
-	if is_instance_valid(anchor):
-		spawn_position = SwatSquadBot.formation_position((anchor as Node3D).global_position, index)
-	bot.position = spawn_position
-	players_node.add_child(bot, true)
-	bot.set_spawn_position(bot.global_position)
-	bot.set_color_index(index)
-	if bot.simulation_enabled:
-		_connect_crate_weapon_signals(bot)
-		bot.equip_crate_weapon(WeaponStats.Kind.UZI)
-	network_players[key] = bot
-
-
-## Fim do esquadrao: libera os 4 soldados no servidor e nos clientes.
-func _retire_swat_squad(squad_id: int) -> void:
-	var squad_value: Variant = swat_squads.get(squad_id)
-	if squad_value == null:
-		return
-	swat_squads.erase(squad_id)
-	for key_value in (squad_value as Dictionary)["keys"]:
-		var key := String(key_value)
-		var bot = network_players.get(key)
-		network_players.erase(key)
-		player_slots_replication.forget(key)
-		if is_instance_valid(bot):
-			bot.queue_free()
+func broadcast_swat_retire(squad_id: int) -> void:
+	_retire_swat_squad_rpc.rpc(squad_id)
 
 
 @rpc("authority", "call_remote", "reliable")
 func _retire_swat_squad_rpc(squad_id: int) -> void:
-	_retire_swat_squad(squad_id)
-
-
-## Avanca os esquadroes: expira quem passou do tempo e alimenta a IA de cada
-## soldado no servidor. Roda no servidor/offline (quem simula o esquadrao).
-## Uso: chamado em _physics_process.
-func _update_swat_squads(delta: float) -> void:
-	for squad_id_value in swat_squads.keys().duplicate():
-		var squad_id := int(squad_id_value)
-		var squad: Dictionary = swat_squads[squad_id]
-		squad["elapsed"] = float(squad["elapsed"]) + delta
-		if SwatSquadBot.remaining_seconds(float(squad["elapsed"])) <= 0.0:
-			_retire_swat_squad(squad_id)
-			if NetworkSession.is_server():
-				_retire_swat_squad_rpc.rpc(squad_id)
-			continue
-		var anchor_ref: Variant = squad["anchor"]
-		var anchor: Node3D = null
-		if anchor_ref is WeakRef:
-			anchor = (anchor_ref as WeakRef).get_ref() as Node3D
-		if anchor_ref != null and anchor == null:
-			# Dono sumiu (desconectou): o esquadrao era suporte dele e vai embora.
-			_retire_swat_squad(squad_id)
-			if NetworkSession.is_server():
-				_retire_swat_squad_rpc.rpc(squad_id)
-			continue
-		var keys: Array = squad["keys"]
-		for index in keys.size():
-			var bot = network_players.get(String(keys[index]))
-			if not is_instance_valid(bot):
-				continue
-			# Vaga unica por soldado: o dicionario interno da IA (strafe, preso,
-			# ultima posicao) nao pode ser compartilhado entre esquadroes vivos.
-			var slot := squad_id * SwatSquadBot.COUNT + index
-			var input: Dictionary = swat_bot_ai.collect_squad_input(bot, anchor, zombies, slot, index, delta)
-			bot.apply_network_input(input)
+	swat.retire(squad_id)
 
 
 ## Chaves criadas pelo servidor (esquadrao SWAT e bots de PVP) nao vem do
@@ -632,139 +545,10 @@ func _update_swat_squads(delta: float) -> void:
 func _is_reserved_player_key(key: String) -> bool:
 	if pvp.has_bot(key):
 		return true
-	for squad_value in swat_squads.values():
+	for squad_value in swat.squads.values():
 		if (squad_value as Dictionary)["keys"].has(key):
 			return true
 	return false
-
-
-## Teste rapido da chamada de SWAT: espera a cidade, spawna zumbis em volta do
-## primeiro jogador, chama o esquadrao e imprime o estado dos soldados.
-## Uso: godot --headless --path . -- --smoke-test-swat
-func _tick_swat_smoke(delta: float) -> void:
-	if not smoke_swat_mode:
-		return
-	smoke_swat_elapsed += delta
-	if NetworkSession.is_client():
-		_tick_client_swat_smoke(delta)
-		return
-	if not smoke_swat_called:
-		if smoke_swat_elapsed < 2.5 or not _procedural_city_ready():
-			return
-		var caller := get_tree().get_first_node_in_group("player") as Node3D
-		if caller == null:
-			return
-		smoke_swat_targets.clear()
-		var ring_offsets: Array[Vector3] = []
-		for index in 6:
-			var angle := TAU * float(index) / 6.0
-			ring_offsets.append(Vector3(cos(angle), 0.0, sin(angle)) * 10.0)
-		for offset in ring_offsets:
-			if _spawn_zombie(caller.global_position + offset):
-				smoke_swat_targets.append(zombies.get_child(-1))
-		call_swat(caller, -caller.global_transform.basis.z)
-		smoke_swat_called = true
-		smoke_swat_report_in = 2.0
-		print(JSON.stringify({"event": "swat_smoke_called", "squads": swat_squads.size()}))
-		return
-	if swat_squads.is_empty():
-		# Esquadrao inteiro expirou: imprime o resumo e espera alguns segundos
-		# (tempo de o cliente receber o retire) antes de fechar.
-		if smoke_swat_done_in < 0.0:
-			_print_swat_smoke_report()
-			print(JSON.stringify({"event": "swat_smoke_done", "elapsed": snappedf(smoke_swat_elapsed, 0.1)}))
-			smoke_swat_done_in = 6.0
-			return
-		smoke_swat_done_in -= delta
-		if smoke_swat_done_in <= 0.0:
-			get_tree().quit(0)
-		return
-	smoke_swat_report_in -= delta
-	if smoke_swat_report_in > 0.0:
-		return
-	smoke_swat_report_in = 2.0
-	_print_swat_smoke_report()
-
-
-## Cliente: confere que os soldados existem AQUI (nao so no servidor) e que se
-## movem. Era o que faltava: com o id de peer negativo lido como u32 o estado
-## era descartado e o soldado ficava parado na origem, invisivel, sem erro
-## nenhum no log. Imprime o resumo e encerra.
-## Uso: godot --headless --path . -- --join=IP --server-port=P --smoke-test-swat
-func _tick_client_swat_smoke(delta: float) -> void:
-	var bots: Array[Node] = []
-	for player_node in players_node.get_children():
-		if bool(player_node.get("is_swat_bot")):
-			bots.append(player_node)
-	for bot in bots:
-		if not smoke_swat_first_seen.has(bot.name):
-			smoke_swat_first_seen[bot.name] = (bot as Node3D).global_position
-	if fmod(smoke_swat_elapsed, 2.0) < delta:
-		var travels: Array[float] = []
-		for bot in bots:
-			var start: Vector3 = smoke_swat_first_seen.get(bot.name, (bot as Node3D).global_position)
-			travels.append(snappedf((bot as Node3D).global_position.distance_to(start), 0.1))
-		print(JSON.stringify({"event": "swat_seen", "alive": bots.size(), "travel": travels}))
-	if smoke_swat_elapsed < 8.0:
-		return
-	if bots.is_empty() and smoke_swat_elapsed < 20.0:
-		# Sem esquadrao nenhum: nao espera para sempre (o teste tem timeout, mas
-		# um smoke que trava ate ser morto nao serve de sinal).
-		return
-	var max_travel := 0.0
-	var at_origin := 0
-	for bot in bots:
-		var start: Vector3 = smoke_swat_first_seen.get(bot.name, (bot as Node3D).global_position)
-		var now_position := (bot as Node3D).global_position
-		max_travel = maxf(max_travel, now_position.distance_to(start))
-		if now_position.length() < 1.0:
-			at_origin += 1
-	print(JSON.stringify({
-		"event": "swat_seen_done",
-		"alive": bots.size(),
-		"max_travel": snappedf(max_travel, 0.1),
-		"at_origin": at_origin,
-	}))
-	get_tree().quit(0)
-
-
-## Estado dos soldados: distancia do dono, arma, pente e vida.
-func _print_swat_smoke_report() -> void:
-	for squad_id_value in swat_squads:
-		var squad: Dictionary = swat_squads[squad_id_value]
-		var anchor_ref: Variant = squad["anchor"]
-		var anchor: Node3D = null
-		if anchor_ref is WeakRef:
-			anchor = (anchor_ref as WeakRef).get_ref() as Node3D
-		var keys: Array = squad["keys"]
-		var rows: Array = []
-		for index in keys.size():
-			var bot = network_players.get(String(keys[index]))
-			if not is_instance_valid(bot):
-				rows.append({"index": index, "alive": false})
-				continue
-			var slots: WeaponSlots = bot.get("weapon_slots")
-			var kind := int(bot.get("current_weapon"))
-			var anchor_distance := -1.0
-			if anchor != null:
-				anchor_distance = bot.global_position.distance_to(anchor.global_position)
-			rows.append({
-				"index": index,
-				"alive": true,
-				"dist_anchor": snappedf(anchor_distance, 0.1),
-				"weapon": kind,
-				"mag": int(slots.state_of(kind).get("mag", -1)),
-				"health": int(bot.get("health")),
-			})
-		print(JSON.stringify({
-			"event": "swat_smoke",
-			"squad": int(squad_id_value),
-			"elapsed": snappedf(float(squad["elapsed"]), 0.1),
-			"zombies": zombies.get_child_count(),
-			"kills": survival_wave_controller.total_kills if survival_wave_controller != null else -1,
-			"targets_hp": smoke_swat_targets.map(func(z: Node) -> int: return int(z.get("health")) if is_instance_valid(z) else -1),
-			"bots": rows,
-		}))
 
 
 ## Granada arremessada na autoridade: clientes veem o mesmo arco (so visual).
