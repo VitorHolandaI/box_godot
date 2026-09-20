@@ -13,7 +13,7 @@
 #   scripts/server_menu.sh logs               # segue o log
 #   scripts/server_menu.sh status             # o que esta no ar
 #   PVP_BOTS=4 scripts/server_menu.sh pvp up  # mata-mata com 4 bots (teste)
-#   CAR_BOT=0 scripts/server_menu.sh survival up  # sem bot dirigindo o carro
+#   CAR_BOT=1 scripts/server_menu.sh survival up  # com bot dirigindo o carro (teste)
 #   PORT=32000 scripts/server_menu.sh pvp up  # outra porta (2o servidor)
 #   DRY_RUN=1 scripts/server_menu.sh pvp up   # so mostra o comando
 #   scripts/server_menu.sh self-test          # testa o script (sem docker)
@@ -25,9 +25,10 @@ cd "$project_dir"
 godot_server_bin="dist/box-godot-linux.x86_64"
 ## PVP sem bots por padrao (jogo de verdade). PVP_BOTS=N pede bots de teste.
 default_pvp_bots="${PVP_BOTS:-0}"
-## Bot dirigindo o carro no servidor local (teste da rede do veiculo). CAR_BOT=0
-## desliga; CAR_BOT=N poe bot em ate N carros.
-default_car_bot="${CAR_BOT:-1}"
+## Bot dirigindo o carro no servidor local (so para testar a rede do veiculo).
+## DESLIGADO por padrao: no play normal ninguem ocupa o carro. CAR_BOT=N liga em
+## ate N carros.
+default_car_bot="${CAR_BOT:-0}"
 
 usage() {
 	cat <<'TXT'
