@@ -36,6 +36,21 @@ static func opaque(color: Color, floor_height: float, ceiling_cutout: bool = fal
 	return material
 
 
+## Material opaco com imagem projetada em metros no mundo. Mantem o shader de
+## visibilidade e evita depender do UV fragmentado das caixas procedurais.
+## Uso: var wall := ProceduralBuildingMaterials.textured_opaque(Color.WHITE, 3.4, brick, 1.2)
+static func textured_opaque(color: Color, floor_height: float, texture: Texture2D, texture_meters: float, ceiling_cutout: bool = false, metallic: float = 0.0, roughness: float = DEFAULT_ROUGHNESS, section_cut_exempt: bool = false) -> ShaderMaterial:
+	if texture == null:
+		push_error("Textura de edificio ausente; esperado Texture2D para %.2f m por repeticao." % texture_meters)
+	if texture_meters <= 0.0:
+		push_error("Escala de textura invalida %.2f; esperado > 0." % texture_meters)
+	var material := opaque(color, floor_height, ceiling_cutout, metallic, roughness, section_cut_exempt)
+	material.set_shader_parameter("use_texture", texture != null)
+	material.set_shader_parameter("albedo_texture", texture)
+	material.set_shader_parameter("texture_meters", maxf(texture_meters, 0.1))
+	return material
+
+
 ## Vidro translucido que tambem some nos andares ocultos.
 ## Uso: var glass := ProceduralBuildingMaterials.glass(3.4)
 static func glass(floor_height: float) -> ShaderMaterial:

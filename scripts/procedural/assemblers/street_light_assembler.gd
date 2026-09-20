@@ -26,6 +26,8 @@ static func assemble(city, parent: Node3D, blocked_areas: Array[Rect2] = []) -> 
 	blocked.append_array(blocked_areas)
 	var placed: Array[Vector2] = []
 	for road in city.roads:
+		if road.road_type == "alley":
+			continue
 		for placement in light_placements(road):
 			var point: Vector2 = placement["position"]
 			if _is_blocked(point, blocked) or _is_on_any_road(point, city.roads) or _is_near_existing(point, placed):
@@ -76,7 +78,7 @@ static func _lot_areas(city) -> Array[Rect2]:
 		for lot in block.lots:
 			if lot.building == null:
 				continue
-			var size := Vector2(lot.building.width, lot.building.depth)
+			var size: Vector2 = lot.building_footprint_size()
 			areas.append(Rect2(lot.position - size * 0.5, size).grow(LOT_CLEARANCE))
 	return areas
 

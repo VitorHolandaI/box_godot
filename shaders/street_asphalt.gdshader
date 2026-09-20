@@ -12,6 +12,7 @@ uniform vec3 asphalt_color : source_color = vec3(0.075, 0.080, 0.085);
 uniform vec3 patch_color : source_color = vec3(0.115, 0.115, 0.118);
 uniform vec3 lane_color : source_color = vec3(0.72, 0.60, 0.16);
 uniform float lane_half_width : hint_range(0.5, 12.0) = 3.0;
+uniform bool show_center_line = true;
 // Faixa central: comprimento do traco e do vao, em metros.
 uniform float dash_length : hint_range(0.5, 8.0) = 2.4;
 uniform float dash_gap : hint_range(0.5, 8.0) = 2.6;
@@ -67,10 +68,12 @@ void fragment() {
 		albedo *= 1.0 - edge * 0.35;
 
 		// Faixa central tracejada, gasta pelo uso (o ruido come pedacos dela).
-		float center = 1.0 - smoothstep(0.06, 0.13, abs(local_pos.x));
-		float dash = step(fract(local_pos.y / (dash_length + dash_gap)), dash_length / (dash_length + dash_gap));
-		float wear = smoothstep(0.35, 0.75, road_fbm(uv * 1.7 + vec2(63.0, 5.0)));
-		albedo = mix(albedo, lane_color, center * dash * wear * 0.85);
+		if (show_center_line) {
+			float center = 1.0 - smoothstep(0.06, 0.13, abs(local_pos.x));
+			float dash = step(fract(local_pos.y / (dash_length + dash_gap)), dash_length / (dash_length + dash_gap));
+			float wear = smoothstep(0.35, 0.75, road_fbm(uv * 1.7 + vec2(63.0, 5.0)));
+			albedo = mix(albedo, lane_color, center * dash * wear * 0.85);
+		}
 	}
 	ALBEDO = albedo;
 	ROUGHNESS = roughness;
