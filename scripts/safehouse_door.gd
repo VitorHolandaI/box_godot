@@ -44,7 +44,7 @@ func interact() -> void:
 ## Safehouse doors cannot be damaged by zombies or weapons. Mesma assinatura das
 ## outras portas: bala e explosao passam 4 argumentos (antes dava erro de script).
 ## Usage: door.take_damage(10, Vector3.FORWARD)
-func take_damage(_amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null) -> void:
+func take_damage(_amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null, _hit_position: Vector3 = Vector3.INF) -> void:
 	return
 
 
