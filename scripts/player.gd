@@ -40,6 +40,9 @@ const GROUND_INTERACT_RADIUS := 2.8
 const DOOR_INTERACT_REACH := 3.5
 ## Segurando interagir ao lado do caido, reanimacao completa em ~3s.
 const REVIVE_DURATION := 3.0
+## Duracao da animacao de recarga (cosmetica: a municao entra na hora; o valor
+## espelha PlayerAnimator.RELOAD_ANIM_SECONDS).
+const RELOAD_ANIM_SECONDS := 1.0
 ## Pellet tracer: menor/mais curto que o tracer da pistola.
 const PELLET_VISUAL_SCALE := Vector3(0.55, 0.55, 0.45)
 const UNSTUCK_LOCATOR_SCRIPT: GDScript = preload("res://scripts/player_unstuck_locator.gd")
@@ -115,6 +118,8 @@ var gunshot_noise_time := 0.0
 var noise_radius := 0.0
 var pistol_stance_time := 0.0
 var pistol_recoil_time := 0.0
+## Tempo restante da animacao de recarga (cosmetica; ver PlayerAnimator).
+var reload_anim_time := 0.0
 ## Arma de crate em maos mantem a pose de mira com duas maos por um tempo.
 var crate_weapon_stance_time := 0.0
 var knife_attack_time := 0.0
@@ -209,6 +214,7 @@ func _physics_process(delta: float) -> void:
 	muzzle_flash_time = maxf(muzzle_flash_time - delta, 0.0)
 	pistol_stance_time = maxf(pistol_stance_time - delta, 0.0)
 	pistol_recoil_time = maxf(pistol_recoil_time - delta, 0.0)
+	reload_anim_time = maxf(reload_anim_time - delta, 0.0)
 	knife_attack_time = maxf(knife_attack_time - delta, 0.0)
 	hit_reaction_time = maxf(hit_reaction_time - delta, 0.0)
 	sonar_pulse_time = maxf(sonar_pulse_time - delta, 0.0)
@@ -448,6 +454,7 @@ func _handle_weapon_input() -> void:
 		_reload_pistol()
 	elif reload_pressed and WeaponStats.is_crate_weapon(current_weapon):
 		weapon_slots.reload(current_weapon)
+		reload_anim_time = RELOAD_ANIM_SECONDS
 	# Armas automaticas (Uzi) atiram segurando; as outras sao por aperto.
 	var wants_to_attack := attack_pressed
 	if bool(WeaponStats.stats_for(current_weapon).get("is_auto", false)):
@@ -503,6 +510,7 @@ func _fire_crate_weapon() -> void:
 		return
 	if int(state["mag"]) <= 0:
 		weapon_slots.reload(current_weapon)
+		reload_anim_time = RELOAD_ANIM_SECONDS
 		return
 	if weapon_slots.is_degraded(current_weapon) and crate_weapon_rng.randf() < float(WeaponStats.stats_for(current_weapon)["jam_chance"]):
 		# Falha de mecanismo: gasta cooldown, nao gasta bala nem durabilidade.
@@ -871,6 +879,7 @@ func _fire_pistol() -> Node3D:
 
 
 func _reload_pistol() -> void:
+	reload_anim_time = RELOAD_ANIM_SECONDS
 	var bullets_needed := 12 - pistol_ammo
 	var bullets_loaded := mini(bullets_needed, reserve_ammo)
 	pistol_ammo += bullets_loaded
