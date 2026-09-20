@@ -3,6 +3,7 @@
 Logica de jogo, rede, interface e testes automatizados.
 
 - `acid_puddle.gd`: poca de acido do cuspidor que queima jogadores no raio e some em 5 s (visual no cliente).
+- `aim_reticle.gd`: retículo de mira por cima do quadro do jogador: cruz pequena no centro no FPS (para onde o tiro vai) e, na 3a pessoa com mouse, linha fina do boneco ao cursor mais um ponto no cursor (estilo Foxhole).
 - `air_strike.gd`: ataque aereo chamado pelo jogador: fumaca no alvo a 14 m e, apos 2,5 s, 6 bombas em linha que ferem zumbis e portas.
 - `ammo_loot_director.gd`: loot farto: reposicao de municao a cada 30 s ate 5 itens por classe, queda de municao (8%, meia carga) e de arma usada (30%, ate 30 no chao por 90 s) ao matar zumbi.
 - `ammo_pickup.gd`: caixa de municao militar coletavel, recarga de reserva e sincronizacao de rede.
@@ -22,6 +23,9 @@ Logica de jogo, rede, interface e testes automatizados.
 - `crate_weapon_model_builder.gd`: modelos em caixas das armas de crate na mao do jogador (escopetas, fuzis, sniper, bazuca e armas futuristas com faixas brilhando).
 - `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores e que abre para longe de quem interage; a direcao e replicada na rede. Tambem treme ao apanhar e pode ser arrombada por zumbis, faca ou tiro, liberando o vao.
 - `door_debris_effect.gd`: animacao visual de tabuas e lascas voando quando uma porta e arrombada.
+- `drivable_car.gd`: carro dirigivel do MVP (`VehicleBody3D`) que o jogador ocupa com "interagir" (E); le steer/throttle/brake do motorista, mantem o boneco visivel sentado no assento (a camera passa a seguir e aproximar o carro) e atropela zumbi acima de 4 km/h pela `RunOverArea`. O corpo e o jipe CC0 `assets/models/jeep/pickup_armored.glb`, com as quatro rodas visuais remontadas no `VehicleWheel3D` (giram e esterçam com a fisica).
+- `car_bot_driver.gd`: motorista de IA do laboratorio do carro; segue uma rota circular e entrega steer/throttle pelo mesmo contrato do jogador (`get_vehicle_input`).
+- `carro_lab.gd`: laboratorio do carro (mapa vazio com chao texturizado, sol e um jipe dirigido por bot) — `godot --path . scenes/carro_lab.tscn`.
 - `door_network_state.gd`: coleta e aplica estados autoritativos das portas comuns por caminho deterministico (completo ou so as mudancas).
 - `door_state_replicator.gd`: no servidor, junta as mudancas de portas e marca quem ja recebeu o estado completo; vai por RPC confiavel, fora do snapshot.
 - `floor_plan_generator.gd`: gera planta de casa por squarified treemap (subdivide o retangulo na proporcao dos pesos dos comodos) com portas por arvore geradora, garantindo todo comodo alcancavel; `program_for_seed(seed, area, include_utility)` monta o programa (quartos/banheiros/cozinhas e a despensa da entrada de servico) conforme o tamanho da casa; `draft_interior` vira paredes e vaos.
@@ -30,7 +34,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `in_game_menu.gd`: pausa local, navegacao, configuracoes e teclas (Esc) e botao "Destravar personagem" durante a partida.
 - `in_game_settings_panel.gd`: configuracoes abertas pelo Esc na partida: graficos, jogabilidade (mira pelo mouse e primeira pessoa) e teclas de cada jogador local, valendo na hora.
 - `keybinding_editor.gd`: troca de teclas compartilhada pelo menu principal e pelo menu do Esc (rotulos das acoes, captura por dispositivo e nome curto da tecla).
-- `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
+- `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco; dirigindo um carro aproxima e abaixa a camera (`DRIVING_OFFSET`), senao o veiculo fica minusculo no offset isometrico.
 - `first_person_camera.gd`: camera em primeira pessoa presa na cabeca do jogador (yaw do corpo/`camera_yaw` + `view_pitch`), escondendo a cabeca enquanto ativa e restaurando ao sair.
 - `local_host_launcher.gd`: "Hospedar partida" do menu: sobe o servidor dedicado como processo filho headless, entra por 127.0.0.1, encerra ao voltar ao menu/fechar o jogo e o filho sai sozinho sem peers (`--host-idle-exit=`).
 - `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos que so somem longe dos jogadores, bot de teste e o loot de onda (municao/vida) que nasce dentro das casas/predios, com poucos itens na rua. O modo `--armas-lab` sobe uma partida offline num mapa vazio (chao + arena) com uma arma de crate de cada tipo no chao para pegar e testar, mantendo cameras/tela dividida do survival.
@@ -118,7 +122,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `server_ping_probe.gd`: mede RTT usando o ping nativo do ENet na porta do jogo.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores, indestrutivel e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
-- `split_screen_manager.gd`: viewports com audio 3D, cameras (isometrica ou primeira pessoa por jogador), HUDs locais e minimapa com o mapa gerado de fundo (ruas e predios), a seta de direcao de cada boneco, os aliados, os zumbis dentro do raio do sonar e todos os zumbis quando restam 5 ou menos.
+- `split_screen_manager.gd`: viewports com audio 3D, cameras (isometrica ou primeira pessoa por jogador), HUDs locais, retículo de mira (`aim_reticle.gd`) e minimapa com o mapa gerado de fundo (ruas e predios), a seta de direcao de cada boneco, os aliados, os zumbis dentro do raio do sonar e todos os zumbis quando restam 5 ou menos.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_building_navigation.gd`: regressoes da escada alternada, navmesh por edificio, zumbi subindo/descendo, jogador subindo e zumbi saindo de casa arrombando portas.
 - `test_city_props.gd`: regressoes da altura/posicao dos postes e do telhado das casas.
@@ -126,6 +130,8 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_corpse_cleanup.gd`: regressoes do sumico de cadaveres por distancia. Inclui a fila de corpos com o mais antigo ja liberado.
 - `test_collision_boundaries.gd`: regressao focada para faca, tiro e ataque de zumbi bloqueados por paredes.
 - `test_door_breaking.gd`: regressoes de destrocos, vao liberado, tremida, faca do jogador, replicacao da quebra e envio so das portas que mudaram.
+- `test_drivable_car.gd`: regressoes do carro dirigivel: montagem da cena (4 rodas, assento, saida, area de atropelamento), entrar/sair e o dano de atropelamento por velocidade.
+- `test_run_over_target.gd`: duble de teste de zumbi que so conta o dano recebido, para o teste de atropelamento sem carregar a IA e a cena do zumbi real.
 - `test_apartment_layout.gd`: regressoes da planta dos predios: vao de porta sem parede atravessada, comodos alcancaveis, tamanho para o boneco e terraco acessivel.
 - `test_plan_layout.gd`: regressoes do adaptador planta procedural -> UnitBlueprint (comodos contidos, sem sobreposicao, alcancaveis, proporcionais ao boneco e variando por seed) e da flag `use_plan_layout`.
 - `test_player_unstuck.gd`: regressoes do destravar do jogador: sai de bloco, sai pelo lado sob teto baixo, recarga e teleporte no cliente.

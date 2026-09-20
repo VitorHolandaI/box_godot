@@ -414,22 +414,32 @@ func _test_first_person_camera_follows_head(test_root: Node) -> void:
 	test_root.add_child(camera)
 	camera.set("target", player)
 	camera.call("_process", 0.016)
-	var head := player.get_node("Model/Head") as Node3D
+	var head := player.get_node("Model/Head") as VisualInstance3D
+	var head_layer := 1 << FIRST_PERSON_CAMERA_SCRIPT.HEAD_RENDER_LAYER
 	var expected_y: float = player.global_position.y + FIRST_PERSON_CAMERA_SCRIPT.EYE_HEIGHT
-	var camera_ok := absf(camera.global_position.y - expected_y) < 0.01 and not head.visible
+	# Regressao: a layer da cabeca tem de estar dentro do cull_mask padrao do
+	# Godot, senao a cabeca some de TODAS as cameras, nao so da FPS.
+	var layer_within_default_mask := (0xFFFFF & head_layer) != 0
+	var camera_ok := absf(camera.global_position.y - expected_y) < 0.01 and head.layers == head_layer and layer_within_default_mask
 	player.set("camera_yaw", 0.0)
 	var forward: Vector2 = player.call("_local_aim_input")
 	player.set("camera_yaw", PI * 0.5)
 	var right: Vector2 = player.call("_local_aim_input")
+	# FPS: a mira 3D inclui o pitch (o tiro vai no retículo), nao so o yaw.
+	player.set("camera_yaw", 0.0)
+	player.set("view_pitch", 0.5)
+	var aim_3d: Vector3 = player.call("_local_aim_direction")
+	var aim_3d_ok := absf(aim_3d.length() - 1.0) < 0.001 and aim_3d.y > 0.3 and aim_3d.z < -0.5
+	player.set("view_pitch", 0.0)
 	var forward_move: Vector2 = player.call("_aim_relative_move", Vector2(0.0, -1.0))
 	var aim_ok := forward.distance_to(Vector2(0.0, -1.0)) < 0.01 and right.distance_to(Vector2(-1.0, 0.0)) < 0.01
 	var move_ok := forward_move.distance_to(Vector2(-1.0, 0.0)) < 0.01
 	player.call("set_first_person", false)
 	camera.free()
-	var head_visible := head.visible
+	var head_restored := head.layers != head_layer
 	player.free()
-	if not camera_ok or not aim_ok or not move_ok or not head_visible:
-		_fail(test_root, "FPS: camera=%s mira=%s movimento=%s cabeca_voltou=%s; esperado camera na cabeca, mira pelo yaw e W na frente do olhar." % [camera_ok, aim_ok, move_ok, head_visible])
+	if not camera_ok or not aim_ok or not move_ok or not head_restored or not aim_3d_ok:
+		_fail(test_root, "FPS: camera=%s mira=%s mira3d=%s movimento=%s cabeca_voltou=%s; esperado camera na cabeca, mira pelo yaw e W na frente do olhar." % [camera_ok, aim_ok, aim_3d_ok, move_ok, head_restored])
 		return
 	print("PASS: Primeira pessoa com camera na cabeca, mira pelo yaw, W relativo ao olhar e cabeca escondida.")
 
