@@ -3,6 +3,9 @@ extends RefCounted
 
 const BUILDING_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/building_assembler.gd")
 const MESH_BATCHER: GDScript = preload("res://scripts/procedural/assemblers/mesh_batcher.gd")
+const ASPHALT_SHADER: Shader = preload("res://shaders/street_asphalt.gdshader")
+## Material de asfalto por largura de pista; ver _asphalt_material.
+static var _asphalt_cache: Dictionary = {}
 # Acima do ultimo andar: cobre telhado de casa e a casinha da escada do terraco.
 const ROOF_CLEARANCE := 3.0
 
@@ -17,9 +20,24 @@ static func assemble(city, parent: Node3D) -> void:
 ## Monta so as ruas; usado pela montagem em etapas da cidade.
 ## Uso: ProceduralCityAssembler.assemble_roads(city, parent)
 static func assemble_roads(city, parent: Node3D) -> void:
-	var road_material := _material(Color(0.07, 0.08, 0.09))
 	for road in city.roads:
-		_add_road(parent, road, road_material)
+		_add_road(parent, road, _asphalt_material(road.width))
+
+
+## Asfalto procedural (grao, remendo, trinca, sarjeta e faixa central). O
+## material depende so da largura da pista (a faixa precisa saber onde e o meio
+## e a sarjeta onde e a borda), entao e cacheado por largura: sao 2 larguras e
+## ~80 trechos de rua, e um material por trecho quebraria o batching.
+static func _asphalt_material(road_width: float) -> ShaderMaterial:
+	var key := snappedf(road_width, 0.01)
+	var cached: Variant = _asphalt_cache.get(key)
+	if cached != null:
+		return cached as ShaderMaterial
+	var material := ShaderMaterial.new()
+	material.shader = ASPHALT_SHADER
+	material.set_shader_parameter("lane_half_width", road_width * 0.5)
+	_asphalt_cache[key] = material
+	return material
 
 
 ## Monta um lote (predio) isolado; usado pela montagem em etapas para
