@@ -18,7 +18,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `capture_shots.sh`: captura os frames de divulgacao do README pelo modo `--capture` do jogo e otimiza para `docs/imagens/` (`--shot=NOME`, `--list`, `--no-optimize`; brutos em `dist/capturas/`).
 - `corpse_cleanup_policy.gd`: escolhe quais ragdolls somem: so os longe de todos os jogadores, com teto que remove o mais distante.
 - `casa_lab.gd`: gera uma construcao por vez (casa/loja/mercado/predio) pelo caminho da cidade procedural (`building_generator` -> `ProceduralCityAssembler`) e regenera com outra seed pelo botao Gerar/tecla G, para ver a variacao de layout interno; `[`/`]` trocam o tipo e a camera e a do survival/PVP (`local_camera.gd`; ESC solta o mouse, `--lab-voo` usa a camera de voo).
-- `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
+- `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas. Expoe `get_minimap_layout()` (ruas e pegadas dos predios) para o minimapa desenhar o mapa gerado de fundo.
 - `crate_weapon_model_builder.gd`: modelos em caixas das armas de crate na mao do jogador (escopetas, fuzis, sniper, bazuca e armas futuristas com faixas brilhando).
 - `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores e que abre para longe de quem interage; a direcao e replicada na rede. Tambem treme ao apanhar e pode ser arrombada por zumbis, faca ou tiro, liberando o vao.
 - `door_debris_effect.gd`: animacao visual de tabuas e lascas voando quando uma porta e arrombada.
@@ -59,6 +59,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_equipment.gd`: regressoes dos itens (contagem, teclas sem conflito, granada no pavio, arremesso de granada e faca, item de granadas no chao).
 - `test_ground_weapon_pickup.gd`: regressoes da coleta de arma no chao: troca com arma de crate na mao ou guardada, modelo grande no piso e nome perto do jogador; municao automatica ao passar pela mesma arma.
 - `test_in_game_settings.gd`: regressoes das configuracoes na partida (captura por dispositivo, tecla nova no InputMap, menu do Esc abrindo graficos e teclas).
+- `test_minimap.gd`: regressoes do minimapa: direcao da seta do jogador (forward -Z projetado) e layout do mapa gerado (ruas e uma pegada por predio, dentro do alcance).
 - `test_player_capacity.gd`: regressoes do `--max-players`, da recusa de entrada e do spawn sem empilhar alem de 4 jogadores.
 - `test_player_snapshot_codec.gd`: regressoes do snapshot binario de jogadores (ida e volta, tamanho, 24 jogadores em poucos pacotes, truncado, envio dos slots e id de peer negativo).
 - `test_safehouse_door.gd`: regressoes da porta da safehouse: E abre/fecha pelo raycast e o main acha a porta criada pela cidade em etapas.
@@ -107,7 +108,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `server_ping_probe.gd`: mede RTT usando o ping nativo do ENet na porta do jogo.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores, indestrutivel e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
-- `split_screen_manager.gd`: viewports com audio 3D, cameras (isometrica ou primeira pessoa por jogador), HUDs locais e minimapa com o jogador, os aliados, os zumbis dentro do raio do sonar e todos os zumbis quando restam 5 ou menos.
+- `split_screen_manager.gd`: viewports com audio 3D, cameras (isometrica ou primeira pessoa por jogador), HUDs locais e minimapa com o mapa gerado de fundo (ruas e predios), a seta de direcao de cada boneco, os aliados, os zumbis dentro do raio do sonar e todos os zumbis quando restam 5 ou menos.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_building_navigation.gd`: regressoes da escada alternada, navmesh por edificio, zumbi subindo/descendo, jogador subindo e zumbi saindo de casa arrombando portas.
 - `test_city_props.gd`: regressoes da altura/posicao dos postes e do telhado das casas.

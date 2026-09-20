@@ -63,6 +63,11 @@ const BUILDING_COLORS := [
 ## esta flag levanta. Veja is_city_ready().
 var city_ready := false
 
+## Ruas e pegadas dos predios para o minimapa desenhar o mapa de fundo.
+## {"roads": [{"start": Vector2, "finish": Vector2, "width": float}],
+##  "buildings": [{"center": Vector2, "size": Vector2}]} em (x, z).
+var minimap_layout: Dictionary = {}
+
 var road_material: StandardMaterial3D
 var line_material: StandardMaterial3D
 var boundary_material: StandardMaterial3D
@@ -84,7 +89,49 @@ func _ready() -> void:
 	_create_street_props()
 	_create_boundaries()
 	_create_forest()
+	minimap_layout = legacy_minimap_layout()
 	city_ready = true
+
+
+## Layout do minimapa quando a cidade procedural esta desligada (--legacy-city):
+## ruas nas colunas fixas e os 36 lotes da grade, sem blueprint para consultar.
+## Uso: city.minimap_layout = legacy_minimap_layout()
+static func legacy_minimap_layout() -> Dictionary:
+	var half := ROAD_LENGTH * 0.5
+	var roads: Array = []
+	for offset in ROAD_OFFSETS:
+		roads.append({"start": Vector2(offset, -half), "finish": Vector2(offset, half), "width": 8.0})
+		roads.append({"start": Vector2(-half, offset), "finish": Vector2(half, offset), "width": 8.0})
+	var buildings: Array = []
+	for x in LOT_CENTERS:
+		for z in LOT_CENTERS:
+			buildings.append({"center": Vector2(x, z), "size": Vector2(18.0, 18.0)})
+	return {"roads": roads, "buildings": buildings}
+
+
+## Layout estatico do minimapa a partir do blueprint procedural: um segmento
+## por lance de rua e uma pegada por lote com predio. Dado puro (sem cena).
+## Uso: city_generator.minimap_layout = build_minimap_layout(cidade)
+static func build_minimap_layout(city) -> Dictionary:
+	var roads: Array = []
+	for road in city.roads:
+		roads.append({"start": road.start, "finish": road.finish, "width": road.width})
+	var buildings: Array = []
+	for block in city.blocks:
+		for lot in block.lots:
+			if lot.building == null:
+				continue
+			buildings.append({
+				"center": lot.position,
+				"size": Vector2(lot.building.width, lot.building.depth),
+			})
+	return {"roads": roads, "buildings": buildings}
+
+
+## Layout do minimapa; vazio ate a cidade terminar de montar.
+## Uso: var layout := city.get_minimap_layout()
+func get_minimap_layout() -> Dictionary:
+	return minimap_layout
 
 
 ## Montagem em etapas: o blueprint (dado puro, sem cena) roda na thread pool,
@@ -96,6 +143,7 @@ func _build_procedural_city() -> void:
 	_hide_legacy_center_roads()
 	_create_procedural_safehouse()
 	var city = await _generate_blueprint_async(NetworkSession.world_seed, NetworkSession.survival_mode, NetworkSession.pvp_mode)
+	minimap_layout = build_minimap_layout(city)
 	PROCEDURAL_CITY_ASSEMBLER.assemble_roads(city, self)
 	var safehouse_area: Array[Rect2] = [SAFEHOUSE_LOT_AREA]
 	STREET_LIGHT_ASSEMBLER.assemble(city, self, safehouse_area)
