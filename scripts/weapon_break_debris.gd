@@ -43,7 +43,7 @@ static func spawn(scene_root: Node, origin: Vector3) -> void:
 	metallic.roughness = 0.45
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
-	for piece_index in PIECE_COUNT:
+	for _piece_index in PIECE_COUNT:
 		var mesh := MeshInstance3D.new()
 		var box := BoxMesh.new()
 		box.size = Vector3(0.1, 0.1, 0.18)
