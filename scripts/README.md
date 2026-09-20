@@ -71,6 +71,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
 - `test_zombie_crowd_slots.gd`: regressoes da fila de ataque (anel cheio, vaga expirando, atacante sem esperar a propria vaga, zumbi real parado na fila).
+- `test_zombie_hit_zones.gd`: regressoes do dano localizado: zona pela parte mais proxima do impacto, cabeca dobrando o dano, perna derrubando a velocidade, braco enfraquecendo o golpe e dano sem ponto de impacto (melee/fogo) como torso.
 - `test_zombie_l4d_specials.gd`: regressoes do puxador, curandeiro e espreitador (registro e ondas, lingua, movimento forcado, cura e cadaver, bote e revelacao).
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
 - `test_zombie_specials.gd`: regressoes do cuspidor, da investida, dos tipos acima de 15 no snapshot e das especiais desde a hora 1.
@@ -136,7 +137,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `server_menu.sh`: menu do servidor local no docker compose — escolhe no ato sobrevivencia ou mata-mata PVP, com ou sem rebuild, e ainda parar/logs/status. Aceita modo+acao por argumento (`pvp up`, `survival start`), variaveis `PVP_BOTS`/`PORT`/`SERVER_NAME`, `DRY_RUN=1` para so mostrar o comando e `self-test` (checa o script sem docker).
 - `test_container.sh`: smoke test do servidor Docker.
 - `test_dedicated.sh`: smoke test do servidor Godot nativo executando testes unitarios e teste com bot.
-- `zombie.gd`: IA de zumbi com perseguicao global do jogador, rota pelo navmesh do edificio (sai de comodos, usa escadas, quebra portas sem abri-las), empurrao de bando limitado, desintegracao por FOV, sentidos, combate bloqueado por paredes, knockback e variantes anatomicas.
+- `zombie.gd`: IA de zumbi com perseguicao global do jogador, rota pelo navmesh do edificio (sai de comodos, usa escadas, quebra portas sem abri-las), empurrao de bando limitado, desintegracao por FOV, sentidos, combate bloqueado por paredes, knockback e variantes anatomicas. `take_damage` aceita o ponto de impacto (mundo) e aplica dano localizado: zona pela parte mais proxima, cabeca 2x, perna -40% de velocidade, braco -50% de golpe.
 - `zombie_boss_brain.gd`: cerebro do super zumbi Tita: pisao em area, invocacao de sprinters em 66%/33% e furia abaixo de 25%.
 - `zombie_burn.gd`: fogo no zumbi: dano por segundo em ticks e espalha para vizinhos a 1,5 m ate 2 saltos.
 - `zombie_crowd_slots.gd`: fila de ataque estilo Left 4 Dead: no maximo 8 zumbis batem no mesmo jogador; os outros a 3 m esperam parados sem move_and_slide ate abrir vaga.

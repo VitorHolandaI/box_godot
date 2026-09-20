@@ -90,7 +90,7 @@ func _set_swing_away_from(opener_position: Vector3) -> void:
 ## and bullets all count; at zero health the door bursts into debris and stops
 ## blocking the doorway.
 ## Usage: door.take_damage(25, attacker_forward, "knife", player)
-func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null) -> void:
+func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null, _hit_position: Vector3 = Vector3.INF) -> void:
 	if amount <= 0 or is_destroyed:
 		return
 	health = maxi(health - amount, 0)
