@@ -11,6 +11,9 @@ signal player_eliminated()
 ## (partida local ou servidor).
 signal crate_weapon_broken(kind: int)
 signal crate_weapon_dropped(kind: int, mag: int, reserve: int, durability: int)
+## Emitido quando o jogador troca entre isometrica e primeira pessoa; o
+## split_screen_manager reconstroi a camera e o HUD.
+signal first_person_changed(enabled: bool)
 
 ## Ordem segue WeaponStats.Kind: as armas de crate ficam por ultimo.
 ## Mesma ordem de WeaponStats.Kind (os inteiros viajam na rede e nos slots).
@@ -121,6 +124,19 @@ var walk_time := 0.0
 var spawn_position := Vector3.ZERO
 var move_input := Vector2.ZERO
 var aim_input := Vector2.ZERO
+## Mira pelo cursor (isometrica) e primeira pessoa. `camera_yaw` e o yaw livre
+## do modo FPS (o corpo segue ele); `view_pitch` inclina so a camera.
+const AIM_SENSITIVITY := 0.0022
+const AIM_PITCH_LIMIT := 1.35
+var mouse_aim := true
+var first_person := false
+var camera_yaw := 0.0
+var view_pitch := 0.0
+## Camera/viewport do jogador, setados pelo split_screen_manager, para projetar
+## o cursor no chao. `mouse_owner` diz quem controla o unico cursor (P1).
+var aim_camera: Camera3D = null
+var aim_viewport: Viewport = null
+var mouse_owner := true
 var jump_pressed := false
 var sprint_pressed := false
 var attack_pressed := false
@@ -173,6 +189,9 @@ func _ready() -> void:
 	safe_margin = 0.08
 	max_slides = 6
 	spawn_position = global_position
+	mouse_aim = GameConfig.mouse_aim_enabled
+	first_person = GameConfig.first_person_enabled
+	camera_yaw = rotation.y
 	snapshot_buffer.reset(float(Time.get_ticks_msec()), global_position, rotation.y)
 	_apply_player_color()
 	_build_crate_weapon_models()
@@ -243,7 +262,10 @@ func _physics_process(delta: float) -> void:
 	var direction := Vector3(move_input.x, 0.0, move_input.y).normalized()
 	_update_stamina(delta, not direction.is_zero_approx() and sprint_pressed)
 	_update_noise(delta, direction)
-	if not aim_input.is_zero_approx():
+	if first_person:
+		# FPS: o yaw vem do mouse (sem suavizar), o corpo inteiro segue.
+		rotation.y = camera_yaw
+	elif not aim_input.is_zero_approx():
 		var target_rotation := atan2(-aim_input.x, -aim_input.y)
 		rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
 	elif not direction.is_zero_approx():
@@ -285,7 +307,7 @@ func get_local_input_state() -> Dictionary:
 		"throw_knife": Input.is_action_pressed(input_action_prefix + "throw_knife"),
 		"air_strike": Input.is_action_pressed(input_action_prefix + "air_strike"),
 		"swat": Input.is_action_pressed(input_action_prefix + "swat"),
-		"aim": aim_input,
+		"aim": _local_aim_input(),
 	}
 
 
@@ -1227,6 +1249,9 @@ func _update_stamina(delta: float, wants_to_sprint: bool) -> void:
 
 func _poll_input() -> void:
 	move_input = Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down")
+	if Input.is_action_just_pressed(input_action_prefix + "view"):
+		toggle_first_person()
+	aim_input = _local_aim_input()
 	jump_pressed = Input.is_action_just_pressed(input_action_prefix + "jump")
 	sprint_pressed = Input.is_action_pressed(input_action_prefix + "sprint")
 	attack_pressed = Input.is_action_just_pressed(input_action_prefix + "attack")
@@ -1282,6 +1307,85 @@ func _clear_transient_input() -> void:
 	throw_knife_pressed = false
 	air_strike_pressed = false
 	swat_pressed = false
+
+
+## Look do FPS: o movimento do mouse gira o corpo (yaw) e inclina a camera
+## (pitch). So o dono do cursor aplica, para nao girar todos os jogadores juntos.
+func _input(event: InputEvent) -> void:
+	if not first_person or not is_local_controller or not mouse_owner:
+		return
+	if GameConfig.menu_open or Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		return
+	if event is InputEventMouseMotion:
+		var motion := event as InputEventMouseMotion
+		camera_yaw = wrapf(camera_yaw - motion.relative.x * AIM_SENSITIVITY, -PI, PI)
+		view_pitch = clampf(view_pitch - motion.relative.y * AIM_SENSITIVITY, -AIM_PITCH_LIMIT, AIM_PITCH_LIMIT)
+
+
+## Direcao de mira local (XZ no mundo). O FPS usa o yaw do mouse; a isometrica
+## projeta o cursor no chao. Sem mira o corpo volta a virar para o movimento.
+## Uso: chamado por _poll_input e por get_local_input_state.
+func _local_aim_input() -> Vector2:
+	if first_person:
+		return Vector2(-sin(camera_yaw), -cos(camera_yaw))
+	if GameConfig.mouse_aim_enabled and mouse_aim and mouse_owner:
+		return _mouse_ground_direction()
+	return Vector2.ZERO
+
+
+## Projeta o cursor do viewport do jogador no plano do chao e devolve a direcao
+## (XZ) do boneco ate o ponto. Uso: interno da mira.
+func _mouse_ground_direction() -> Vector2:
+	if aim_camera == null or not is_instance_valid(aim_camera) or aim_viewport == null or not is_instance_valid(aim_viewport):
+		return Vector2.ZERO
+	var screen_point := aim_viewport.get_mouse_position()
+	var ray_origin := aim_camera.project_ray_origin(screen_point)
+	var ray_direction := aim_camera.project_ray_normal(screen_point)
+	var ground := Plane(Vector3.UP, global_position.y + 0.1)
+	var hit: Variant = ground.intersects_ray(ray_origin, ray_direction)
+	if hit == null:
+		return Vector2.ZERO
+	var offset := Vector2((hit as Vector3).x - global_position.x, (hit as Vector3).z - global_position.z)
+	if offset.length_squared() < 0.04:
+		return Vector2.ZERO
+	return offset.normalized()
+
+
+## Alterna isometrica <-> primeira pessoa. Uso: tecla "view" e menu.
+func toggle_first_person() -> void:
+	set_first_person(not first_person)
+
+
+## Uso: player.set_first_person(true)
+func set_first_person(enabled: bool) -> void:
+	if first_person == enabled:
+		return
+	first_person = enabled
+	if first_person:
+		camera_yaw = rotation.y
+		view_pitch = 0.0
+	first_person_changed.emit(first_person)
+	_apply_mouse_capture()
+
+
+## Em FPS o cursor fica preso (o mouse olha); na isometrica ele volta a mirar.
+## Com o menu aberto quem manda e o menu. Uso: interno.
+func _apply_mouse_capture() -> void:
+	if GameConfig.menu_open:
+		return
+	if first_person and is_local_controller:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	elif not _another_local_player_in_first_person():
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+
+
+## Algum outro jogador local ja esta em primeira pessoa (cursor ja preso)?
+## Uso: interno do _apply_mouse_capture.
+func _another_local_player_in_first_person() -> bool:
+	for node in get_tree().get_nodes_in_group("player"):
+		if node != self and node.get("is_local_controller") == true and bool(node.get("first_person")):
+			return true
+	return false
 
 
 ## Equipa e seleciona uma arma de crate na autoridade (esquadrao SWAT com Uzi).

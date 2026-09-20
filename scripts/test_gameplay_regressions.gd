@@ -10,6 +10,7 @@ const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const PERFORMANCE_HUD_SCRIPT := preload("res://scripts/performance_hud.gd")
 const LOCAL_CAMERA_SCRIPT := preload("res://scripts/local_camera.gd")
+const FIRST_PERSON_CAMERA_SCRIPT := preload("res://scripts/first_person_camera.gd")
 const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/generators/city_generator.gd")
 const PROCEDURAL_BUILDING_GENERATOR: GDScript = preload("res://scripts/procedural/generators/building_generator.gd")
 const PROCEDURAL_BUILDING_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/building_assembler.gd")
@@ -30,6 +31,7 @@ func run(test_root: Node) -> void:
 	_test_hud_alive_zombie_count(test_root)
 	_test_minimap_reveals_zombies_on_sonar(test_root)
 	_test_camera_keeps_fixed_yaw(test_root)
+	_test_first_person_camera_follows_head(test_root)
 	_test_enterable_building_spawn_marker(test_root)
 	_test_no_street_zombie_starts(test_root)
 	_test_spawn_locations_stay_in_forest(test_root)
@@ -340,6 +342,37 @@ func _test_camera_keeps_fixed_yaw(test_root: Node) -> void:
 	player.free()
 	building.free()
 	print("PASS: Camera segue o jogador sem girar o yaw e mantendo a aura alinhada.")
+
+
+func _test_first_person_camera_follows_head(test_root: Node) -> void:
+	print("Testando camera de primeira pessoa e mira pelo yaw...")
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.reads_local_input = false
+	player.is_local_controller = false
+	player.position = Vector3(5.0, 1.0, 5.0)
+	test_root.add_child(player)
+	player.call("set_first_person", true)
+	var camera := Camera3D.new()
+	camera.set_script(FIRST_PERSON_CAMERA_SCRIPT)
+	test_root.add_child(camera)
+	camera.set("target", player)
+	camera.call("_process", 0.016)
+	var head := player.get_node("Model/Head") as Node3D
+	var expected_y: float = player.global_position.y + FIRST_PERSON_CAMERA_SCRIPT.EYE_HEIGHT
+	var camera_ok := absf(camera.global_position.y - expected_y) < 0.01 and not head.visible
+	player.set("camera_yaw", 0.0)
+	var forward: Vector2 = player.call("_local_aim_input")
+	player.set("camera_yaw", PI * 0.5)
+	var right: Vector2 = player.call("_local_aim_input")
+	var aim_ok := forward.distance_to(Vector2(0.0, -1.0)) < 0.01 and right.distance_to(Vector2(-1.0, 0.0)) < 0.01
+	player.call("set_first_person", false)
+	camera.free()
+	var head_visible := head.visible
+	player.free()
+	if not camera_ok or not aim_ok or not head_visible:
+		_fail(test_root, "FPS: camera=%s mira=%s cabeca_voltou=%s; esperado camera na cabeca, mira pelo yaw e cabeca visivel ao sair." % [camera_ok, aim_ok, head_visible])
+		return
+	print("PASS: Primeira pessoa com camera na cabeca, mira pelo yaw e cabeca escondida.")
 
 
 func _test_enterable_building_spawn_marker(test_root: Node) -> void:
