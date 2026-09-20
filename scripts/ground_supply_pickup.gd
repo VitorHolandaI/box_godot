@@ -206,7 +206,11 @@ func _add_class_label() -> void:
 	label.modulate = color_for(supply_kind)
 	label.outline_modulate = Color(0.0, 0.0, 0.0, 0.9)
 	label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	label.no_depth_test = true
+	# Sem atravessar parede e sumindo longe: antes as etiquetas de municao
+	# apareciam a qualquer distancia (no_depth_test) e atravessavam os predios.
+	label.no_depth_test = false
+	label.visibility_range_end = 16.0
+	label.visibility_range_end_margin = 4.0
 	label.font_size = 40
 	label.pixel_size = 0.006
 	label.position = Vector3(0.0, 0.55, 0.0)
