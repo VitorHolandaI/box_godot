@@ -1,0 +1,50 @@
+{
+	"limits": {
+		"file_lines_soft": 500,
+		"file_lines_hard": 800,
+		"function_lines": 80,
+		"function_lines_critical": 120,
+		"max_parameters": 5,
+		"max_nesting": 2,
+		"max_line_length": 120,
+		"cyclomatic_warning": 12,
+		"cyclomatic_critical": 20,
+		"god_class_functions": 20,
+		"god_class_signals": 10,
+		"god_class_exports": 15
+	},
+	"checks": {
+		"file_length": true,
+		"function_length": true,
+		"parameters": true,
+		"nesting": true,
+		"todo_comments": true,
+		"long_lines": false,
+		"print_statements": false,
+		"empty_functions": true,
+		"magic_numbers": false,
+		"commented_code": false,
+		"missing_types": false,
+		"cyclomatic_complexity": true,
+		"god_class": true,
+		"naming_conventions": true,
+		"unused_variables": true,
+		"unused_parameters": false,
+		"missing_return_type": false,
+		"ignore_underscore_prefix": true,
+		"ascii_only": false,
+		"ascii_only_project_wide": false,
+		"strict_limits": true,
+		"sealed": true
+	},
+	"scanning": {
+		"respect_gdignore": true,
+		"scan_addons": false,
+		"respect_ignore_directives": true,
+		"included_addons": [],
+		"excluded_addons": []
+	},
+	"exclude": {
+		"paths": ["addons/", ".godot/", "screenshots/"]
+	}
+}
