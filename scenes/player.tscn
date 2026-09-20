@@ -145,13 +145,13 @@ position = Vector3(0.2, 0.02, 0)
 position = Vector3(0, -0.42, 0)
 mesh = SubResource("LegMesh")
 
-[node name="LeftBoot" type="CSGBox3D" parent="Model"]
-position = Vector3(-0.2, -0.75, -0.03)
+[node name="LeftBoot" type="CSGBox3D" parent="Model/LeftLeg"]
+position = Vector3(0, -0.77, -0.03)
 size = Vector3(0.36, 0.22, 0.42)
 material = SubResource("WeaponMaterial")
 
-[node name="RightBoot" type="CSGBox3D" parent="Model"]
-position = Vector3(0.2, -0.75, -0.03)
+[node name="RightBoot" type="CSGBox3D" parent="Model/RightLeg"]
+position = Vector3(0, -0.77, -0.03)
 size = Vector3(0.36, 0.22, 0.42)
 material = SubResource("WeaponMaterial")
 
