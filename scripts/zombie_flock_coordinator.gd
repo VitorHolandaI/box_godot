@@ -70,7 +70,9 @@ func _update_building_lights(delta: float) -> void:
 		return
 	_light_toggle_elapsed = 0.0
 	var margin := Vector3.ONE * LIGHT_MARGIN
-	var relevant_players: Array = _cached_players if not _cached_players.is_empty() else get_living_players(get_tree())
+	# get_living_players poda o cache: um peer que desconectou deixa o Node
+	# liberado em _cached_players, e o cast dele estourava com 8 peers.
+	var relevant_players: Array = get_living_players(get_tree())
 	for building_value in get_tree().get_nodes_in_group("visibility_building"):
 		var building := building_value as Node
 		if building == null or String(building.name).begins_with("CentralSafehouse"):
@@ -83,8 +85,10 @@ func _update_building_lights(delta: float) -> void:
 		var bounds := AABB(bounds_min, (max_value as Vector3) + margin - bounds_min)
 		var want_on := false
 		for player in relevant_players:
+			if not is_instance_valid(player):
+				continue
 			var player_node := player as Node3D
-			if player_node != null and is_instance_valid(player_node) and bounds.has_point(player_node.global_position):
+			if player_node != null and bounds.has_point(player_node.global_position):
 				want_on = true
 				break
 		var key := String(building.get_path())

@@ -2281,8 +2281,32 @@ func _get_player_spawn_position(slot: int) -> Vector3:
 	var marker_path := "GeneratedCity/CentralSafehouse/PlayerSpawn%d" % (spawn_slot + 1)
 	var marker := get_node_or_null(marker_path) as Marker3D
 	var base: Vector3 = marker.global_position if marker != null else PLAYER_SPAWN_POINTS[spawn_slot]
-	# Servidor com mais de 4 jogadores: nao nascer em cima de outro no marcador.
-	return base + PlayerCapacity.spawn_offset(slot, PLAYER_SPAWN_POINTS.size())
+	# Servidor com mais de 4 jogadores: procura um ponto livre em volta do
+	# marcador. O offset fixo caia dentro de parede/movel em alguns marcadores e
+	# o jogador nascia preso (visto no teste de 8 peers: moved=false).
+	var offset: Vector3 = PlayerCapacity.spawn_offset(slot, PLAYER_SPAWN_POINTS.size())
+	if offset == Vector3.ZERO:
+		return base
+	for step in 12:
+		var candidate: Vector3 = base + offset.rotated(Vector3.UP, TAU * float(step) / 12.0)
+		if _spawn_point_is_free(candidate):
+			return candidate
+	return base
+
+
+## Ponto de spawn livre de parede/movel (esfera do tamanho do boneco).
+## Uso: if _spawn_point_is_free(ponto): return ponto
+func _spawn_point_is_free(candidate: Vector3) -> bool:
+	var space := get_world_3d().direct_space_state
+	if space == null:
+		return true
+	var sphere := SphereShape3D.new()
+	sphere.radius = PlayerCapacity.SPAWN_FREE_RADIUS
+	var query := PhysicsShapeQueryParameters3D.new()
+	query.shape = sphere
+	query.transform = Transform3D(Basis.IDENTITY, candidate + Vector3.UP * 0.6)
+	query.collision_mask = 1
+	return space.intersect_shape(query, 1).is_empty()
 
 
 func _update_player_vision(delta: float) -> void:
