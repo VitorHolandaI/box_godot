@@ -32,6 +32,9 @@ const SONAR_INTERVAL := 10.0
 const SONAR_REVEAL_RADIUS := 45.0
 ## Raio de coleta por interacao de armas no chao (crates e dropadas).
 const GROUND_INTERACT_RADIUS := 2.8
+## Porta pode ser usada antes de encostar nela; ainda exige o raycast estar na
+## frente do boneco, para nao abrir porta atraves de parede.
+const DOOR_INTERACT_REACH := 3.5
 ## Segurando interagir ao lado do caido, reanimacao completa em ~3s.
 const REVIVE_DURATION := 3.0
 ## Pellet tracer: menor/mais curto que o tracer da pistola.
@@ -721,13 +724,16 @@ func _handle_interaction_input() -> void:
 		ground_weapon.call("interact_with", self)
 		return
 	var ray_start := head.global_position
-	var ray_end := ray_start - global_transform.basis.z * 2.5
+	var ray_end := ray_start - global_transform.basis.z * DOOR_INTERACT_REACH
 	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [self])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	var collider: Node = hit.get("collider")
 	while collider != null:
 		if collider.has_method("interact"):
-			collider.interact()
+			if collider.is_in_group("destructible_door"):
+				collider.interact(self)
+			else:
+				collider.interact()
 			return
 		collider = collider.get_parent()
 

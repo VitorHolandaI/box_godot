@@ -6,6 +6,7 @@ const ROAD_BLUEPRINT: GDScript = preload("res://scripts/procedural/blueprints/ro
 const BLOCK_BLUEPRINT: GDScript = preload("res://scripts/procedural/blueprints/block_blueprint.gd")
 const LOT_BLUEPRINT: GDScript = preload("res://scripts/procedural/blueprints/lot_blueprint.gd")
 const BUILDING_GENERATOR: GDScript = preload("res://scripts/procedural/generators/building_generator.gd")
+const LOT_FEASIBILITY: GDScript = preload("res://scripts/procedural/generators/lot_feasibility.gd")
 
 const ROAD_LINES := [-72.0, -24.0, 24.0, 72.0]
 const ROAD_ANCHORS := [-96.0, -72.0, -24.0, 24.0, 72.0, 96.0]
@@ -50,12 +51,12 @@ static func _generate_blocks(city, world_seed: int, survival_mode: bool, pvp_mod
 			var center: Vector2 = Vector2(-48.0 + float(x_index) * 48.0, -48.0 + float(z_index) * 48.0)
 			var district := "urban" if z_index < 2 else "suburban"
 			var block = BLOCK_BLUEPRINT.new("Block_%02d" % block_index, district, center, BLOCK_SIZE)
-			_generate_lots(block, world_seed + block_index * 97, survival_mode, pvp_mode)
+			_generate_lots(block, world_seed + block_index * 97, survival_mode, pvp_mode, city.roads)
 			city.add_block(block)
 			block_index += 1
 
 
-static func _generate_lots(block, block_seed: int, survival_mode: bool, pvp_mode: bool = false) -> void:
+static func _generate_lots(block, block_seed: int, survival_mode: bool, pvp_mode: bool, roads: Array) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = block_seed
 	var lot_index := 0
@@ -73,13 +74,22 @@ static func _generate_lots(block, block_seed: int, survival_mode: bool, pvp_mode
 			var jitter := Vector2.ZERO if reserved_lot else Vector2(rng.randf_range(-1.0, 1.0), rng.randf_range(-1.0, 1.0))
 			var lot_position: Vector2 = block.position + Vector2(-10.5 + float(x_index) * 21.0, -10.5 + float(z_index) * 21.0) + jitter
 			var lot_seed := block_seed + lot_index * 31
-			var archetype := "house"
-			if block.district == "urban":
-				var urban_variant := absi(block_seed + lot_index) % (16 if survival_mode else 8)
-				archetype = "store" if urban_variant == 0 else "grocery" if urban_variant == 1 else "apartment" if urban_variant == 2 else "house"
+			# Viabilidade no lugar do sorteio seco: area, frentes de rua, declive
+			# e distrito pesam qual arquetipo cabe (lot_feasibility.gd).
+			var features := {
+				"area": LOT_SIZE.x * LOT_SIZE.y,
+				"street_sides": LOT_FEASIBILITY.street_facing_sides(lot_position, LOT_SIZE, roads),
+				# Terreno ainda e plano; o declive entra aqui quando houver relevo.
+				"slope": 0.0,
+				"district": block.district,
+				"survival": survival_mode,
+			}
+			var pick_rng := RandomNumberGenerator.new()
+			pick_rng.seed = lot_seed
+			var archetype: String = LOT_FEASIBILITY.choose_archetype(features, pick_rng)
 			var lot = LOT_BLUEPRINT.new("%s_Lot_%d" % [block.id, lot_index], lot_seed, block.district, lot_position, LOT_SIZE)
 			lot.building_rotation_y = 0.0 if z_index == 0 else PI
-			if not reserved_lot:
+			if not reserved_lot and not archetype.is_empty():
 				lot.building = BUILDING_GENERATOR.generate(lot_seed, archetype)
 			block.add_lot(lot)
 			lot_index += 1
