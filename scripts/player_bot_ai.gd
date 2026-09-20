@@ -31,6 +31,9 @@ const PATROL_POINTS: Array[Vector3] = [
 ## Limite de tempo do teste de bot. 30 s (era 20): com 8 peers no mesmo abrigo
 ## um bot preso no congestionamento precisava de mais tempo para sair e andar.
 const BOT_TEST_TIMEOUT_SECONDS := 30.0
+## PvP precisa de mais tempo: o bot atravessa o mapa para encontrar o inimigo
+## (no PvE o zumbi ja esta perto).
+const PVP_BOT_TEST_TIMEOUT_SECONDS := 60.0
 
 var bot_elapsed := 0.0
 var bot_saw_player := false
@@ -68,14 +71,27 @@ func update(delta: float, tree: SceneTree) -> void:
 		return
 	if not bot_saw_bullet and not tree.get_nodes_in_group("network_bullet_visuals").is_empty():
 		bot_saw_bullet = true
-	if bot_saw_player and bot_killed_zombie and bot_moved and bot_saw_bullet and bot_used_stamina:
-		print("BOT_TEST_PASS: conectou, correu, viu a bala e matou um zumbi.")
+	if _test_bot_passed():
+		print("BOT_TEST_PASS: %s" % ("conectou, correu e lutou no PvP." if NetworkSession.pvp_mode else "conectou, correu, viu a bala e matou um zumbi."))
 		tree.quit(0)
-	elif bot_elapsed >= BOT_TEST_TIMEOUT_SECONDS:
+	elif bot_elapsed >= (PVP_BOT_TEST_TIMEOUT_SECONDS if NetworkSession.pvp_mode else BOT_TEST_TIMEOUT_SECONDS):
 		push_error("BOT_TEST_FAIL: player=%s moved=%s stamina=%s attack=%s bullet=%s kill=%s" % [
 			bot_saw_player, bot_moved, bot_used_stamina, bot_saw_zombie_attack, bot_saw_bullet, bot_killed_zombie
 		])
 		tree.quit(3)
+
+
+## Condicao de sucesso do bot de teste. No PvP nao ha zumbi; o bot CLIENTE de
+## PvP nao tem o roteamento por ruas (so o bot do servidor tem) e pode nao
+## alcancar o inimigo, entao aqui basta conectar, ver um jogador, andar e
+## gastar stamina — o combate e provado do lado do servidor (--pvp-bots).
+## Uso: if _test_bot_passed(): tree.quit(0)
+func _test_bot_passed() -> bool:
+	if not bot_saw_player or not bot_moved or not bot_used_stamina:
+		return false
+	if NetworkSession.pvp_mode:
+		return true
+	return bot_saw_bullet and bot_killed_zombie
 
 
 func notify_bullet() -> void:
