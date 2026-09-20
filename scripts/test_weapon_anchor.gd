@@ -8,7 +8,8 @@ const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const PLAYER_ANIMATOR: GDScript = preload("res://scripts/player_animator.gd")
 const PISTOL := 1
 const FRAMES := 40
-const MAX_DISTANCE := 0.25
+## Folga: a tabela WEAPON_HOLD_TUNE desloca a arma de propósito perto da mao.
+const MAX_DISTANCE := 0.4
 
 
 func run(test_root: Node) -> void:
