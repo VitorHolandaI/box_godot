@@ -137,77 +137,114 @@ var _previous_player_count := 0
 var zombie_weapon_drops: Array[Node] = []
 
 
+## Monta a partida por papel: o comum, depois offline (jogadores locais) ou
+## rede (roster, smoke tests e carga do servidor).
 func _ready() -> void:
 	GameConfig.menu_open = false
 	FramePerfProbe.active = perf_probe
 	loot_rng.randomize()
 	in_game_menu.unstuck_requested.connect(_on_unstuck_requested)
 	survival_wave_controller = SURVIVAL_WAVE_CONTROLLER_SCRIPT.new(Callable(self, "_spawn_zombie"))
-	# Debug: pula direto para onda especifica e prespawn para teste de carga
+	_apply_debug_wave_arguments()
+	_start_game_mode()
+	_add_world_helpers()
+	if NetworkSession.is_offline():
+		_start_offline_match()
+		return
+	_start_network_match()
+
+
+## Debug: pula direto para uma onda especifica (`--test-wave=N`), para chegar
+## na horda cheia sem jogar as horas anteriores.
+func _apply_debug_wave_arguments() -> void:
 	for arg in OS.get_cmdline_user_args():
 		if arg.begins_with("--test-wave="):
-			var w := int(arg.trim_prefix("--test-wave=")) - 1
-			survival_wave_controller.wave_index = clampi(w, 0, survival_wave_controller.schedule.TARGETS.size() - 1)
+			var wave := int(arg.trim_prefix("--test-wave=")) - 1
+			survival_wave_controller.wave_index = clampi(wave, 0, survival_wave_controller.schedule.TARGETS.size() - 1)
 		if arg == "--test-wave-8":
 			survival_wave_controller.wave_index = 7
-	if not NetworkSession.is_client() and NetworkSession.pvp_mode:
-		# PVP: sem supimentos/airdrop/loot de sobrevivencia no mapa.
+
+
+## Mata-mata ou sobrevivencia, so onde a partida e simulada. O cliente nao
+## monta nem um nem outro: ele recebe tudo pronto.
+func _start_game_mode() -> void:
+	if NetworkSession.is_client():
+		return
+	if NetworkSession.pvp_mode:
+		# PVP: sem suprimentos/airdrop/loot de sobrevivencia no mapa.
 		pvp.start_match()
-	if not NetworkSession.is_client() and not NetworkSession.pvp_mode:
-		wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
-		airdrop_controller = AIRDROP_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
-		airdrop_controller.airdrop_requested.connect(loot.launch_airdrop)
-		# Transicao de onda escalonada: refresh de suprimentos, airdrop, loot
-		# e HUD rodam em frames distintos para nao varrer 600 zumbis 4x no
-		# mesmo frame (hitch de 1 frame a cada nova hora).
-		survival_wave_controller.wave_started.connect(_on_wave_transition)
-		wave_supply_controller.refresh_wave(survival_wave_controller.wave_index)
-		# Sem o loot aqui: a cidade monta em etapas e as ancoras internas ainda
-		# nao existem; o primeiro lote sai no _process quando ela fica pronta.
+		return
+	wave_supply_controller = WAVE_SUPPLY_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
+	airdrop_controller = AIRDROP_CONTROLLER_SCRIPT.new(get_tree(), NetworkSession.world_seed)
+	airdrop_controller.airdrop_requested.connect(loot.launch_airdrop)
+	# Transicao de onda escalonada: refresh de suprimentos, airdrop, loot
+	# e HUD rodam em frames distintos para nao varrer 600 zumbis 4x no
+	# mesmo frame (hitch de 1 frame a cada nova hora).
+	survival_wave_controller.wave_started.connect(_on_wave_transition)
+	wave_supply_controller.refresh_wave(survival_wave_controller.wave_index)
+	# Sem o loot aqui: a cidade monta em etapas e as ancoras internas ainda
+	# nao existem; o primeiro lote sai no _process quando ela fica pronta.
+
+
+## Nos que existem em qualquer papel: o cerebro das hordas, a captura de telas
+## de dev e a janela/sombras.
+func _add_world_helpers() -> void:
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
 	coordinator.name = "ZombieFlockCoordinator"
 	add_child(coordinator)
-
 	if SHOT_CAPTURE_SCRIPT.is_requested():
 		# Captura de frames para docs/README (dev-only): inerte sem --capture.
 		add_child(SHOT_CAPTURE_SCRIPT.new())
-
 	if not NetworkSession.bot_name.is_empty():
 		DisplayServer.window_set_title("Box Godot - %s" % NetworkSession.bot_name)
 	sun.shadow_enabled = GameConfig.uses_world_shadows()
-	if NetworkSession.is_offline():
-		var configs := _get_local_player_configs()
-		for slot in configs.size():
-			_spawn_offline_player(slot, configs[slot])
-		split_screen.configure(local_players)
-		if NetworkSession.weapons_lab:
-			_build_weapons_lab()
-			return
-		# Teste offline com horda: --test-wave=8 --prespawn-zombies=200
-		var offline_prespawn := LoadTestOptions.prespawn_zombie_count(OS.get_cmdline_user_args())
-		if offline_prespawn > 0:
-			_prespawn_load_test_zombies(offline_prespawn)
-		return
 
+
+## Partida local: os jogadores da tela dividida e, se pedido, o campo de armas
+## ou a horda de teste de carga.
+func _start_offline_match() -> void:
+	var configs := _get_local_player_configs()
+	for slot in configs.size():
+		_spawn_offline_player(slot, configs[slot])
+	split_screen.configure(local_players)
+	if NetworkSession.weapons_lab:
+		_build_weapons_lab()
+		return
+	# Teste offline com horda: --test-wave=8 --prespawn-zombies=200
+	var offline_prespawn := LoadTestOptions.prespawn_zombie_count(OS.get_cmdline_user_args())
+	if offline_prespawn > 0:
+		_prespawn_load_test_zombies(offline_prespawn)
+
+
+## Servidor ou cliente: roster de peers, smoke tests de dev e, no servidor, a
+## carga inicial e os bots de PVP.
+func _start_network_match() -> void:
 	NetworkSession.roster_changed.connect(_reconcile_network_players)
 	NetworkSession.server_lost.connect(_on_server_lost)
 	NetworkSession.peer_scene_loaded.connect(_on_peer_scene_loaded)
 	_configure_network_zombies()
 	_reconcile_network_players()
-	smoke_test_mode = NetworkSession.is_server() and "--smoke-test-zombie" in OS.get_cmdline_user_args()
-	if "--smoke-test-swat" in OS.get_cmdline_user_args():
-		swat_smoke = SwatSmokeTest.new(self, swat)
-	if smoke_test_mode:
-		_spawn_zombie(Vector3(-8.5, 1.0, 9.5))
-		var smoke_zombie := zombies.get_child(-1) as CharacterBody3D
-		smoke_zombie.set("health", 35)
-		smoke_zombie.set("speed", 0.0)
+	_start_smoke_tests()
 	if NetworkSession.is_server():
 		door_state_replicator.watch(get_tree())
 		_prespawn_load_test_zombies(LOAD_TEST_OPTIONS_SCRIPT.prespawn_zombie_count(OS.get_cmdline_user_args()))
 		if NetworkSession.pvp_mode:
 			pvp.spawn_bots_when_ready.call_deferred(LOAD_TEST_OPTIONS_SCRIPT.pvp_bot_count(OS.get_cmdline_user_args()))
 	_notify_scene_loaded.call_deferred()
+
+
+## Harnesses de desenvolvimento: um zumbi parado para mirar (--smoke-test-zombie)
+## e o teste da chamada de SWAT (--smoke-test-swat).
+func _start_smoke_tests() -> void:
+	if "--smoke-test-swat" in OS.get_cmdline_user_args():
+		swat_smoke = SwatSmokeTest.new(self, swat)
+	smoke_test_mode = NetworkSession.is_server() and "--smoke-test-zombie" in OS.get_cmdline_user_args()
+	if not smoke_test_mode:
+		return
+	_spawn_zombie(Vector3(-8.5, 1.0, 9.5))
+	var smoke_zombie := zombies.get_child(-1) as CharacterBody3D
+	smoke_zombie.set("health", 35)
+	smoke_zombie.set("speed", 0.0)
 
 
 ## Teste de carga: enche o mundo de zumbis ja no inicio para medir rede e CPU
@@ -284,7 +321,32 @@ func _perf_context() -> Dictionary:
 	}
 
 
+## Frame do mundo: sondas e limpeza em qualquer papel; depois, so onde a
+## partida e simulada, a cidade pronta e o avanco do modo de jogo.
 func _process(delta: float) -> void:
+	_tick_probes_and_cleanup(delta)
+	if NetworkSession.is_client() or smoke_test_mode:
+		return
+	if not _procedural_city_ready():
+		# Cidade ainda montando: nada de wave/zumbi sobre predio inexistente.
+		return
+	if NetworkSession.weapons_lab:
+		# Campo de armas: sem porta, loot aleatorio nem onda de zumbi.
+		return
+	_finish_city_setup()
+	if NetworkSession.pvp_mode:
+		# Mata-mata nao tem zumbi: sem isso o spawner do modo classico (que roda
+		# quando survival_mode e falso) enchia o mapa de zumbi durante o PVP.
+		return
+	if NetworkSession.survival_mode:
+		_tick_survival(delta)
+		return
+	_tick_classic_spawns(delta)
+
+
+## Sonda de frame, auditoria de fluxo, medidor de atraso, visao dos jogadores
+## e limpeza de cadaveres. Roda em todo papel, inclusive no cliente.
+func _tick_probes_and_cleanup(delta: float) -> void:
 	_finish_perf_frame(delta)
 	if flow_audit.is_enabled():
 		flow_audit.tick(delta, self)
@@ -296,43 +358,43 @@ func _process(delta: float) -> void:
 	perf_start = FramePerfProbe.begin()
 	_cleanup_far_ragdolls(delta)
 	FramePerfProbe.end("ragdoll_cleanup", perf_start)
-	if NetworkSession.is_client() or smoke_test_mode:
-		return
-	if not _procedural_city_ready():
-		# Cidade ainda montando: nada de wave/zumbi sobre predio inexistente.
-		return
-	if NetworkSession.weapons_lab:
-		# Campo de armas: sem porta, loot aleatorio nem onda de zumbi.
-		return
+
+
+## Duas coisas que so dao para fazer com a cidade INTEIRA montada, e por isso
+## nao cabem no _ready. Idempotente: cada uma roda uma vez.
+func _finish_city_setup() -> void:
 	if not _city_doors_watched:
 		# watch() no _ready corria com a cidade pela metade: as portas montam
 		# DEPOIS e ficavam sem listener, e nenhuma mudanca replicava. Re-assina
 		# os sinais com o mundo completo (watch e idempotente).
 		_city_doors_watched = true
 		door_state_replicator.watch(get_tree())
-	if not _initial_loot_spawned:
-		# Cidade pronta: agora as ancoras internas existem, entao o primeiro
-		# lote de loot nasce DENTRO dos predios (e nao mais na rua).
-		_initial_loot_spawned = true
-		loot.spawn_scattered(survival_wave_controller.wave_index)
-	if NetworkSession.pvp_mode:
-		# Mata-mata nao tem zumbi: sem isso o spawner do modo classico (que roda
-		# quando survival_mode e falso) enchia o mapa de zumbi durante o PVP.
+	if _initial_loot_spawned:
 		return
-	if NetworkSession.survival_mode:
-		_check_survival_room_reset()
-		_check_survival_game_over()
-		if survival_wave_controller.game_over:
-			if survival_wave_controller.tick_game_over(delta, not get_tree().get_nodes_in_group("player").is_empty()):
-				_restart_survival()
-			return
-		perf_start = FramePerfProbe.begin()
-		survival_wave_controller.tick(delta)
-		FramePerfProbe.end("wave_spawn", perf_start)
-		# Sem jogador nao ha onde espalhar (pick_clear_position gira em volta deles).
-		if not get_tree().get_nodes_in_group("player").is_empty():
-			_restock_class_ammo(delta)
+	# Cidade pronta: agora as ancoras internas existem, entao o primeiro
+	# lote de loot nasce DENTRO dos predios (e nao mais na rua).
+	_initial_loot_spawned = true
+	loot.spawn_scattered(survival_wave_controller.wave_index)
+
+
+## Sobrevivencia: sala vazia, derrota, avanco da onda e reposicao de municao.
+func _tick_survival(delta: float) -> void:
+	_check_survival_room_reset()
+	_check_survival_game_over()
+	if survival_wave_controller.game_over:
+		if survival_wave_controller.tick_game_over(delta, not get_tree().get_nodes_in_group("player").is_empty()):
+			_restart_survival()
 		return
+	var perf_start := FramePerfProbe.begin()
+	survival_wave_controller.tick(delta)
+	FramePerfProbe.end("wave_spawn", perf_start)
+	# Sem jogador nao ha onde espalhar (pick_clear_position gira em volta deles).
+	if not get_tree().get_nodes_in_group("player").is_empty():
+		_restock_class_ammo(delta)
+
+
+## Modo classico (sem ondas): zumbi pinga no ritmo da agenda ate o teto.
+func _tick_classic_spawns(delta: float) -> void:
 	if not zombie_spawn_schedule.is_spawn_due(delta):
 		return
 	var alive_count := get_tree().get_nodes_in_group("zombies").size()
@@ -340,12 +402,11 @@ func _process(delta: float) -> void:
 		push_warning("Spawn de zumbi adiado: nenhum ponto autorizado esta livre.")
 
 
+## Tick de fisica: o que vale para todos, depois o lado do cliente (envia
+## input, consome fila de spawn) ou o do servidor (manda os snapshots).
 func _physics_process(delta: float) -> void:
 	perf_probe.record_physics_step()
-	if NetworkSession.is_client() and NetworkSession.pvp_mode and buy_menu == null and not local_players.is_empty():
-		buy_menu = BuyMenu.new()
-		add_child(buy_menu)
-		buy_menu.setup(local_players[0], Callable(self, "request_purchase_local"), Callable(self, "pvp_status_text"))
+	_open_buy_menu_when_ready()
 	if not NetworkSession.is_client():
 		# Servidor e offline simulam o esquadrao; o cliente so aplica snapshot.
 		swat.update(delta)
@@ -356,39 +417,66 @@ func _physics_process(delta: float) -> void:
 	if pvp.is_active():
 		pvp.tick(delta)
 	if NetworkSession.is_client():
-		if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
-			bot_ai.update(delta, get_tree())
-		if lag_probe.is_enabled():
-			_record_received_network_traffic()
-		if lag_probe.is_enabled() and lag_probe.tick(delta, _server_round_trip_ms()):
+		_tick_client_network(delta)
+		return
+	if NetworkSession.is_server():
+		_tick_server_network(delta)
+
+
+## Menu de compra do mata-mata: so no cliente e so depois que o jogador local
+## existe (ele e criado a partir do roster, que chega depois da cena).
+func _open_buy_menu_when_ready() -> void:
+	if not (NetworkSession.is_client() and NetworkSession.pvp_mode):
+		return
+	if buy_menu != null or local_players.is_empty():
+		return
+	buy_menu = BuyMenu.new()
+	add_child(buy_menu)
+	buy_menu.setup(local_players[0], Callable(self, "request_purchase_local"), Callable(self, "pvp_status_text"))
+
+
+## Cliente: IA do bot de teste, medidor de atraso, envio de input e a fila de
+## spawn de zumbi (que entra aos poucos para nao dar hitch de instantiate).
+func _tick_client_network(delta: float) -> void:
+	if NetworkSession.bot_mode or NetworkSession.autoplay_bot:
+		bot_ai.update(delta, get_tree())
+	if lag_probe.is_enabled():
+		_record_received_network_traffic()
+		if lag_probe.tick(delta, _server_round_trip_ms()):
 			print(JSON.stringify(lag_probe.build_report()))
 			get_tree().quit(0)
-		input_elapsed += delta
-		if input_elapsed >= INPUT_INTERVAL:
-			input_elapsed = 0.0
-			_submit_inputs.rpc_id(NetworkSession.SERVER_ID, _collect_local_inputs(delta))
-		var drain_start := FramePerfProbe.begin()
-		_drain_zombie_spawn_queue()
-		FramePerfProbe.end("spawn_drain", drain_start)
-	elif NetworkSession.is_server():
-		ground_state_elapsed += delta
-		if ground_state_elapsed >= GROUND_STATE_INTERVAL:
-			ground_state_elapsed = 0.0
-			_send_ground_states()
-			_send_wave_progress()
-		snapshot_elapsed += delta
-		if snapshot_elapsed >= SNAPSHOT_INTERVAL:
-			snapshot_elapsed = 0.0
-			# So para quem ja carregou; antes um jogador carregando a cidade
-			# congelava os snapshots de todos os outros ate terminar.
-			if not NetworkSession.loaded_peers.is_empty():
-				var snapshot_start := FramePerfProbe.begin()
-				_send_door_states()
-				_send_player_snapshots(_collect_player_states())
-				FramePerfProbe.end("snapshot_players", snapshot_start)
-				snapshot_start = FramePerfProbe.begin()
-				_send_zombie_snapshots(_collect_zombie_states())
-				FramePerfProbe.end("snapshot_zombies", snapshot_start)
+			return
+	input_elapsed += delta
+	if input_elapsed >= INPUT_INTERVAL:
+		input_elapsed = 0.0
+		_submit_inputs.rpc_id(NetworkSession.SERVER_ID, _collect_local_inputs(delta))
+	var drain_start := FramePerfProbe.begin()
+	_drain_zombie_spawn_queue()
+	FramePerfProbe.end("spawn_drain", drain_start)
+
+
+## Servidor: estado do chao e progresso da onda a 2 Hz, snapshots a 10 Hz.
+func _tick_server_network(delta: float) -> void:
+	ground_state_elapsed += delta
+	if ground_state_elapsed >= GROUND_STATE_INTERVAL:
+		ground_state_elapsed = 0.0
+		_send_ground_states()
+		_send_wave_progress()
+	snapshot_elapsed += delta
+	if snapshot_elapsed < SNAPSHOT_INTERVAL:
+		return
+	snapshot_elapsed = 0.0
+	# So para quem ja carregou; antes um jogador carregando a cidade
+	# congelava os snapshots de todos os outros ate terminar.
+	if NetworkSession.loaded_peers.is_empty():
+		return
+	var snapshot_start := FramePerfProbe.begin()
+	_send_door_states()
+	_send_player_snapshots(_collect_player_states())
+	FramePerfProbe.end("snapshot_players", snapshot_start)
+	snapshot_start = FramePerfProbe.begin()
+	_send_zombie_snapshots(_collect_zombie_states())
+	FramePerfProbe.end("snapshot_zombies", snapshot_start)
 
 
 func _record_received_network_traffic() -> void:
