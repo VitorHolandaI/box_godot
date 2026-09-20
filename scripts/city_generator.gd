@@ -80,6 +80,11 @@ func is_city_ready() -> bool:
 
 
 func _ready() -> void:
+	if NetworkSession.weapons_lab:
+		# Campo de testes: sem cidade. O main.tscn ja tem o chao e o main monta
+		# a arena; deixar vazio evita gerar predios em volta.
+		city_ready = true
+		return
 	if NetworkSession.procedural_city_enabled:
 		_build_procedural_city.call_deferred()
 		return
