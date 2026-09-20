@@ -15,7 +15,7 @@ func run(test_root: Node) -> void:
 
 func _test_round_trip_keeps_state(test_root: Node) -> void:
 	print("Testando ida e volta do snapshot binario de zumbis...")
-	var alive := {"network_id": 4242, "position": Vector3(-123.456, 3.21, 88.8), "rotation": -2.5, "health": 85, "is_dead": false, "attack_sequence": 1234}
+	var alive := {"network_id": 4242, "position": Vector3(-123.456, 3.21, 88.8), "rotation": -2.5, "health": 85, "is_dead": false, "attack_sequence": 1234, "limb_loss_mask": 5}
 	var dead := {"network_id": 7, "position": Vector3(1.0, 0.5, -1.0), "rotation": 1.0, "health": 0, "is_dead": true, "attack_sequence": 3, "death_velocity": Vector3(2.5, -1.25, 0.5)}
 	var payload: PackedByteArray = CODEC_SCRIPT.encode([alive, dead])
 	var decoded: Array[Dictionary] = CODEC_SCRIPT.decode(payload)
@@ -25,14 +25,14 @@ func _test_round_trip_keeps_state(test_root: Node) -> void:
 	var first := decoded[0]
 	var rotation_error := absf(angle_difference(float(first["rotation"]), -2.5))
 	var position_ok := (first["position"] as Vector3).distance_to(alive["position"]) <= CODEC_SCRIPT.POSITION_SCALE
-	if first["name"] != "ZombieSpawn4242" or not position_ok or rotation_error > TAU / 256.0 or int(first["health"]) != 85 or int(first["attack_sequence"]) != 1234 or bool(first["is_dead"]):
+	if first["name"] != "ZombieSpawn4242" or not position_ok or rotation_error > TAU / 256.0 or int(first["health"]) != 85 or int(first["attack_sequence"]) != 1234 or int(first["limb_loss_mask"]) != 5 or bool(first["is_dead"]):
 		_fail(test_root, "Zumbi vivo decodificado errado: %s." % first)
 		return
 	var second := decoded[1]
 	if not bool(second["is_dead"]) or (second["death_velocity"] as Vector3).distance_to(dead["death_velocity"]) > CODEC_SCRIPT.VELOCITY_SCALE:
 		_fail(test_root, "Zumbi morto deveria trazer velocidade de morte: %s." % second)
 		return
-	print("PASS: Snapshot binario preserva id, posicao, rotacao, vida, ataque e morte.")
+	print("PASS: Snapshot binario preserva id, posicao, vida, ataque, membros perdidos e morte.")
 
 
 func _test_packets_fit_budget(test_root: Node) -> void:
@@ -73,7 +73,7 @@ func _test_round_trip_keeps_zombie_type(test_root: Node) -> void:
 	if decoded_types != expected or not bool(decoded[last]["is_dead"]) or payload.size() != CODEC_SCRIPT.ALIVE_RECORD_BYTES * last + CODEC_SCRIPT.DEAD_RECORD_BYTES:
 		_fail(test_root, "Tipos 0..%d deveriam voltar iguais sem crescer o registro; tipos=%s bytes=%d." % [last, decoded_types, payload.size()])
 		return
-	print("PASS: Snapshot binario carrega o tipo do zumbi sem bytes extras.")
+	print("PASS: Snapshot binario carrega tipo e mascara de membros em todos os registros.")
 
 
 func _test_truncated_payload_is_rejected(test_root: Node) -> void:

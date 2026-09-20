@@ -46,6 +46,8 @@ const NAVIGATION_SCRIPT: GDScript = preload("res://scripts/procedural/navigation
 const VARIANT_ABILITIES_SCRIPT: GDScript = preload("res://scripts/zombie_variant_abilities.gd")
 const BLOATER_BURST_EFFECT_SCRIPT: GDScript = preload("res://scripts/bloater_burst_effect.gd")
 const BOSS_BRAIN_SCRIPT: GDScript = preload("res://scripts/zombie_boss_brain.gd")
+const LIMB_STATE_SCRIPT: GDScript = preload("res://scripts/zombie_limb_state.gd")
+const LIMB_DEBRIS_SCRIPT: GDScript = preload("res://scripts/zombie_limb_debris.gd")
 const BLOATER_BURST_COLOR := Color(0.55, 0.8, 0.15)
 const BOSS_GROUP := "boss_zombies"
 const TITAN_SLAM_COLOR := Color(1.0, 0.45, 0.1)
@@ -63,6 +65,12 @@ const HEADSHOT_DAMAGE_MULTIPLIER := 2.0
 const LEG_SHOT_SPEED_FACTOR := 0.6
 const ARM_SHOT_ATTACK_FACTOR := 0.5
 const MIN_LIMP_SPEED := 0.6
+## Tres tiros de pistola no mesmo membro arrancam-no; armas fortes resolvem em
+## menos impactos porque usam o dano real ja corrigido por armor/headshot.
+const LIMB_DAMAGE_TO_SEVER := 30
+const ARM_LOSS_SPEED_FACTOR := 0.9
+const ARM_LOSS_ATTACK_FACTOR := 0.75
+const LEG_LOSS_SPEED_FACTOR := 0.75
 
 @export var speed := 2.2
 @export var gravity := 22.0
@@ -204,6 +212,9 @@ var damage_taken_total := 0
 var leg_shot := false
 var arm_shot := false
 var last_hit_zone := HIT_ZONE_TORSO
+var limb_damage := {"left_arm": 0, "right_arm": 0, "left_leg": 0, "right_leg": 0}
+var limb_loss_mask := 0
+var natural_limb_loss_mask := 0
 var _tongue_damage_start := 0
 var _tongue_burn := 0.0
 var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
@@ -231,6 +242,7 @@ var _tick_in_melee_range := false
 func _ready() -> void:
 	add_to_group("zombies")
 	_configure_variant()
+	natural_limb_loss_mask = _natural_limb_loss_mask()
 	health = max_health
 	_ground_collision_mask = collision_mask
 	tick_budget = ZombieTickBudget.new(absi(name.hash()))
@@ -986,7 +998,11 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 
 	amount = VARIANT_ABILITIES_SCRIPT.adjust_incoming_damage(int(zombie_type), amount, damage_kind, collector.has_ability(ZombieType.ARMORED))
 	if hit_position.is_finite():
-		amount = _apply_hit_zone(body_zone_for_points(to_local(hit_position), _visible_zone_points()), amount)
+		var local_hit := to_local(hit_position)
+		var zone := body_zone_for_points(local_hit, _visible_zone_points())
+		amount = _apply_hit_zone(zone, amount)
+		if damage_kind == "bullet":
+			_damage_limb_at(zone, local_hit, amount)
 	damage_taken_total += amount
 	health = maxi(health - mini(amount, max_health), 0)
 	_refresh_health_label()
@@ -1024,6 +1040,88 @@ func _apply_hit_zone(zone: String, amount: int) -> int:
 			arm_shot = true
 			attack_damage = maxi(int(roundf(float(attack_damage) * ARM_SHOT_ATTACK_FACTOR)), 1)
 	return amount
+
+
+func _damage_limb_at(zone: String, local_hit: Vector3, amount: int) -> void:
+	if zone != HIT_ZONE_ARM and zone != HIT_ZONE_LEG:
+		return
+	var limb_name := _nearest_limb_name(zone, local_hit)
+	if limb_name.is_empty():
+		return
+	limb_damage[limb_name] = int(limb_damage[limb_name]) + amount
+	if int(limb_damage[limb_name]) >= LIMB_DAMAGE_TO_SEVER:
+		_sever_limb(limb_name)
+
+
+func _nearest_limb_name(zone: String, local_hit: Vector3) -> String:
+	var limb_names: Array[String] = []
+	if zone == HIT_ZONE_ARM:
+		limb_names.append_array(["left_arm", "right_arm"])
+	else:
+		limb_names.append_array(["left_leg", "right_leg"])
+	var nearest_name := ""
+	var nearest_distance := INF
+	for limb_name in limb_names:
+		var limb := _limb_node(limb_name)
+		if not _body_part_present(limb):
+			continue
+		var distance := to_local(limb.global_position).distance_squared_to(local_hit)
+		if distance < nearest_distance:
+			nearest_name = limb_name
+			nearest_distance = distance
+	return nearest_name
+
+
+func _sever_limb(limb_name: String) -> void:
+	var limb_bit: int = LIMB_STATE_SCRIPT.bit_for_name(limb_name)
+	if limb_bit == 0 or limb_loss_mask & limb_bit != 0:
+		return
+	var limb := _limb_node(limb_name)
+	var mesh := limb.get_node_or_null("Mesh") as MeshInstance3D if limb != null else null
+	if mesh == null:
+		return
+	var scene_root := get_tree().current_scene
+	if scene_root != null:
+		LIMB_DEBRIS_SCRIPT.spawn(scene_root, mesh, hit_direction * 4.0 + Vector3.UP * 3.0)
+	_apply_limb_loss_mask(limb_loss_mask | limb_bit)
+	if limb_name.ends_with("arm"):
+		attack_damage = maxi(int(roundf(float(attack_damage) * ARM_LOSS_ATTACK_FACTOR)), 1)
+		speed = maxf(speed * ARM_LOSS_SPEED_FACTOR, MIN_LIMP_SPEED)
+		return
+	speed = maxf(speed * LEG_LOSS_SPEED_FACTOR, MIN_LIMP_SPEED)
+
+
+func _limb_node(limb_name: String) -> Node3D:
+	match limb_name:
+		"left_arm":
+			return left_arm
+		"right_arm":
+			return right_arm
+		"left_leg":
+			return left_leg
+		"right_leg":
+			return right_leg
+	push_error("No de membro invalido '%s'; esperado left_arm/right_arm/left_leg/right_leg." % limb_name)
+	return null
+
+
+func _natural_limb_loss_mask() -> int:
+	var result := 0
+	for limb_name in ["left_arm", "right_arm", "left_leg", "right_leg"]:
+		if not _body_part_present(_limb_node(limb_name)):
+			result |= LIMB_STATE_SCRIPT.bit_for_name(limb_name)
+	return result
+
+
+func _apply_limb_loss_mask(mask: int) -> void:
+	limb_loss_mask = mask & LIMB_STATE_SCRIPT.ALL
+	for limb_name in ["left_arm", "right_arm", "left_leg", "right_leg"]:
+		var limb := _limb_node(limb_name)
+		var mesh := limb.get_node_or_null("Mesh") as MeshInstance3D if limb != null else null
+		if mesh == null:
+			continue
+		var limb_bit: int = LIMB_STATE_SCRIPT.bit_for_name(limb_name)
+		mesh.visible = natural_limb_loss_mask & limb_bit == 0 and limb_loss_mask & limb_bit == 0
 
 
 ## Zona do corpo cuja parte esta mais perto do ponto local atingido. Puro e
@@ -1262,7 +1360,7 @@ func _collect_fade_meshes() -> void:
 func _spawn_ragdoll() -> void:
 	var scene := get_tree().current_scene
 	if scene.has_method("spawn_zombie_ragdoll"):
-		scene.spawn_zombie_ragdoll(global_position, rotation.y, death_velocity, int(zombie_type), appearance_hash, name)
+		scene.spawn_zombie_ragdoll(global_position, rotation.y, death_velocity, int(zombie_type), appearance_hash, name, limb_loss_mask)
 
 
 ## Habilidades efetivas: a do proprio tipo mais as herdadas pelo coletor.
@@ -1358,6 +1456,7 @@ func get_network_state() -> Dictionary:
 		"attack_sequence": attack_sequence,
 		"zombie_type": int(zombie_type),
 		"appearance_hash": appearance_hash,
+		"limb_loss_mask": limb_loss_mask,
 	}
 
 
@@ -1379,7 +1478,10 @@ func apply_network_state(state: Dictionary) -> void:
 		if net_type != int(zombie_type):
 			zombie_type = net_type as ZombieType
 			ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
+			natural_limb_loss_mask = _natural_limb_loss_mask()
 			_collect_fade_meshes()
+	if state.has("limb_loss_mask"):
+		_apply_limb_loss_mask(int(state["limb_loss_mask"]))
 	var received_attack_sequence := int(state.get("attack_sequence", last_applied_attack_sequence))
 	if last_applied_attack_sequence < 0:
 		last_applied_attack_sequence = received_attack_sequence
@@ -1406,4 +1508,3 @@ func apply_network_state(state: Dictionary) -> void:
 		_spawn_ragdoll()
 		if has_ability(ZombieType.BLOATER):
 			_play_bloater_burst()
-
