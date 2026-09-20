@@ -48,6 +48,18 @@ const RUIN_INNER_RADIUS := 78.0
 const RUIN_OUTER_RADIUS := 95.0
 const PLAYER_ONLY_BOUNDARY_LAYER := 16
 const CAR_RUST_SHADER: Shader = preload("res://shaders/car_rust.gdshader")
+## Os carros do pacote tem ~1,8 m de altura e o boneco do jogo tem 2,22 m, entao
+## pareciam de brinquedo ao lado dele. Este fator casa os veiculos com o boneco.
+const VEHICLE_SCALE := 1.3
+## Carros abandonados sao RigidBody empurraveis: massa abaixo do jipe (650) para
+## ele conseguir bater e mover no impacto em vez de travar.
+const WRECK_MASS := 450.0
+const DRIVABLE_CAR_SCENE: PackedScene = preload("res://scenes/drivable_car.tscn")
+## So nasce 1 carro dirigivel no mapa (o jipe militar). Fica no meio de uma rua
+## larga, longe dos pontos dos carros abandonados (car_spots) para nao empilhar.
+const DRIVABLE_CAR_SPOTS := [
+	Vector3(-24.0, 0.4, 6.0),
+]
 const BUILDING_COLORS := [
 	Color(0.48, 0.25, 0.18),
 	Color(0.25, 0.36, 0.46),
@@ -164,6 +176,7 @@ func _build_procedural_city() -> void:
 			budget -= 1
 		await get_tree().process_frame
 	_create_abandoned_cars(_street_props_rng())
+	_create_drivable_cars(_street_props_rng())
 	_create_boundaries()
 	_create_forest()
 	city_ready = true
@@ -306,6 +319,20 @@ func _create_streetlights(rng: RandomNumberGenerator) -> void:
 			add_child(light_inst)
 
 
+## Carros dirigiveis: o jogador entra com E e dirige. Chamado junto dos props de
+## rua, mas depois de a cidade existir, para o carro cair no asfalto.
+## Uso: interno de _build_procedural_city
+func _create_drivable_cars(rng: RandomNumberGenerator) -> void:
+	for index in DRIVABLE_CAR_SPOTS.size():
+		var car := DRIVABLE_CAR_SCENE.instantiate() as VehicleBody3D
+		if car == null:
+			continue
+		car.name = "DrivableCar%d" % index
+		car.position = DRIVABLE_CAR_SPOTS[index]
+		car.rotation.y = rng.randf_range(0.0, TAU)
+		add_child(car)
+
+
 func _create_abandoned_cars(rng: RandomNumberGenerator) -> void:
 	var vehicle_configs: Array[Dictionary] = [
 		{"path": "res://assets/models/city/car_police.gltf", "scale": 5.0, "size": Vector3(2.1, 1.8, 4.7)},
@@ -331,16 +358,25 @@ func _create_abandoned_cars(rng: RandomNumberGenerator) -> void:
 		Vector3(-60.0, 0.12, 24.0),
 		Vector3(60.0, 0.12, -24.0),
 	]
+	var wreck_material := PhysicsMaterial.new()
+	wreck_material.friction = 0.6
+	wreck_material.bounce = 0.05
 	for spot in car_spots:
 		var cfg: Dictionary = vehicle_configs[rng.randi_range(0, vehicle_configs.size() - 1)]
 		var car_scene := load(cfg["path"] as String) as PackedScene
 		if car_scene == null:
 			continue
-		var car_body := StaticBody3D.new()
+		# Corpo fisico (era StaticBody): assim o jipe dirigivel bate e empurra.
+		var car_body := RigidBody3D.new()
+		car_body.mass = WRECK_MASS
+		car_body.physics_material_override = wreck_material
+		car_body.continuous_cd = true
+		car_body.linear_damp = 0.6
+		car_body.angular_damp = 1.0
 		car_body.position = spot
 		car_body.rotation.y = rng.randf_range(-0.4, 0.4) if rng.randf() < 0.7 else rng.randf() * TAU
 		var car_inst := car_scene.instantiate() as Node3D
-		car_inst.scale = Vector3.ONE * (cfg["scale"] as float)
+		car_inst.scale = Vector3.ONE * (cfg["scale"] as float) * VEHICLE_SCALE
 
 		var is_burnt: bool = rng.randf() < 0.25
 		_apply_corrosion_to_vehicle(car_inst, rng, is_burnt)
@@ -353,9 +389,10 @@ func _create_abandoned_cars(rng: RandomNumberGenerator) -> void:
 
 		var col := CollisionShape3D.new()
 		var shape := BoxShape3D.new()
-		shape.size = cfg["size"] as Vector3
+		var collision_size: Vector3 = (cfg["size"] as Vector3) * VEHICLE_SCALE
+		shape.size = collision_size
 		col.shape = shape
-		col.position = Vector3(0.0, (cfg["size"] as Vector3).y * 0.5, 0.0)
+		col.position = Vector3(0.0, collision_size.y * 0.5, 0.0)
 		car_body.add_child(col)
 		add_child(car_body)
 

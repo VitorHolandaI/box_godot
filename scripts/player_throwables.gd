@@ -34,9 +34,12 @@ static func handle_input(player: Node3D) -> void:
 		player.set("equipment_cooldown", ITEM_COOLDOWN)
 
 
-## Mira do jogador (analogico/mouse) ou a frente do corpo.
+## Mira do jogador (3D do FPS/cursor, analogico/mouse) ou a frente do corpo.
 ## Uso: var direcao := PlayerThrowables.aim_direction(player)
 static func aim_direction(player: Node3D) -> Vector3:
+	var full: Variant = player.get("aim_direction")
+	if full is Vector3 and not (full as Vector3).is_zero_approx():
+		return (full as Vector3).normalized()
 	var aim: Vector2 = player.get("aim_input")
 	var direction := Vector3(aim.x, 0.0, aim.y).normalized()
 	return direction if not direction.is_zero_approx() else -player.global_transform.basis.z
