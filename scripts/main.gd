@@ -509,7 +509,7 @@ func register_corpse(corpse: Node) -> void:
 			oldest_corpse.queue_free()
 
 
-func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0, appearance_hash: int = 0, source_name: String = "") -> void:
+func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0, appearance_hash: int = 0, source_name: String = "", limb_loss_mask: int = 0) -> void:
 	if not source_name.is_empty() and is_instance_valid(ragdolls_by_zombie.get(source_name)):
 		return
 	var perf_start := FramePerfProbe.begin()
@@ -519,7 +519,7 @@ func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3,
 	add_child(ragdoll)
 	ragdoll.position = position
 	ragdoll.rotation.y = rotation
-	ragdoll.setup(velocity, z_type, appearance_hash)
+	ragdoll.setup(velocity, z_type, appearance_hash, limb_loss_mask)
 	ragdolls.append(ragdoll)
 	if not source_name.is_empty():
 		ragdoll.set_meta("source_zombie", source_name)

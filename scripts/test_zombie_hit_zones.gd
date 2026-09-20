@@ -6,7 +6,9 @@ extends RefCounted
 ## Uso: await ZombieHitZoneTests.new().run(test_root)
 
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
+const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
 const ZOMBIE_SCRIPT: GDScript = preload("res://scripts/zombie.gd")
+const LIMB_STATE_SCRIPT: GDScript = preload("res://scripts/zombie_limb_state.gd")
 
 
 func run(test_root: Node) -> void:
@@ -14,6 +16,10 @@ func run(test_root: Node) -> void:
 	await _test_headshot_doubles_damage(test_root)
 	await _test_leg_shot_slows_zombie(test_root)
 	await _test_arm_shot_weakens_attack(test_root)
+	await _test_arm_loss_hides_member_and_slows_zombie(test_root)
+	await _test_leg_loss_hides_member_and_further_slows_zombie(test_root)
+	await _test_network_limb_loss_hides_member(test_root)
+	await _test_ragdoll_keeps_lost_member(test_root)
 	await _test_hit_without_position_is_torso(test_root)
 
 
@@ -77,6 +83,70 @@ func _test_arm_shot_weakens_attack(test_root: Node) -> void:
 		_fail(test_root, "Braco deveria enfraquecer o golpe (%d -> %d) e marcar arm_shot; arm_shot=%s." % [base_attack, attack_after, arm_shot])
 		return
 	print("PASS: Tiro no braco enfraquece o golpe (%d -> %d)." % [base_attack, attack_after])
+
+
+func _test_arm_loss_hides_member_and_slows_zombie(test_root: Node) -> void:
+	print("Testando amputacao do braco apos tiros repetidos...")
+	var zombie := await _spawn_walker(test_root, Vector3(1025.0, 1.0, 1000.0))
+	var base_speed := float(zombie.get("speed"))
+	var base_attack := int(zombie.get("attack_damage"))
+	var point := (zombie.get_node("Model/LeftArm") as Node3D).global_position
+	for _shot in 3:
+		zombie.take_damage(10, Vector3.FORWARD, "bullet", null, point)
+	var mesh := zombie.get_node("Model/LeftArm/Mesh") as MeshInstance3D
+	var member_hidden := not mesh.visible
+	var mask := int(zombie.get("limb_loss_mask"))
+	var speed_after := float(zombie.get("speed"))
+	var attack_after := int(zombie.get("attack_damage"))
+	zombie.free()
+	if not member_hidden or mask & LIMB_STATE_SCRIPT.LEFT_ARM == 0 or speed_after >= base_speed or attack_after >= base_attack * 0.5:
+		_fail(test_root, "Braco deveria sumir e enfraquecer movimento/ataque; escondido=%s mask=%d velocidade=%.2f ataque=%d." % [member_hidden, mask, speed_after, attack_after])
+		return
+	print("PASS: Tres tiros removem braco e reduzem locomocao e golpe.")
+
+
+func _test_leg_loss_hides_member_and_further_slows_zombie(test_root: Node) -> void:
+	print("Testando amputacao da perna apos tiros repetidos...")
+	var zombie := await _spawn_walker(test_root, Vector3(1030.0, 1.0, 1000.0))
+	var point := (zombie.get_node("Model/RightLeg") as Node3D).global_position
+	for _shot in 3:
+		zombie.take_damage(10, Vector3.FORWARD, "bullet", null, point)
+	var mesh := zombie.get_node("Model/RightLeg/Mesh") as MeshInstance3D
+	var member_hidden := not mesh.visible
+	var mask := int(zombie.get("limb_loss_mask"))
+	var speed_after := float(zombie.get("speed"))
+	zombie.free()
+	if not member_hidden or mask & LIMB_STATE_SCRIPT.RIGHT_LEG == 0 or speed_after >= 1.0:
+		_fail(test_root, "Perna deveria sumir e deixar zumbi manco; escondido=%s mask=%d velocidade=%.2f." % [member_hidden, mask, speed_after])
+		return
+	print("PASS: Tres tiros removem perna e deixam zumbi manco.")
+
+
+func _test_network_limb_loss_hides_member(test_root: Node) -> void:
+	print("Testando membro amputado aplicado pelo snapshot...")
+	var zombie := await _spawn_walker(test_root, Vector3(1035.0, 1.0, 1000.0))
+	zombie.apply_network_state({"limb_loss_mask": LIMB_STATE_SCRIPT.RIGHT_ARM})
+	var hidden := not (zombie.get_node("Model/RightArm/Mesh") as MeshInstance3D).visible
+	zombie.free()
+	if not hidden:
+		_fail(test_root, "Snapshot deveria esconder o braco direito amputado.")
+		return
+	print("PASS: Snapshot preserva membro amputado no proxy.")
+
+
+func _test_ragdoll_keeps_lost_member(test_root: Node) -> void:
+	print("Testando cadaver mantendo membro amputado...")
+	var ragdoll := RAGDOLL_SCENE.instantiate() as Node3D
+	test_root.add_child(ragdoll)
+	await test_root.get_tree().physics_frame
+	ragdoll.call("setup", Vector3.ZERO, 0, 0, LIMB_STATE_SCRIPT.LEFT_LEG)
+	var leg := ragdoll.get_node_or_null("LeftLeg")
+	var removed := leg == null or leg.is_queued_for_deletion()
+	ragdoll.free()
+	if not removed:
+		_fail(test_root, "Cadaver deveria manter a perna esquerda amputada.")
+		return
+	print("PASS: Cadaver preserva a amputacao recebida do zumbi vivo.")
 
 
 ## Melee, fogo e explosao nao passam ponto de impacto: dano cheio, zona torso.
