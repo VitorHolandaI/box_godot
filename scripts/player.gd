@@ -166,6 +166,9 @@ var aim_direction := Vector3.ZERO
 ## do modo FPS (o corpo segue ele); `view_pitch` inclina so a camera.
 const AIM_SENSITIVITY := 0.0022
 const AIM_PITCH_LIMIT := 1.35
+## Velocidade com que o corpo vira para a mira (por segundo). Baixo demais e o
+## boneco "arrasta" atras do cursor; usado tambem na previsao local do cliente.
+const AIM_TURN_RATE := 22.0
 ## Alcance do raycast que acha o ponto do cursor na 3a pessoa.
 const MOUSE_AIM_RANGE := 80.0
 var mouse_aim := true
@@ -327,7 +330,19 @@ func _interpolate_proxy(delta: float) -> void:
 		var col := move_and_collide(motion)
 		if col != null:
 			move_and_collide(col.get_remainder().slide(col.get_normal()))
-	rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
+	# O jogador LOCAL preve a rotacao: no cliente a do servidor chega a 10 Hz e o
+	# boneco "arrastava" atras da mira. So a rotacao e prevista (cosmetica); a
+	# posicao continua vindo do snapshot autoritativo.
+	if is_local_controller and first_person:
+		rotation.y = camera_yaw
+	elif is_local_controller:
+		var local_aim := _local_aim_input()
+		if not local_aim.is_zero_approx():
+			rotation.y = lerp_angle(rotation.y, atan2(-local_aim.x, -local_aim.y), minf(delta * AIM_TURN_RATE, 1.0))
+		else:
+			rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
+	else:
+		rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
 	# Dentro do carro o proxy usa a pose do assento (sentado dirigindo / em pe no
 	# bed), nao a marcha.
 	if is_driving() or is_riding():
@@ -363,7 +378,7 @@ func _face_aim_or_movement(direction: Vector3, delta: float) -> void:
 		target_rotation = atan2(-direction.x, -direction.z)
 	else:
 		return
-	rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
+	rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * AIM_TURN_RATE, 1.0))
 
 
 ## Gravidade, pulo e a velocidade horizontal; o empurrao forcado (lingua do
@@ -1216,13 +1231,23 @@ func _shot_origin() -> Vector3:
 func _attack_with_knife() -> void:
 	attack_cooldown = 0.45
 	knife_attack_time = KNIFE_ATTACK_DURATION
+	var forward := _knife_forward()
 	var target := _find_knife_target()
 	if target != null and target.has_method("take_damage"):
-		target.take_damage(knife_damage, -global_transform.basis.z, "knife", self)
+		target.take_damage(knife_damage, forward, "knife", self)
 		return
 	var door := _find_knife_door()
 	if door != null:
-		door.take_damage(knife_damage, -global_transform.basis.z, "knife", self)
+		door.take_damage(knife_damage, forward, "knife", self)
+
+
+## Direcao horizontal da facada: segue a mira (cursor/reticulo) quando existe,
+## senao a frente do corpo. Antes usava so o corpo, que fica atras do cursor com
+## o modo de mira novo. Uso: _attack_with_knife/_find_knife_target/_find_knife_door
+func _knife_forward() -> Vector3:
+	if not aim_input.is_zero_approx():
+		return Vector3(aim_input.x, 0.0, aim_input.y)
+	return -global_transform.basis.z
 
 
 ## Porta inteira logo a frente, ao alcance da faca. Bater repetidamente
@@ -1230,7 +1255,7 @@ func _attack_with_knife() -> void:
 ## Uso: var door := _find_knife_door()
 func _find_knife_door() -> Node:
 	var ray_start := global_position + Vector3.UP * 0.2
-	var ray_end := ray_start - global_transform.basis.z * KNIFE_DOOR_REACH
+	var ray_end := ray_start + _knife_forward() * KNIFE_DOOR_REACH
 	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [get_rid()])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	var collider: Node = hit.get("collider")
@@ -1244,7 +1269,7 @@ func _find_knife_door() -> Node:
 func _find_knife_target() -> Node3D:
 	var best_target: Node3D = null
 	var best_distance := 1.7
-	var forward := -global_transform.basis.z
+	var forward := _knife_forward()
 	# No maximo 4 rays por facada: cercado, os 4 mais proximos bastam.
 	# Varre os grupos direto (sem montar array de 600 alvos por facada).
 	var rays_used := 0
