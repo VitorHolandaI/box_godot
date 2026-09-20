@@ -34,7 +34,7 @@ func _collect_declarations(lines: Array) -> void:
 
 	for i in range(lines.size()):
 		var line: String = lines[i]
-		var trimmed := line.strip_edges()
+		var trimmed := line.strip_edges().trim_prefix("static ")
 		var line_num := i + 1
 
 		# Track function boundaries
