@@ -253,6 +253,7 @@ func _physics_process(delta: float) -> void:
 	if is_driving():
 		_sync_to_vehicle()
 		_handle_vehicle_exit()
+		_clear_transient_input()
 		return
 	if is_riding():
 		# Passageiro: preso ao assento traseiro, mas ainda mira e atira (sem
@@ -1145,9 +1146,12 @@ func _handle_vehicle_exit() -> void:
 	# brigaria com o servidor (o snapshot re-prenderia o jogador).
 	if not simulation_enabled:
 		return
-	if not reads_local_input:
-		return
-	if not Input.is_action_just_pressed(input_action_prefix + "interact"):
+	# O host le o Input na hora; o avatar remoto usa o `interact` que veio da
+	# rede (antes o `reads_local_input` barrava o cliente e ele ficava preso).
+	var wants_exit := interact_pressed
+	if reads_local_input:
+		wants_exit = Input.is_action_just_pressed(input_action_prefix + "interact")
+	if not wants_exit:
 		return
 	if is_driving():
 		driving_car.call("exit_car")
