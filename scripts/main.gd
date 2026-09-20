@@ -97,6 +97,8 @@ var smoke_swat_first_seen: Dictionary = {}
 ## watch() do replicador de portas precisa re-agir quando a cidade em etapas
 ## termina de montar; false evita re-watch repetido a cada frame.
 var _city_doors_watched := false
+## O primeiro lote de loot espera a cidade montar (ancoras internas prontas).
+var _initial_loot_spawned := false
 var player_vision_elapsed := 0.0
 var corpse_cleanup_elapsed := 0.0
 ## Cadencia do sync dedicado de suprimentos/armas no chao (2 Hz).
@@ -217,7 +219,8 @@ func _ready() -> void:
 		# mesmo frame (hitch de 1 frame a cada nova hora).
 		survival_wave_controller.wave_started.connect(_on_wave_transition)
 		wave_supply_controller.refresh_wave(survival_wave_controller.wave_index)
-		_spawn_scattered_loot(survival_wave_controller.wave_index)
+		# Sem o loot aqui: a cidade monta em etapas e as ancoras internas ainda
+		# nao existem; o primeiro lote sai no _process quando ela fica pronta.
 	var coordinator = FLOCK_COORDINATOR_SCRIPT.new()
 	coordinator.name = "ZombieFlockCoordinator"
 	add_child(coordinator)
@@ -357,6 +360,11 @@ func _process(delta: float) -> void:
 		# os sinais com o mundo completo (watch e idempotente).
 		_city_doors_watched = true
 		door_state_replicator.watch(get_tree())
+	if not _initial_loot_spawned:
+		# Cidade pronta: agora as ancoras internas existem, entao o primeiro
+		# lote de loot nasce DENTRO dos predios (e nao mais na rua).
+		_initial_loot_spawned = true
+		_spawn_scattered_loot(survival_wave_controller.wave_index)
 	if NetworkSession.pvp_mode:
 		# Mata-mata nao tem zumbi: sem isso o spawner do modo classico (que roda
 		# quando survival_mode e falso) enchia o mapa de zumbi durante o PVP.
@@ -1019,7 +1027,7 @@ func _spawn_scattered_loot(_wave_index: int = 0) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = NetworkSession.world_seed * 31337 + Time.get_ticks_msec()
 	var interior := _interior_loot_points()
-	interior.shuffle()
+	_shuffle_with(interior, rng)
 	var next_index := 0
 	var items: Array[Array] = [
 		[GroundSupplyPickup.Kind.HEALTH, 35], [GroundSupplyPickup.Kind.HEALTH, 35],
@@ -1052,6 +1060,17 @@ func _interior_loot_points() -> Array[Vector3]:
 		if anchor != null and is_instance_valid(anchor):
 			points.append(anchor.global_position + Vector3.UP * 0.25)
 	return points
+
+
+## Embaralha com o RNG LOCAL: Array.shuffle usa o RNG global e mudava o timing
+## de outros sistemas (roteador de zumbi), o que deixava testes instaveis.
+## Uso: _shuffle_with(pontos, rng)
+func _shuffle_with(values: Array, rng: RandomNumberGenerator) -> void:
+	for index in range(values.size() - 1, 0, -1):
+		var swap := rng.randi_range(0, index)
+		var temporary: Variant = values[index]
+		values[index] = values[swap]
+		values[swap] = temporary
 
 
 func _spawn_loot_item(rng: RandomNumberGenerator, kind: int, amount: int) -> void:
