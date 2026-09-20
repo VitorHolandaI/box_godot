@@ -17,6 +17,7 @@ const HAND_ANCHOR_LOCAL := Vector3(0.0, -0.72, -0.12)
 const WEAPON_HOLD_TUNE := {
 	1: {"pos": Vector3(-0.08, -0.02, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},   # pistol
 	6: {"pos": Vector3(0.0, 0.05, -0.05), "rot": Vector3(0.0, -PI, 0.0)},    # carbine (modelo invertido)
+	16: {"pos": Vector3(0.0, 0.0, 0.0), "rot": Vector3(0.0, -PI, 0.0)},      # sniper (modelo invertido)
 	11: {"pos": Vector3(-0.05, 0.0, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},    # railgun
 	14: {"pos": Vector3(-0.05, 0.05, 0.05), "rot": Vector3(0.0, 0.0, 0.0)},  # aug
 	17: {"pos": Vector3(0.0, 0.05, 0.05), "rot": Vector3(0.0, 0.0, 0.0)},    # bazooka
