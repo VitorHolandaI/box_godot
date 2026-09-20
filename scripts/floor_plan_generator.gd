@@ -32,6 +32,54 @@ const HOUSE_PROGRAM: Array[Dictionary] = [
 	{"name": "CORREDOR", "weight": 1.0},
 ]
 
+## Area (m2) por comodo usada para estimar quantos cabem na casa. Nao e area
+## util real: serve so para o orcamento de comodos nao estourar a grade.
+const AREA_PER_ROOM := 14.0
+## A partir desta area a casa grande pode ganhar 2a cozinha, corredor extra e
+## mais banheiros.
+const LARGE_HOUSE_AREA := 150.0
+
+
+## Programa por tamanho: casa grande pede mais quartos e banheiros, as vezes 2a
+## cozinha e corredor; casa pequena fica enxuta. Regras de plausibilidade:
+## 1 sala sempre, 1 cozinha (2 so em casa grande), 1 banheiro por ~2 quartos,
+## corredor so com 3+ quartos. Com `include_utility` entra uma DESPENSA pequena
+## (entrada de servico, tipo mudroom de casa americana). Tudo deterministico.
+## Uso: var program := FloorPlanGenerator.program_for_seed(seed, 180.0, true)
+static func program_for_seed(plan_seed: int, area_m2: float, include_utility: bool = false) -> Array[Dictionary]:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = plan_seed
+	var budget := clampi(int(area_m2 / AREA_PER_ROOM), 4, 11)
+	var is_large := area_m2 >= LARGE_HOUSE_AREA
+	var utility := 1 if include_utility else 0
+	var kitchens := 1 + (1 if is_large and rng.randf() < 0.5 else 0)
+	var bedrooms := clampi(roundi(area_m2 / 34.0), 1, 6)
+	var bathrooms := _bathroom_count(bedrooms, is_large)
+	# Ajusta ao orcamento da grade tirando quarto (e banheiro) extra.
+	while 1 + utility + kitchens + bedrooms + bathrooms > budget and bedrooms > 1:
+		bedrooms -= 1
+		bathrooms = _bathroom_count(bedrooms, is_large)
+	var program: Array[Dictionary] = [{"name": "SALA", "weight": rng.randf_range(3.5, 5.0)}]
+	if utility > 0:
+		program.append({"name": "DESPENSA", "weight": rng.randf_range(0.7, 1.0)})
+	for index in kitchens:
+		program.append({"name": "COZINHA", "weight": rng.randf_range(2.0, 3.0)})
+	for index in bedrooms:
+		program.append({"name": "QUARTO", "weight": rng.randf_range(2.2, 3.2)})
+	for index in bathrooms:
+		program.append({"name": "BANHEIRO", "weight": rng.randf_range(1.0, 1.6)})
+	var corridors := (1 if bedrooms >= 3 else 0) + (1 if is_large and rng.randf() < 0.5 else 0)
+	while corridors > 0 and program.size() + corridors > budget:
+		corridors -= 1
+	for index in corridors:
+		program.append({"name": "CORREDOR", "weight": rng.randf_range(0.8, 1.2)})
+	return program
+
+
+## Um banheiro por ~2 quartos, com um extra em casa grande. Uso: interno.
+static func _bathroom_count(bedrooms: int, is_large: bool) -> int:
+	return clampi(int(ceil(float(bedrooms) / 2.0)) + (1 if is_large else 0), 1, 4)
+
 
 ## Planta: {"rooms": [{"name": String, "rect": Rect2i}], "doors": [{"a": int,
 ## "b": int, "cell": Vector2i}]}. Os indices apontam para "rooms" na mesma
@@ -57,6 +105,15 @@ static func _subdivide(rect: Rect2i, members: Array[Dictionary], rooms: Array[Di
 	if members.size() == 1:
 		rooms.append({"name": String(members[0]["name"]), "rect": rect})
 		return
+	# Sem espaco para dois lados minimos nao da para dividir: funde o resto num
+	# comodo so, mantendo o nome do membro de maior peso. Sem isso o clampi
+	# estourava e saia comodo abaixo de MIN_ROOM_SIDE (2 celulas), apertado para
+	# o boneco depois de escalar.
+	var can_split_x := rect.size.x >= MIN_ROOM_SIDE * 2
+	var can_split_y := rect.size.y >= MIN_ROOM_SIDE * 2
+	if not can_split_x and not can_split_y:
+		rooms.append({"name": _heaviest_name(members), "rect": rect})
+		return
 	var total := 0.0
 	for member in members:
 		total += float(member["weight"])
@@ -73,7 +130,7 @@ static func _subdivide(rect: Rect2i, members: Array[Dictionary], rooms: Array[Di
 	for member in first:
 		first_weight += float(member["weight"])
 	var ratio := clampf(first_weight / maxf(total, 0.001), 0.25, 0.75)
-	if rect.size.x >= rect.size.y:
+	if (rect.size.x >= rect.size.y and can_split_x) or not can_split_y:
 		var cut := clampi(roundi(float(rect.size.x) * ratio), MIN_ROOM_SIDE, rect.size.x - MIN_ROOM_SIDE)
 		_subdivide(Rect2i(rect.position.x, rect.position.y, cut, rect.size.y), first, rooms, rng)
 		_subdivide(Rect2i(rect.position.x + cut, rect.position.y, rect.size.x - cut, rect.size.y), second, rooms, rng)
@@ -81,6 +138,16 @@ static func _subdivide(rect: Rect2i, members: Array[Dictionary], rooms: Array[Di
 		var cut := clampi(roundi(float(rect.size.y) * ratio), MIN_ROOM_SIDE, rect.size.y - MIN_ROOM_SIDE)
 		_subdivide(Rect2i(rect.position.x, rect.position.y, rect.size.x, cut), first, rooms, rng)
 		_subdivide(Rect2i(rect.position.x, rect.position.y + cut, rect.size.x, rect.size.y - cut), second, rooms, rng)
+
+
+## Nome do membro de maior peso, usado quando a regiao nao cabe ser dividida.
+## Uso: interno do _subdivide.
+static func _heaviest_name(members: Array[Dictionary]) -> String:
+	var heaviest: Dictionary = members[0]
+	for member in members:
+		if float(member["weight"]) > float(heaviest["weight"]):
+			heaviest = member
+	return String(heaviest["name"])
 
 
 ## Portas por arvore geradora do grafo de vizinhanca, partindo do maior quarto:
@@ -158,10 +225,7 @@ static func draft_interior(plan: Dictionary) -> Dictionary:
 	var rooms: Array = plan["rooms"]
 	var owner_of := {}
 	for index in rooms.size():
-		var rect: Rect2i = rooms[index]["rect"]
-		for x: int in range(rect.position.x, rect.end.x):
-			for y: int in range(rect.position.y, rect.end.y):
-				owner_of[Vector2i(x, y)] = index
+		_index_room_cells(owner_of, rooms[index]["rect"], index)
 	var doors := {}
 	for door in plan["doors"]:
 		doors[door["cell"]] = true
@@ -178,6 +242,13 @@ static func draft_interior(plan: Dictionary) -> Dictionary:
 	# A divisa entre dois quartos e visitada pelos dois, e o vao da porta
 	# tambem: sem deduplicar, cada parede interna e cada porta entram duas vezes.
 	return {"walls": _unique_sides(walls), "openings": _unique_sides(openings)}
+
+
+## Marca cada celula do quarto com o indice dele. Uso: interno do draft_interior.
+static func _index_room_cells(owner_of: Dictionary, rect: Rect2i, room_index: int) -> void:
+	for x in range(rect.position.x, rect.end.x):
+		for y in range(rect.position.y, rect.end.y):
+			owner_of[Vector2i(x, y)] = room_index
 
 
 ## Tira lado repetido mantendo a ordem. Uso: interno do draft_interior.

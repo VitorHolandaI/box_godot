@@ -51,6 +51,9 @@ const EQUIPMENT_TESTS_SCRIPT := preload("res://scripts/test_equipment.gd")
 const SUPPORT_CALLS_TESTS_SCRIPT := preload("res://scripts/test_support_calls.gd")
 const ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT := preload("res://scripts/test_zombie_l4d_specials.gd")
 const IN_GAME_SETTINGS_TESTS_SCRIPT := preload("res://scripts/test_in_game_settings.gd")
+const LOT_FEASIBILITY_TESTS_SCRIPT := preload("res://scripts/test_lot_feasibility.gd")
+const PLAN_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_plan_layout.gd")
+const COMMERCIAL_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_commercial_layout.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -74,6 +77,9 @@ const FOCUSED_TEST_GROUPS := {
 	"door_breaking": DOOR_BREAKING_TESTS_SCRIPT,
 	"safehouse_door": SAFEHOUSE_DOOR_TESTS_SCRIPT,
 	"city_props": CITY_PROPS_TESTS_SCRIPT,
+	"lot_feasibility": LOT_FEASIBILITY_TESTS_SCRIPT,
+	"plan_layout": PLAN_LAYOUT_TESTS_SCRIPT,
+	"commercial_layout": COMMERCIAL_LAYOUT_TESTS_SCRIPT,
 	"network_lag_probe": NETWORK_LAG_PROBE_TESTS_SCRIPT,
 	"frame_perf_probe": FRAME_PERF_PROBE_TESTS_SCRIPT,
 	"server_tick_policy": SERVER_TICK_POLICY_TESTS_SCRIPT,
@@ -149,6 +155,9 @@ func _ready() -> void:
 	await ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT.new().run(self)
 	await IN_GAME_SETTINGS_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
+	LOT_FEASIBILITY_TESTS_SCRIPT.new().run(self)
+	PLAN_LAYOUT_TESTS_SCRIPT.new().run(self)
+	COMMERCIAL_LAYOUT_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)
 	if bool(get_meta("unit_test_failed", false)):

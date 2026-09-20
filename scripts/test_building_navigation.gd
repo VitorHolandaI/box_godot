@@ -102,11 +102,20 @@ func _test_upper_floors_have_no_doors_to_the_void(test_root: Node) -> void:
 	var links_per_floor: Dictionary = {}
 	for link in blueprint.unit_links:
 		links_per_floor[int(link["floor_index"])] = int(links_per_floor.get(int(link["floor_index"]), 0)) + 1
-	for floor_index in range(1, blueprint.floors):
-		if int(links_per_floor.get(floor_index, 0)) != 1:
-			_fail(test_root, "Andar %d deveria ligar nucleo e apartamento com 1 passagem; tem %d." % [floor_index, int(links_per_floor.get(floor_index, 0))])
+	for floor_blueprint in blueprint.floor_blueprints:
+		if floor_blueprint.floor_index == 0:
+			continue
+		var apartments := 0
+		for placement in floor_blueprint.units:
+			for room in placement["blueprint"].rooms:
+				if room.room_type == "living_room":
+					apartments += 1
+		# 1 apartamento liga direto ao nucleo; 2 ou 4 passam pelo corredor.
+		var expected := apartments + (0 if apartments == 1 else 1)
+		if int(links_per_floor.get(floor_blueprint.floor_index, 0)) != expected:
+			_fail(test_root, "Andar %d com %d apartamento(s) deveria ter %d passagens; tem %d." % [floor_blueprint.floor_index, apartments, expected, int(links_per_floor.get(floor_blueprint.floor_index, 0))])
 			return
-	print("PASS: Andares altos so tem passagens internas a partir da escada.")
+	print("PASS: Andares altos so tem passagens internas (1, 2 ou 4 apartamentos por andar).")
 
 
 func _test_router_without_building_has_no_route(test_root: Node) -> void:
