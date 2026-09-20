@@ -120,6 +120,11 @@ var pistol_stance_time := 0.0
 var pistol_recoil_time := 0.0
 ## Tempo restante da animacao de recarga (cosmetica; ver PlayerAnimator).
 var reload_anim_time := 0.0
+## Tuner da pose das armas (--armas-lab): ajusta a posicao/rotacao da arma na
+## mao com o teclado e imprime os valores. Uso: teclas I/K (Y), J/L (X), U/O (Z),
+## setas (rot X/Y), virgula/ponto (rot Z), P imprime, 0 reseta a arma atual.
+var weapon_holds: Dictionary = {}
+var hold_tuner_enabled := false
 ## Arma de crate em maos mantem a pose de mira com duas maos por um tempo.
 var crate_weapon_stance_time := 0.0
 var knife_attack_time := 0.0
@@ -189,6 +194,7 @@ var zombie_kills := 0
 
 
 func _ready() -> void:
+	hold_tuner_enabled = NetworkSession.weapons_lab
 	health = max_health
 	stamina = max_stamina
 	safe_margin = 0.08
@@ -1325,6 +1331,46 @@ func _clear_transient_input() -> void:
 	throw_knife_pressed = false
 	air_strike_pressed = false
 	swat_pressed = false
+
+
+## Tuner de pose das armas (dev, --armas-lab). Uso: I/K Y, J/L X, U/O Z,
+## setas rot X/Y, virgula/ponto rot Z, P imprime o JSON, 0 reseta a arma atual.
+func _unhandled_input(event: InputEvent) -> void:
+	if not hold_tuner_enabled or not is_local_controller or local_slot != 0:
+		return
+	if not (event is InputEventKey) or not event.pressed or event.echo:
+		return
+	var step := 0.05
+	var rot_step := deg_to_rad(7.5)
+	var hold: Dictionary = weapon_holds.get(current_weapon, {"pos": Vector3.ZERO, "rot": Vector3.ZERO})
+	var pos: Vector3 = hold["pos"]
+	var rot: Vector3 = hold["rot"]
+	match (event as InputEventKey).keycode:
+		KEY_I: pos.y += step
+		KEY_K: pos.y -= step
+		KEY_J: pos.x -= step
+		KEY_L: pos.x += step
+		KEY_U: pos.z -= step
+		KEY_O: pos.z += step
+		KEY_RIGHT: rot.y += rot_step
+		KEY_LEFT: rot.y -= rot_step
+		KEY_UP: rot.x -= rot_step
+		KEY_DOWN: rot.x += rot_step
+		KEY_COMMA: rot.z -= rot_step
+		KEY_PERIOD: rot.z += rot_step
+		KEY_P:
+			print(JSON.stringify({"event": "weapon_hold", "kind": current_weapon, "pos": [snappedf(pos.x, 0.001), snappedf(pos.y, 0.001), snappedf(pos.z, 0.001)], "rot_deg": [snappedf(rad_to_deg(rot.x), 0.1), snappedf(rad_to_deg(rot.y), 0.1), snappedf(rad_to_deg(rot.z), 0.1)]}))
+			get_viewport().set_input_as_handled()
+			return
+		KEY_0:
+			weapon_holds.erase(current_weapon)
+			print(JSON.stringify({"event": "weapon_hold_reset", "kind": current_weapon}))
+			get_viewport().set_input_as_handled()
+			return
+		_:
+			return
+	weapon_holds[current_weapon] = {"pos": pos, "rot": rot}
+	get_viewport().set_input_as_handled()
 
 
 ## Look do FPS: o movimento do mouse gira o corpo (yaw) e inclina a camera
