@@ -38,7 +38,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `menu.gd`: selecao local/multiplayer/hospedar partida (mostra IPs da LAN para os amigos), navegador de salas, configuracao de jogadores, conexao e opcoes graficas.
 - `modular_building_builder.gd`: gerador de predios procedurais com andares multiplos andaveis, escadas reais transitaveis, sacadas, terraco caminhavel, iluminacao e materiais de dois tons.
 - `network_lag_probe.gd`: sonda de cliente (`--lag-probe=SEGUNDOS`) que mede RTT, atraso entre snapshots, KB/s e pacotes/s recebidos e FPS.
-- `network_session.gd`: sessao ENet (limite de jogadores via `PlayerCapacity`), roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
+- `network_session.gd`: sessao ENet (limite de jogadores via `PlayerCapacity`), roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario. O `_ready` so despacha: configura pelos argumentos, liga os sinais e entrega para cena de ferramenta, servidor dedicado, bot ou partida offline direta.
 - `network_zombie_proxy_factory.gd`: cria o zumbi do cliente a partir do snapshot, com a variante sorteada pelo servidor aplicada antes do _ready.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
 - `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao). Mira pelo cursor do mouse e modo primeira pessoa (tecla "view", rebindavel), com o WASD relativo ao olhar no FPS.
@@ -104,7 +104,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_session.sh`: checagem padrao de sessao em duas fases: (1) servidor + bot exigindo `BOT_TEST_PASS` (conectou, andou, gastou stamina, viu bala e matou zumbi) e (2) servidor com `--smoke-test-swat` + cliente conferindo que os 4 soldados existem NO CLIENTE e se movem (`swat_seen_done`), alem da linha de build nos dois lados, handshake aceito e zero erro de RPC.
 - `server_entrypoint.sh`: cria a seed a partir do container e inicia o servidor dedicado.
 - `survival_map_builder.gd`: cria a arena compacta e suas barreiras para sobrevivencia.
-- `survival_wave_controller.gd`: controla spawning, limpeza e conclusao das ondas, GAME OVER com reinicio automatico e sync de onda/restantes para o cliente.
+- `survival_wave_controller.gd`: controla spawning, limpeza e conclusao das ondas, GAME OVER com reinicio automatico e sync de onda/restantes para o cliente. Sala vazia nao e derrota (`everyone_is_down([])` e falso): o servidor dedicado e um servico que espera jogador, e a partida so recomeca na transicao do ultimo jogador saindo (`room_emptied`).
 - `survival_wave_schedule.gd`: define a progressao ate a onda final de 600 zumbis.
 - `wave_supply_pickup.gd`: pickup interno autoritativo de vida ou municao.
 - `wave_supply_controller.gd`: renova quatro suprimentos da Safehouse e sorteia pontos internos por onda.

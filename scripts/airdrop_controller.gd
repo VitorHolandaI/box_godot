@@ -61,17 +61,24 @@ func pick_drop_position(tree: SceneTree) -> Vector3:
 		return INVALID_DROP_POSITION
 	# Lista de zumbis cacheada uma vez: 96 tentativas nao refazem o grupo.
 	var cached_zombies := tree.get_nodes_in_group("zombies")
-	for attempt in 96:
-		var radius := rng.randf_range(MIN_DROP_RADIUS, MAX_DROP_RADIUS)
-		if attempt >= ATTEMPTS_PER_RING * 2:
-			radius = rng.randf_range(MAX_DROP_RADIUS * 2.5, MAX_DROP_RADIUS * 3.5)
-		elif attempt >= ATTEMPTS_PER_RING:
-			radius = rng.randf_range(MAX_DROP_RADIUS, MAX_DROP_RADIUS * 2.5)
+	for attempt in ATTEMPTS_PER_RING * 3:
+		var radius := _radius_for_attempt(rng, attempt)
 		var angle := rng.randf_range(0.0, TAU)
 		var candidate := origin_player.global_position + Vector3(cos(angle) * radius, 0.0, sin(angle) * radius)
 		if is_drop_clear(candidate, tree, cached_zombies):
 			return Vector3(candidate.x, 0.02, candidate.z)
 	return INVALID_DROP_POSITION
+
+
+## Raio do anel da tentativa: o primeiro anel fica perto do jogador e os
+## seguintes alargam, para achar rua aberta mesmo com a horda em cima dele.
+## Uso: var radius := _radius_for_attempt(rng, attempt)
+static func _radius_for_attempt(rng: RandomNumberGenerator, attempt: int) -> float:
+	if attempt >= ATTEMPTS_PER_RING * 2:
+		return rng.randf_range(MAX_DROP_RADIUS * 2.5, MAX_DROP_RADIUS * 3.5)
+	if attempt >= ATTEMPTS_PER_RING:
+		return rng.randf_range(MAX_DROP_RADIUS, MAX_DROP_RADIUS * 2.5)
+	return rng.randf_range(MIN_DROP_RADIUS, MAX_DROP_RADIUS)
 
 
 ## Ponto aberto para itens espalhados: reusa a mesma folga de rua do airdrop
