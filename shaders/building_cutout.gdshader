@@ -4,9 +4,20 @@ render_mode cull_disabled;
 
 #include "res://shaders/building_visibility.gdshaderinc"
 
+// Normal em espaco de mundo. `NORMAL` no fragment() e view space (o vertex
+// entrega em model space); usa-la direto fazia a escolha do eixo da textura
+// depender da rotacao da camera e a parede "nadar" ao olhar em volta.
+varying vec3 world_normal;
+
 uniform vec4 base_color : source_color = vec4(0.48, 0.25, 0.18, 1.0);
-uniform sampler2D albedo_texture : source_color, filter_linear_mipmap;
+// A textura e projetada em metros no mundo: as UVs passam de 1 e a superficie
+// e vista em angulo raso, entao precisa de repeat + mipmap anisotropico para
+// nao serrilhar no fundo (mipmaps desligados no .import anulam o filtro).
+uniform sampler2D albedo_texture : source_color, filter_linear_mipmap_anisotropic, repeat_enable;
 uniform bool use_texture = false;
+// Tamanho real de uma repeticao da textura. A projecao usa a superficie no
+// mundo, nao UV de BoxMesh, para cada painel de parede manter a mesma escala.
+uniform float texture_meters : hint_range(0.1, 16.0) = 1.0;
 uniform float material_roughness : hint_range(0.0, 1.0) = 0.9;
 uniform float material_metallic : hint_range(0.0, 1.0) = 0.0;
 // Detalhe procedural da fachada. Em 0 o material volta a ser cor chapada
@@ -51,6 +62,7 @@ float seam(float value, float period, float softness) {
 
 void vertex() {
 	world_position = (MODEL_MATRIX * vec4(VERTEX, 1.0)).xyz;
+	world_normal = normalize(MODEL_NORMAL_MATRIX * NORMAL);
 }
 
 void fragment() {
@@ -58,18 +70,21 @@ void fragment() {
 	if (visibility_should_discard(CAMERA_POSITION_WORLD, CAMERA_DIRECTION_WORLD, IN_SHADOW_PASS, FRONT_FACING || IN_SHADOW_PASS, rim)) {
 		discard;
 	}
-	vec3 albedo = use_texture ? texture(albedo_texture, UV).rgb * base_color.rgb : base_color.rgb;
+	vec3 albedo = base_color.rgb;
 	float roughness = material_roughness;
 	if (detail_strength > 0.001) {
 		// Coordenada da superficie sem depender de UV: as caixas procedurais
 		// nao tem mapeamento util. A parede usa o plano horizontal que ela
 		// enfrenta; piso e telhado usam o plano XZ.
-		vec3 surface_normal = normalize(NORMAL);
+		vec3 surface_normal = normalize(world_normal);
 		float wall_facing = 1.0 - min(abs(surface_normal.y), 1.0);
 		vec2 along = mix(world_position.xz, vec2(
 			mix(world_position.x, world_position.z, step(0.5, abs(surface_normal.x))),
 			world_position.y
 		), wall_facing);
+		if (use_texture) {
+			albedo = texture(albedo_texture, along / texture_meters).rgb * base_color.rgb;
+		}
 
 		float grime = detail_fbm(along * 0.55);
 		float speckle = detail_fbm(along * 3.1 + vec2(31.0, 11.0));
@@ -97,11 +112,18 @@ void fragment() {
 		// tudo volta a parecer plastico.
 		roughness = clamp(roughness + (weather - 0.5) * 0.22 * detail_strength, 0.05, 1.0);
 	}
+	else if (use_texture) {
+		vec2 fallback_uv = world_position.xz / texture_meters;
+		albedo = texture(albedo_texture, fallback_uv).rgb * base_color.rgb;
+	}
 	if (!FRONT_FACING) {
 		// Interior de uma caixa cortada: pinta como secao macica. Com o cutout
 		// desligado (primeira pessoa) a face de tras e parede normal.
 		albedo = cutout_enabled ? SECTION_CAP_COLOR : albedo;
-		NORMAL = vec3(0.0, 1.0, 0.0);
+		// NORMAL e inout em view space: converte o "para cima" do mundo de
+		// volta, senao a tampa de corte e iluminada como se apontasse para a
+		// camera.
+		NORMAL = normalize((VIEW_MATRIX * vec4(0.0, 1.0, 0.0, 0.0)).xyz);
 	}
 	ALBEDO = albedo;
 	EMISSION = vec3(0.18, 0.55, 0.95) * rim * 1.5;
