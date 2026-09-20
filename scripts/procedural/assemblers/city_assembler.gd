@@ -21,21 +21,22 @@ static func assemble(city, parent: Node3D) -> void:
 ## Uso: ProceduralCityAssembler.assemble_roads(city, parent)
 static func assemble_roads(city, parent: Node3D) -> void:
 	for road in city.roads:
-		_add_road(parent, road, _asphalt_material(road.width))
+		_add_road(parent, road, _asphalt_material(road))
 
 
 ## Asfalto procedural (grao, remendo, trinca, sarjeta e faixa central). O
 ## material depende so da largura da pista (a faixa precisa saber onde e o meio
 ## e a sarjeta onde e a borda), entao e cacheado por largura: sao 2 larguras e
 ## ~80 trechos de rua, e um material por trecho quebraria o batching.
-static func _asphalt_material(road_width: float) -> ShaderMaterial:
-	var key := snappedf(road_width, 0.01)
+static func _asphalt_material(road) -> ShaderMaterial:
+	var key := "%s:%.2f" % [road.road_type, road.width]
 	var cached: Variant = _asphalt_cache.get(key)
 	if cached != null:
 		return cached as ShaderMaterial
 	var material := ShaderMaterial.new()
 	material.shader = ASPHALT_SHADER
-	material.set_shader_parameter("lane_half_width", road_width * 0.5)
+	material.set_shader_parameter("lane_half_width", road.width * 0.5)
+	material.set_shader_parameter("show_center_line", road.road_type != "alley")
 	_asphalt_cache[key] = material
 	return material
 
@@ -68,8 +69,10 @@ static func _add_lot(parent: Node3D, lot) -> void:
 	var building: StaticBody3D = BUILDING_ASSEMBLER.assemble(lot.building)
 	building.name = lot.id + "_" + lot.building.archetype
 	var half_size := Vector2(lot.building.width, lot.building.depth) * 0.5
-	var origin: Vector2 = lot.position - half_size if is_zero_approx(lot.building_rotation_y) else lot.position + half_size
-	building.position = Vector3(origin.x, 0.16, origin.y)
+	# O assembler cria predios a partir do canto local (0, 0). Posicionar o
+	# centro depois da rotacao mantem o lote correto para yaw 0, PI e +/- PI/2.
+	var origin_offset := Vector3(-half_size.x, 0.0, -half_size.y).rotated(Vector3.UP, lot.building_rotation_y)
+	building.position = Vector3(lot.position.x, 0.16, lot.position.y) + origin_offset
 	building.rotation.y = lot.building_rotation_y
 	parent.add_child(building)
 	_configure_building_cutout(building, lot.building)
@@ -78,10 +81,14 @@ static func _add_lot(parent: Node3D, lot) -> void:
 
 
 static func _configure_building_cutout(building: StaticBody3D, blueprint) -> void:
-	var corner_a := building.to_global(Vector3.ZERO)
-	var corner_b := building.to_global(Vector3(blueprint.width, 0.0, blueprint.depth))
-	var building_min := Vector3(minf(corner_a.x, corner_b.x), building.global_position.y, minf(corner_a.z, corner_b.z))
-	var building_max := Vector3(maxf(corner_a.x, corner_b.x), building.global_position.y + blueprint.floors * blueprint.floor_height + ROOF_CLEARANCE, maxf(corner_a.z, corner_b.z))
+	var building_min := Vector3(INF, building.global_position.y, INF)
+	var building_max := Vector3(-INF, building.global_position.y + blueprint.floors * blueprint.floor_height + ROOF_CLEARANCE, -INF)
+	for local_corner in [Vector3.ZERO, Vector3(blueprint.width, 0.0, 0.0), Vector3(0.0, 0.0, blueprint.depth), Vector3(blueprint.width, 0.0, blueprint.depth)]:
+		var corner := building.to_global(local_corner)
+		building_min.x = minf(building_min.x, corner.x)
+		building_min.z = minf(building_min.z, corner.z)
+		building_max.x = maxf(building_max.x, corner.x)
+		building_max.z = maxf(building_max.z, corner.z)
 	configure_cutout_bounds(building, building_min, building_max)
 
 

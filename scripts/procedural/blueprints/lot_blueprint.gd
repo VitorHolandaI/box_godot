@@ -20,3 +20,21 @@ func _init(lot_id: String, lot_seed: int, district_type: String, lot_position: V
 
 func signature() -> String:
 	return "%s:%d:%s:%s:%s:%.3f:%s" % [id, seed, district, position, size, building_rotation_y, building.signature() if building != null else "empty"]
+
+
+## Pegada do predio no plano do mundo (eixos x/z), ja com building_rotation_y
+## aplicada. Para yaw de 90 graus equivale a trocar largura e profundidade; para
+## angulos arbitrarios devolve a caixa envolvente, que e o que minimapa e
+## clearance de poste precisam (ambos alinham com os eixos do mundo).
+## Uso: var footprint := lot.building_footprint_size()
+func building_footprint_size() -> Vector2:
+	if building == null:
+		return size
+	var width := float(building.width)
+	var depth := float(building.depth)
+	var cosine := absf(cos(building_rotation_y))
+	var sine := absf(sin(building_rotation_y))
+	return Vector2(
+		cosine * width + sine * depth,
+		sine * width + cosine * depth
+	)
