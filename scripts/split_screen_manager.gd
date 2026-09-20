@@ -119,6 +119,18 @@ func configure(local_players: Array[Node]) -> void:
 		var player := players[index]
 		if is_instance_valid(player) and player.has_signal("first_person_changed") and not player.first_person_changed.is_connected(_on_player_view_mode_changed):
 			player.first_person_changed.connect(_on_player_view_mode_changed)
+	_apply_cutout()
+
+
+## O recorte de parede/teto so vale na isometrica; se qualquer jogador local
+## esta em primeira pessoa, desliga para todos (o global de shader e unico).
+func _apply_cutout() -> void:
+	var any_first_person := false
+	for player in players:
+		if is_instance_valid(player) and bool(player.get("first_person")):
+			any_first_person = true
+			break
+	RenderingServer.global_shader_parameter_set(&"cutout_enabled", not any_first_person)
 
 
 ## Troca isometrica <-> primeira pessoa: reconstroi a camera do jogador e

@@ -1009,24 +1009,49 @@ func _drop_airdrop_crate(drop_position: Vector3, kinds: Array[int]) -> void:
 	GroundWeaponSync.mark_dirty()
 
 
-## Espalha itens de vida e municao pelas ruas a cada onda (e na partida).
-## Replica por nome via GroundWeaponSync; some sozinho em 3 minutos.
+## Espalha itens de vida e municao a cada onda (e na partida). Quase tudo vai
+## para DENTRO das casas/apartamentos (ancoras `building_loot_points`), com
+## poucos itens na rua. Replica por nome via GroundWeaponSync; some em 3 min.
 ## Uso: conectado ao sinal wave_started do SurvivalWaveController.
 func _spawn_scattered_loot(_wave_index: int = 0) -> void:
 	if NetworkSession.is_client():
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = NetworkSession.world_seed * 31337 + Time.get_ticks_msec()
-	for item_index in 2:
-		_spawn_loot_item(rng, GroundSupplyPickup.Kind.HEALTH, 35)
-	for item_index in 2:
-		_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO, 60)
-	# Municao para CADA classe de arma de crate: um refresh completo por onda.
-	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_SHOTGUN, 12)
-	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_UZI, 90)
-	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_MAGNUM, 8)
-	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_DOUBLE_BARREL, 6)
-	_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO_CARBINE, 30)
+	var interior := _interior_loot_points()
+	interior.shuffle()
+	var next_index := 0
+	var items: Array[Array] = [
+		[GroundSupplyPickup.Kind.HEALTH, 35], [GroundSupplyPickup.Kind.HEALTH, 35],
+		[GroundSupplyPickup.Kind.AMMO, 60], [GroundSupplyPickup.Kind.AMMO, 60],
+		[GroundSupplyPickup.Kind.AMMO_SHOTGUN, 12], [GroundSupplyPickup.Kind.AMMO_UZI, 90],
+		[GroundSupplyPickup.Kind.AMMO_MAGNUM, 8], [GroundSupplyPickup.Kind.AMMO_DOUBLE_BARREL, 6],
+		[GroundSupplyPickup.Kind.AMMO_CARBINE, 30],
+	]
+	for entry in items:
+		var position := Vector3.ZERO
+		if next_index < interior.size():
+			position = interior[next_index]
+			next_index += 1
+		else:
+			position = AIRDROP_CONTROLLER_SCRIPT.pick_clear_position(get_tree(), rng, 20.0, 110.0)
+		if position == AIRDROP_CONTROLLER_SCRIPT.INVALID_DROP_POSITION:
+			continue
+		_add_loot_item(int(entry[0]), int(entry[1]), position)
+	# Poucas coisas na rua: dois itens ao ar livre.
+	for _street in 2:
+		_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO, 30)
+
+
+## Pontos internos (uma ancora por unidade) do loot, ja deslocados acima do
+## piso. Uso: interno do _spawn_scattered_loot.
+func _interior_loot_points() -> Array[Vector3]:
+	var points: Array[Vector3] = []
+	for node in get_tree().get_nodes_in_group("building_loot_points"):
+		var anchor := node as Node3D
+		if anchor != null and is_instance_valid(anchor):
+			points.append(anchor.global_position + Vector3.UP * 0.25)
+	return points
 
 
 func _spawn_loot_item(rng: RandomNumberGenerator, kind: int, amount: int) -> void:
