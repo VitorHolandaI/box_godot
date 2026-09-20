@@ -16,9 +16,14 @@ const DEFAULT_MAX_PLAYERS := 8
 const HARD_MAX_PLAYERS := 256
 const MAX_PLAYERS_ARGUMENT := "--max-players="
 ## Do 5o jogador em diante o spawn gira em aneis em volta dos 4 marcadores.
-const SPAWN_RING_STEP := 0.8
+## 1.6 m (era 0.8): com 0.8 o 2o jogador do mesmo marcador nascia a 0.8 m do 1o,
+## as capsulas (~1 m) se sobrepunham e um dos dois ficava preso sem andar
+## (visto no teste de 8 peers: moved=false em um bot por rodada).
+const SPAWN_RING_STEP := 1.6
 const SPAWN_RING_POINTS := 6
-const MAX_SPAWN_OFFSET := 2.4
+const MAX_SPAWN_OFFSET := 4.4
+## Raio do boneco usado para achar um ponto de spawn livre em volta do marcador.
+const SPAWN_FREE_RADIUS := 0.45
 
 
 ## Uso: PlayerCapacity.max_players_from_arguments(PackedStringArray(["--max-players=12"])) -> 12
