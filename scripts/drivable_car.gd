@@ -72,6 +72,14 @@ var is_destroyed := false
 var _crash_cooldown := 0.0
 ## Velocidade do tick anterior, para medir a queda brusca de uma batida.
 var _previous_speed := 0.0
+## Cliente de rede: o servidor e autoritativo, entao este carro NAO simula
+## fisica. Ele congela e persegue o transform que chega no snapshot do carro.
+var network_proxy := false
+## Alvo do snapshot (posicao + rotacao) que o proxy persegue.
+var _target_transform := Transform3D.IDENTITY
+var _has_target := false
+## Velocidade da interpolacao do proxy (por segundo).
+const PROXY_INTERP_RATE := 12.0
 
 ## Volante visual proprio: o aro gira com o esterço por cima do volante estatico
 ## do modelo (o GLB e malha unica e nao da pra girar so a peca do volante).
@@ -105,6 +113,10 @@ func _ready() -> void:
 	var run_over_area := get_node_or_null("RunOverArea") as Area3D
 	if run_over_area != null:
 		run_over_area.body_entered.connect(_on_run_over_body)
+	# No cliente o carro e um proxy: congela a fisica e segue o snapshot.
+	network_proxy = NetworkSession.is_client()
+	if network_proxy:
+		freeze = true
 
 
 ## A mola default do VehicleWheel3D e fraca demais para o peso do carro: o
@@ -243,6 +255,37 @@ func refuel(amount: float) -> void:
 	fuel = clampf(fuel + amount, 0.0, max_fuel)
 
 
+## Estado do carro para o snapshot do servidor. Uso: Main._collect_car_states()
+func get_network_state() -> Dictionary:
+	return {
+		"name": name,
+		"position": global_position,
+		"basis": global_transform.basis,
+		"linear_velocity": linear_velocity,
+		"angular_velocity": angular_velocity,
+		"health": health,
+		"fuel": fuel,
+		"destroyed": is_destroyed,
+		"steering": steering,
+	}
+
+
+## Aplica o snapshot no proxy do cliente: guarda o alvo (interpolado no
+## _physics_process) e atualiza vida/gasolina/estado. Uso: Main._apply_car_snapshot
+func apply_network_state(state: Dictionary) -> void:
+	var position: Variant = state.get("position")
+	var basis: Variant = state.get("basis")
+	if position is Vector3 and basis is Basis:
+		_target_transform = Transform3D(basis as Basis, position as Vector3)
+		_has_target = true
+	health = int(state.get("health", health))
+	fuel = float(state.get("fuel", fuel))
+	steering = float(state.get("steering", steering))
+	_spin_steering_wheel()
+	if bool(state.get("destroyed", false)) and not is_destroyed:
+		_destroy_car()
+
+
 ## Tira o ocupante e devolve o carro ao freio de estacionamento.
 ## Uso: car.exit_car()
 func exit_car() -> void:
@@ -348,6 +391,9 @@ func driver_input() -> Dictionary:
 
 
 func _physics_process(delta: float) -> void:
+	if network_proxy:
+		_interpolate_proxy(delta)
+		return
 	_track_crash_damage(delta)
 	if is_destroyed or not is_occupied():
 		engine_force = 0.0
@@ -370,6 +416,15 @@ func _physics_process(delta: float) -> void:
 	# carro esta em -Z (convencao do Godot): sem o sinal negativo o W andava de re.
 	engine_force = 0.0 if speed_kmh() >= max_speed_kmh else -throttle * max_engine_force
 	fuel = maxf(fuel - fuel_burn_per_second * delta, 0.0)
+
+
+## Proxy do cliente: persegue o transform do snapshot (posicao + rotacao) sem
+## simular fisica. Uso: topo de _physics_process quando network_proxy
+func _interpolate_proxy(delta: float) -> void:
+	if not _has_target:
+		return
+	var weight := clampf(delta * PROXY_INTERP_RATE, 0.0, 1.0)
+	global_transform = global_transform.interpolate_with(_target_transform, weight)
 
 
 ## Gira o aro visual conforme o esterco atual. Uso: interno de _physics_process
