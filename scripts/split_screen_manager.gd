@@ -22,6 +22,8 @@ class MinimapView extends Control:
 	var tracked_zombies: Array = []
 	var tracked_crates: Array = []
 	var tracked_loot: Array = []
+	## Ruas e pegadas do mapa gerado; vem de CityGenerator.get_minimap_layout().
+	var city_layout: Dictionary = {}
 	var own_player: Node = null
 	var world_extent := 160.0
 	var colors: Array = []
@@ -32,6 +34,7 @@ class MinimapView extends Control:
 		draw_rect(rect, Color(0.9, 0.9, 0.9, 0.5), false, 1.0)
 		var center := size * 0.5
 		var scale_value := (minf(size.x, size.y) * 0.5) / world_extent
+		_draw_city_layout(center, scale_value)
 		for index in tracked_players.size():
 			var node := tracked_players[index] as Node3D
 			if node == null or not is_instance_valid(node):
@@ -41,6 +44,7 @@ class MinimapView extends Control:
 			if node == own_player:
 				draw_circle(point, 6.0, Color(1, 1, 1, 0.95))
 			draw_circle(point, 4.0, color)
+			_draw_player_facing(point, node.global_transform.basis, color)
 		for zombie_node in tracked_zombies:
 			var zombie := zombie_node as Node3D
 			if zombie == null or not is_instance_valid(zombie):
@@ -86,6 +90,46 @@ class MinimapView extends Control:
 			draw_line(right, tip, arrow_color, 2.0)
 			draw_line(left, right, arrow_color, 2.0)
 
+
+	## Mapa gerado de fundo: ruas em cinza-escuro e pegadas dos predios em cinza.
+	## Uso: chamado por _draw antes das entidades.
+	func _draw_city_layout(center: Vector2, scale_value: float) -> void:
+		for road in city_layout.get("roads", []):
+			var start: Vector2 = center + (road["start"] as Vector2) * scale_value
+			var finish: Vector2 = center + (road["finish"] as Vector2) * scale_value
+			draw_line(start, finish, Color(0.24, 0.26, 0.3, 0.95), maxf(1.0, float(road["width"]) * scale_value))
+		for building in city_layout.get("buildings", []):
+			var building_center: Vector2 = center + (building["center"] as Vector2) * scale_value
+			var building_size: Vector2 = (building["size"] as Vector2) * scale_value
+			draw_rect(
+				Rect2(building_center - building_size * 0.5, building_size),
+				Color(0.4, 0.38, 0.34, 0.95),
+				true
+			)
+
+
+	## Direcao 2D da frente do Node3D no espaco do minimapa (x->direita,
+	## z->baixo). Godot usa -Z como frente.
+	## Uso: var d := MinimapView.facing_to_minimap(node.global_transform.basis)
+	static func facing_to_minimap(basis: Basis) -> Vector2:
+		var forward := -basis.z
+		var result := Vector2(forward.x, forward.z)
+		if result.length_squared() < 0.0001:
+			return Vector2.ZERO
+		return result.normalized()
+
+
+	## Seta curta na frente do circulo do jogador mostrando para onde ele olha.
+	## Uso: dentro de _draw, apos desenhar o circulo do jogador.
+	func _draw_player_facing(point: Vector2, basis: Basis, color: Color) -> void:
+		var direction := facing_to_minimap(basis)
+		if direction.length_squared() < 0.0001:
+			return
+		var tip := point + direction * 12.0
+		var left := point + direction.rotated(2.5) * 6.0
+		var right := point + direction.rotated(-2.5) * 6.0
+		draw_colored_polygon(PackedVector2Array([tip, left, right]), color)
+
 ## HUD a 5 Hz e minimapa a 12 Hz: nada disso precisa de 60 atualizacoes por
 ## segundo, e cada quadro economizado poupa 4 views com varreduras de 600
 ## zumbis. Uso: roda sozinho via _process.
@@ -100,6 +144,8 @@ var minimaps: Array[Control] = []
 var straggler_reveal_count := STRAGGLER_REVEAL_COUNT
 var hud_elapsed := 0.0
 var minimap_elapsed := 0.0
+var _minimap_layout: Dictionary = {}
+var _minimap_layout_loaded := false
 
 
 func configure(local_players: Array[Node]) -> void:
@@ -179,6 +225,10 @@ func _update_minimaps() -> void:
 	var stragglers: Array = stragglers_to_reveal(all_zombies, straggler_reveal_count)
 	# Super zumbi aparece sempre no minimapa.
 	var bosses := get_tree().get_nodes_in_group("boss_zombies")
+	# O mapa gerado e estatico: busca uma vez, quando a cidade terminar de montar.
+	if not _minimap_layout_loaded:
+		_minimap_layout = _load_city_minimap_layout()
+		_minimap_layout_loaded = not _minimap_layout.is_empty()
 	for index in minimaps.size():
 		var view_player: Node = players[index] if index < players.size() else null
 		var reveal_zombies: Array = stragglers
@@ -191,7 +241,21 @@ func _update_minimaps() -> void:
 		minimaps[index].tracked_zombies = reveal_zombies
 		minimaps[index].tracked_crates = all_crates
 		minimaps[index].tracked_loot = all_loot
+		minimaps[index].city_layout = _minimap_layout
 		minimaps[index].queue_redraw()
+
+
+## Ruas/predios do mapa gerado, lidos do no da cidade (GeneratedCity). Vazio
+## enquanto a cidade monta ou no modo sem cidade procedural.
+## Uso: _minimap_layout = _load_city_minimap_layout()
+func _load_city_minimap_layout() -> Dictionary:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return {}
+	var city := scene.get_node_or_null("GeneratedCity")
+	if city != null and city.has_method("get_minimap_layout"):
+		return city.call("get_minimap_layout")
+	return {}
 
 
 func _update_hud_text() -> void:
