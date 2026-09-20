@@ -584,6 +584,14 @@ static func is_crate_weapon(kind: int) -> bool:
 	return STATS_BY_KIND.has(kind)
 
 
+## Armas seguradas com as DUAS maos (longas: fuzis, escopetas, sniper...). A
+## pistola, o revolver e a escopeta serrada sao de uma mao so.
+## Uso: if WeaponStats.uses_two_hands(kind): ...
+static func uses_two_hands(kind: int) -> bool:
+	var model := String(stats_for(kind).get("model", "rifle"))
+	return model not in ["handgun", "revolver", "short_shotgun"]
+
+
 ## Armas de crate em ordem de tipo (fonte unica para crate, drop e modelos).
 ## Uso: for kind in WeaponStats.crate_kinds(): ...
 static func crate_kinds() -> Array[int]:
