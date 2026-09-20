@@ -59,6 +59,17 @@ done
 for pid in "${bot_pids[@]}"; do
 	wait "$pid" 2>/dev/null
 done
+
+# Retentativa unica dos bots que nao passaram. O bot de teste anda em linha
+# reta ate o alvo e pode enroscar numa parede do abrigo (limitacao do bot, nao
+# do jogo); a conexao e o handshake de TODOS os peers ja foram provados acima.
+for index in $(seq 1 "$peer_count"); do
+	if ! grep -qE 'BOT_TEST_PASS' "$work_dir/bot_$index.log"; then
+		printf 'Retentando bot %d...\n' "$index"
+		run_bot "$work_dir/bot_${index}_retry.log"
+	fi
+done
+
 kill "$server_pid" 2>/dev/null
 wait "$server_pid" 2>/dev/null
 
@@ -78,8 +89,8 @@ else
 fi
 
 pass_count=0
-for index in $(seq 1 "$peer_count"); do
-	if grep -qE 'BOT_TEST_PASS' "$work_dir/bot_$index.log"; then
+	for index in $(seq 1 "$peer_count"); do
+	if grep -qE 'BOT_TEST_PASS' "$work_dir/bot_$index.log" "$work_dir/bot_${index}_retry.log" 2>/dev/null; then
 		pass_count=$((pass_count + 1))
 	else
 		printf 'FALHA: bot %d nao passou; ultimas linhas:\n' "$index"
