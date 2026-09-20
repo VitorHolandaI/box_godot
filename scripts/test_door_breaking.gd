@@ -15,6 +15,9 @@ func run(test_root: Node) -> void:
 	await _test_broken_door_frees_doorway_and_bursts(test_root)
 	_test_hit_shakes_panel_before_breaking(test_root)
 	_test_open_door_can_still_be_broken(test_root)
+	_test_configured_swing_direction_overrides_axis_default(test_root)
+	await _test_door_opens_away_from_interactor(test_root)
+	await _test_player_opens_door_at_extended_reach(test_root)
 	await _test_player_knife_breaks_door(test_root)
 	_test_network_break_animates_only_after_first_snapshot(test_root)
 	_test_debris_rejects_invalid_size(test_root)
@@ -85,6 +88,76 @@ func _test_open_door_can_still_be_broken(test_root: Node) -> void:
 	print("PASS: Porta aberta pode ser destruida.")
 
 
+## A direcao inicial vinda da planta sobrepoe o fallback pelo eixo da parede.
+## Uso: interno do run.
+func _test_configured_swing_direction_overrides_axis_default(test_root: Node) -> void:
+	print("Testando sentido de abertura configurado pela planta...")
+	var door = DOOR_SCRIPT.new()
+	door.configure(Vector3(1.4, 2.6, 0.12), null, -1.0)
+	door.interact()
+	door.call("_physics_process", 1.0)
+	var opened_on_requested_side: bool = is_equal_approx(door.rotation.y, -PI * 0.5)
+	var final_rotation: float = door.rotation.y
+	door.free()
+	if not opened_on_requested_side:
+		_fail(test_root, "Direcao configurada -1 deveria abrir a porta para -90 graus; veio %.3f." % final_rotation)
+		return
+	print("PASS: Porta respeita o sentido de abertura da planta.")
+
+
+## Ao abrir, a folha deve sair para o lado oposto de quem interagiu. Uso: interno.
+func _test_door_opens_away_from_interactor(test_root: Node) -> void:
+	print("Testando porta abrindo para longe de quem interage...")
+	var door := _add_door(test_root, Vector3(-705.0, 0.0, -705.0))
+	var opener := Node3D.new()
+	test_root.add_child(opener)
+	await test_root.get_tree().physics_frame
+	opener.position = door.position + Vector3(0.0, 0.0, 1.0)
+	door.interact(opener)
+	for frame in 24:
+		await test_root.get_tree().physics_frame
+	var positive_side_opens_away: bool = is_equal_approx(door.rotation.y, PI * 0.5)
+	var positive_rotation: float = door.rotation.y
+	door.interact()
+	for frame in 24:
+		await test_root.get_tree().physics_frame
+	opener.position = door.position + Vector3(0.0, 0.0, -1.0)
+	door.interact(opener)
+	for frame in 24:
+		await test_root.get_tree().physics_frame
+	var negative_side_opens_away: bool = is_equal_approx(door.rotation.y, -PI * 0.5)
+	var negative_rotation: float = door.rotation.y
+	door.queue_free()
+	opener.queue_free()
+	if not positive_side_opens_away or not negative_side_opens_away:
+		_fail(test_root, "Porta deveria girar para o lado oposto ao interator; +Z=%.3f -Z=%.3f." % [positive_rotation, negative_rotation])
+		return
+	print("PASS: Porta sempre abre para longe de quem interage.")
+
+
+## O raycast de interacao deve alcancar uma porta a 3,1 m, sem exigir que o
+## boneco encoste no painel. Uso: interno do run.
+func _test_player_opens_door_at_extended_reach(test_root: Node) -> void:
+	print("Testando alcance de interacao da porta...")
+	var door := _add_door(test_root, Vector3(-709.3, 0.0, -713.1))
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.set("reads_local_input", false)
+	player.set("simulation_enabled", false)
+	player.set("is_local_controller", false)
+	player.position = Vector3(-708.6, 1.2, -710.0)
+	test_root.add_child(player)
+	await test_root.get_tree().physics_frame
+	player.set("interact_pressed", true)
+	player.call("_handle_interaction_input")
+	var opened := bool(door.get("is_open"))
+	player.queue_free()
+	door.queue_free()
+	if not opened:
+		_fail(test_root, "Jogador deveria abrir porta a 3,1 m; alcance ficou curto demais.")
+		return
+	print("PASS: Jogador abre porta a 3,1 m sem encostar nela.")
+
+
 func _test_player_knife_breaks_door(test_root: Node) -> void:
 	print("Testando jogador arrombando porta com a faca...")
 	var door := _add_door(test_root, Vector3(-708.7, 0.0, -701.0))
@@ -153,8 +226,8 @@ func _test_replicator_sends_only_changed_doors(test_root: Node) -> void:
 	var broken: Dictionary = replicator.take_changes()
 	var path := str(test_root.get_tree().current_scene.get_path_to(door))
 	door.queue_free()
-	var opened_ok: bool = opened.get(path, []) == [true, false]
-	var broken_ok: bool = broken.get(path, []) == [true, true]
+	var opened_ok: bool = opened.get(path, []) == [true, false, -1.0]
+	var broken_ok: bool = broken.get(path, []) == [true, true, -1.0]
 	if not idle.is_empty() or not opened_ok or not drained.is_empty() or not broken_ok:
 		_fail(test_root, "Replicador deveria enviar so mudancas; parado=%s aberta=%s repetido=%s quebrada=%s." % [idle, opened, drained, broken])
 		return
@@ -180,7 +253,7 @@ func _test_replicator_watches_late_doors(test_root: Node) -> void:
 	var changes: Dictionary = replicator.take_changes()
 	var path := str(test_root.get_tree().current_scene.get_path_to(door))
 	door.queue_free()
-	if changes.get(path, []) != [false, false]:
+	if changes.get(path, []) != [false, false, -1.0]:
 		_fail(test_root, "Re-watch deveria assinar a porta tardia e capturar a mudanca; veio %s." % [changes])
 		return
 	print("PASS: Re-watch apos a montagem assina portas tardias e replica as mudancas.")
@@ -204,12 +277,13 @@ func _test_client_applies_door_change_with_animation(test_root: Node) -> void:
 	var door := _add_door(test_root, Vector3(-724.0, 0.0, -700.0))
 	DOOR_NETWORK_STATE_SCRIPT.apply(test_root.get_tree(), {})
 	var path := str(test_root.get_tree().current_scene.get_path_to(door))
-	DOOR_NETWORK_STATE_SCRIPT.apply_changes(test_root.get_tree(), {path: [true, true], "Nao/Existe": [true, true]})
+	DOOR_NETWORK_STATE_SCRIPT.apply_changes(test_root.get_tree(), {path: [true, true, 1.0], "Nao/Existe": [true, true, 1.0]})
 	var destroyed := bool(door.get("is_destroyed"))
 	var debris := door.get_node_or_null("DoorDebris")
+	var replicated_swing: float = float(door.get("swing_direction"))
 	door.queue_free()
-	if not destroyed or debris == null:
-		_fail(test_root, "Mudanca recebida depois do estado completo deveria quebrar a porta com destrocos; quebrada=%s destrocos=%s." % [destroyed, debris])
+	if not destroyed or debris == null or not is_equal_approx(replicated_swing, 1.0):
+		_fail(test_root, "Mudanca recebida deveria quebrar e replicar giro; quebrada=%s destrocos=%s giro=%.1f." % [destroyed, debris, replicated_swing])
 		return
 	print("PASS: Cliente quebra a porta ao vivo e ignora caminhos invalidos.")
 

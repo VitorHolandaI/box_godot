@@ -25,14 +25,18 @@ var _panel_node: Node3D
 var _received_network_state := false
 
 
-## Configures a door before it is added to the scene tree.
-## Usage: door.configure(Vector3(2.2, 2.4, 0.14), wall_material)
-func configure(size: Vector3, material: Material) -> void:
+## Configures a door before it is added to the scene tree. A non-zero
+## `requested_swing_direction` overrides the legacy axis-derived swing.
+## Usage: door.configure(Vector3(2.2, 2.4, 0.14), wall_material, -1.0)
+func configure(size: Vector3, material: Material, requested_swing_direction: float = 0.0) -> void:
 	if size.x <= 0.0 or size.y <= 0.0 or size.z <= 0.0:
 		push_error("Tamanho de porta invalido %s; esperado um Vector3 positivo." % size)
 		return
 	panel_size = size
 	panel_material = material
+	if not is_zero_approx(requested_swing_direction):
+		swing_direction = signf(requested_swing_direction)
+		return
 	swing_direction = 1.0 if panel_size.z > panel_size.x else -1.0
 
 
@@ -59,15 +63,27 @@ func _physics_process(delta: float) -> void:
 		set_physics_process(false)
 
 
-## Toggles the door between its two player-visible states. Only players call
-## this; zombies never open doors, they can only break them.
-## Usage: door.interact()
-func interact() -> void:
+## Toggles the door. When opening, the leaf swings away from the player who
+## interacted; zombies never open doors, they can only break them.
+## Usage: door.interact(player)
+func interact(opener: Node3D = null) -> void:
 	if is_destroyed:
 		return
+	if not is_open and opener != null:
+		_set_swing_away_from(opener.global_position)
 	is_open = not is_open
 	set_physics_process(true)
 	network_state_changed.emit(self)
+
+
+## Seleciona o lado oposto a quem abriu. A folha horizontal gira para +/- Z;
+## a vertical gira para -/+ X, por causa do pivot no inicio do vao. Uso: interno.
+func _set_swing_away_from(opener_position: Vector3) -> void:
+	var local_opener := to_local(opener_position)
+	if panel_size.x > panel_size.z and not is_zero_approx(local_opener.z):
+		swing_direction = signf(local_opener.z)
+	elif panel_size.z > panel_size.x and not is_zero_approx(local_opener.x):
+		swing_direction = -signf(local_opener.x)
 
 
 ## Damages a building door, open or closed. Zombie claws, the player's knife
@@ -88,10 +104,12 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 ## Applies the authoritative state received from the multiplayer server. The
 ## very first snapshot only mirrors state (a late joiner must not watch every
 ## old door explode); later transitions play the break animation.
-## Usage: door.apply_network_state(true, false)
-func apply_network_state(should_open: bool, destroyed: bool) -> void:
+## Usage: door.apply_network_state(true, false, -1.0)
+func apply_network_state(should_open: bool, destroyed: bool, network_swing_direction: float = 0.0) -> void:
 	var play_animation := _received_network_state
 	_received_network_state = true
+	if not is_zero_approx(network_swing_direction):
+		swing_direction = signf(network_swing_direction)
 	if destroyed and not is_destroyed:
 		_break_apart(Vector3.ZERO, play_animation)
 	if not destroyed:
