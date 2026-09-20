@@ -194,6 +194,8 @@ const PVP_STREET_ROUTE := [
 	Vector3(58.5, 1.3, 58.5),
 ]
 var loot_rng := RandomNumberGenerator.new()
+## Jogadores na sala no frame anterior: a sala reinicia na TRANSICAO para vazia.
+var _previous_player_count := 0
 ## Armas soltas por zumbis ainda no chao, da mais antiga para a mais nova.
 var zombie_weapon_drops: Array[Node] = []
 
@@ -380,6 +382,7 @@ func _process(delta: float) -> void:
 		# quando survival_mode e falso) enchia o mapa de zumbi durante o PVP.
 		return
 	if NetworkSession.survival_mode:
+		_check_survival_room_reset()
 		_check_survival_game_over()
 		if survival_wave_controller.game_over:
 			if survival_wave_controller.tick_game_over(delta, not get_tree().get_nodes_in_group("player").is_empty()):
@@ -1204,22 +1207,43 @@ func _on_peer_scene_loaded(peer_id: int) -> void:
 
 
 ## Todo mundo caido/eliminado = GAME OVER: horda zerada (zumbis limpos,
-## contadores zero) e a partida espera novo jogador entrar.
+## contadores zero) e a partida espera novo jogador entrar. Sala vazia nao
+## conta: servidor dedicado e um servico que espera, nao um jogo perdido.
 func _check_survival_game_over() -> void:
 	if survival_wave_controller.game_over:
 		return
 	if not SURVIVAL_WAVE_CONTROLLER_SCRIPT.everyone_is_down(get_tree().get_nodes_in_group("player")):
 		return
-	# Ninguem de pe: zera.
+	_clear_horde()
+	survival_wave_controller.trigger_game_over()
+	for peer_id in NetworkSession.loaded_peers:
+		_game_over.rpc_id(int(peer_id))
+
+
+## Sala dedicada: quando o ULTIMO jogador sai, a partida recomeca para quem
+## entrar depois. Sala vazia desde que subiu mantem o mundo montado (inclusive
+## a horda de --prespawn-zombies), por isso a checagem e de transicao.
+## Uso: chamado todo frame no modo sobrevivencia.
+func _check_survival_room_reset() -> void:
+	var player_count := get_tree().get_nodes_in_group("player").size()
+	var emptied: bool = SURVIVAL_WAVE_CONTROLLER_SCRIPT.room_emptied(_previous_player_count, player_count)
+	_previous_player_count = player_count
+	if not emptied:
+		return
+	print(JSON.stringify({"event": "room_reset", "reason": "ultimo_jogador_saiu"}))
+	_clear_horde()
+	_restart_survival()
+
+
+## Tira a horda inteira do mundo e limpa os caches/filas de spawn.
+## Uso: interno do game over e do reinicio da sala.
+func _clear_horde() -> void:
 	for zombie_node in zombies.get_children():
 		zombie_cache.erase(String(zombie_node.name))
 		zombie_node.queue_free()
 	zombie_cache.clear()
 	pending_zombie_spawns.clear()
 	pending_zombie_names.clear()
-	survival_wave_controller.trigger_game_over()
-	for peer_id in NetworkSession.loaded_peers:
-		_game_over.rpc_id(int(peer_id))
 
 
 @rpc("authority", "call_remote", "reliable")

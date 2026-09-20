@@ -89,12 +89,25 @@ func set_sync_state(new_wave_index: int, kills: int, alive: int = -1, is_game_ov
 ## entra depois reinicia a horda em main._on_peer_scene_loaded, inclusive na onda 0.
 ## Uso: if SurvivalWaveController.everyone_is_down(get_tree().get_nodes_in_group("player")): ...
 static func everyone_is_down(players: Array) -> bool:
+	# Sala vazia nao e derrota: o servidor dedicado e um servico que espera
+	# jogador. Sem esta guarda o primeiro frame de um servidor recem-subido ja
+	# dava game over e apagava o mundo (inclusive a horda de --prespawn-zombies).
+	if players.is_empty():
+		return false
 	for player_node in players:
 		if not is_instance_valid(player_node) or (player_node as Node).is_queued_for_deletion():
 			continue
 		if player_node.get("is_downed") != true and player_node.get("is_eliminated") != true:
 			return false
 	return true
+
+
+## A sala so reinicia quando o ULTIMO jogador sai: e uma transicao, nao um
+## estado. Sala que nunca teve ninguem (servidor recem-subido) mantem o mundo
+## montado, senao o mundo era reiniciado antes do primeiro jogador entrar.
+## Uso: if SurvivalWaveController.room_emptied(antes, agora): _restart_survival()
+static func room_emptied(previous_player_count: int, current_player_count: int) -> bool:
+	return previous_player_count > 0 and current_player_count == 0
 
 
 ## Game over: para tudo; reinicia sozinho (tick_game_over) ou quando alguem entra.
