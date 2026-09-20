@@ -64,6 +64,23 @@ var local_host := LocalHostLauncher.new()
 
 
 func _ready() -> void:
+	if not _configure_session_from_arguments():
+		return
+	_connect_multiplayer_signals()
+	if _enter_tool_scene():
+		return
+	if _start_dedicated_server():
+		return
+	_read_bot_name_argument()
+	if _join_as_bot():
+		return
+	_enter_direct_offline_scene()
+
+
+## Porta, capacidade, mundo e nome da sala vindos da linha de comando.
+## Devolve false quando a porta e invalida e a sessao ja pediu para sair.
+## Uso: if not _configure_session_from_arguments(): return
+func _configure_session_from_arguments() -> bool:
 	server_port = _get_command_line_port()
 	max_players = PlayerCapacity.max_players_from_arguments(OS.get_cmdline_user_args())
 	local_host.idle_exit_seconds = LocalHostLauncher.idle_exit_seconds_from_arguments(OS.get_cmdline_user_args())
@@ -75,83 +92,107 @@ func _ready() -> void:
 		server_name = PVP_SERVER_NAME
 	if server_port < 0:
 		get_tree().quit(1)
-		return
+		return false
+	return true
+
+
+func _connect_multiplayer_signals() -> void:
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
 	multiplayer.connection_failed.connect(_on_connection_failed)
 	multiplayer.server_disconnected.connect(_on_server_disconnected)
 
-	if "--unit-test" in OS.get_cmdline_user_args():
-		get_tree().call_deferred("change_scene_to_file", "res://scenes/test_combat_and_variants.tscn")
-		return
 
-	if "--benchmark-zombies" in OS.get_cmdline_user_args():
-		get_tree().call_deferred("change_scene_to_file", "res://scenes/benchmark_zombies.tscn")
-		return
+## Cenas de ferramenta (testes e benchmarks) entram no lugar do menu.
+## Devolve true quando assumiu a cena. Uso: if _enter_tool_scene(): return
+func _enter_tool_scene() -> bool:
+	var tool_scenes := {
+		"--unit-test": "res://scenes/test_combat_and_variants.tscn",
+		"--benchmark-zombies": "res://scenes/benchmark_zombies.tscn",
+		"--benchmark-indoor-escape": "res://scenes/benchmark_indoor_escape.tscn",
+	}
+	for flag in tool_scenes:
+		if flag in OS.get_cmdline_user_args():
+			get_tree().call_deferred("change_scene_to_file", tool_scenes[flag])
+			return true
+	return false
 
-	if "--benchmark-indoor-escape" in OS.get_cmdline_user_args():
-		get_tree().call_deferred("change_scene_to_file", "res://scenes/benchmark_indoor_escape.tscn")
-		return
 
-	if ServerTickPolicy.is_dedicated_server():
-		ServerTickPolicy.apply_dedicated_tick()
-		var error := start_server(server_port)
-		if error != OK:
-			push_error("Nao foi possivel iniciar o servidor: %s" % error_string(error))
-			get_tree().quit(1)
-			return
-		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
-		return
+## Servidor dedicado: tick reduzido, socket aberto e entrada direta no mundo.
+## Devolve true quando este processo e o servidor. Uso: if _start_dedicated_server(): return
+func _start_dedicated_server() -> bool:
+	if not ServerTickPolicy.is_dedicated_server():
+		return false
+	ServerTickPolicy.apply_dedicated_tick()
+	var error := start_server(server_port)
+	if error != OK:
+		push_error("Nao foi possivel iniciar o servidor: %s" % error_string(error))
+		get_tree().quit(1)
+		return true
+	get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
+	return true
 
+
+func _read_bot_name_argument() -> void:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--bot-name="):
 			bot_name = argument.trim_prefix("--bot-name=").strip_edges()
 
+
+## Clientes automaticos: `--bot=IP` (teste de fluxo, sai no fim) e
+## `--bot-player=IP` (bot que joga de verdade). Devolve true quando entrou.
+## Uso: if _join_as_bot(): return
+func _join_as_bot() -> bool:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--bot="):
 			bot_mode = true
-			var config: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
-			GameConfig.configure_local_players(config)
+			_configure_single_local_player()
 			join_failed.connect(_on_bot_join_failed, CONNECT_ONE_SHOT)
-			var error := join_server(argument.trim_prefix("--bot="), 1, server_port)
-			if error != OK:
-				push_error("BOT_TEST_FAIL: %s" % error_string(error))
-				get_tree().quit(2)
-			return
+			_join_or_quit(argument.trim_prefix("--bot="), "BOT_TEST_FAIL: %s")
+			return true
 		if argument.begins_with("--bot-player=") or argument == "--bot-player":
 			autoplay_bot = true
-			var target_ip := argument.trim_prefix("--bot-player=") if argument.begins_with("--bot-player=") else "127.0.0.1"
-			var config: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
-			GameConfig.configure_local_players(config)
+			_configure_single_local_player()
 			join_failed.connect(_on_autoplay_bot_join_failed, CONNECT_ONE_SHOT)
-			var error := join_server(target_ip, 1, server_port)
-			if error != OK:
-				push_error("Falha ao conectar bot player: %s" % error_string(error))
-				get_tree().quit(2)
-			return
+			var target_ip := argument.trim_prefix("--bot-player=") if argument.begins_with("--bot-player=") else "127.0.0.1"
+			_join_or_quit(target_ip, "Falha ao conectar bot player: %s")
+			return true
 		if argument.begins_with("--join="):
-			var target_ip := argument.trim_prefix("--join=")
-			var config: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
-			GameConfig.configure_local_players(config)
-			var error := join_server(target_ip, 1, server_port)
-			if error != OK:
-				push_error("Falha ao conectar: %s" % error_string(error))
-				get_tree().quit(2)
-			return
+			_configure_single_local_player()
+			_join_or_quit(argument.trim_prefix("--join="), "Falha ao conectar: %s")
+			return true
+	return false
 
+
+func _configure_single_local_player() -> void:
+	var config: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
+	GameConfig.configure_local_players(config)
+
+
+## Entra no servidor e encerra o processo quando a conexao nem sai do chao:
+## sem isso o bot/cliente ficava vivo sem sessao, sem erro visivel.
+## Uso: _join_or_quit(ip, "Falha ao conectar: %s")
+func _join_or_quit(target_ip: String, error_format: String) -> void:
+	var error := join_server(target_ip, 1, server_port)
+	if error == OK:
+		return
+	push_error(error_format % error_string(error))
+	get_tree().quit(2)
+
+
+## Modos de dev que pulam o menu e caem direto numa partida offline.
+func _enter_direct_offline_scene() -> void:
 	if SHOT_CAPTURE_SCRIPT.is_requested():
 		# Dev (--capture): entra direto numa partida offline, sem passar pelo menu.
 		leave_session()
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
 		return
-
-	if weapons_lab:
-		# Campo de testes de armas: entra direto numa partida offline, sem menu.
-		var lab_config: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
-		GameConfig.configure_local_players(lab_config)
-		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
+	if not weapons_lab:
 		return
+	# Campo de testes de armas: entra direto numa partida offline, sem menu.
+	_configure_single_local_player()
+	get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
 
 
 func _process(delta: float) -> void:
