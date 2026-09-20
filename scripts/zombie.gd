@@ -32,6 +32,9 @@ const TARGET_SWITCH_COOLDOWN := 1.0
 const TARGET_SWITCH_DISTANCE_MARGIN := 2.0
 const MELEE_RANGE := 1.25
 const MELEE_VERTICAL_RANGE := 1.4
+## Alcance do golpe contra um veiculo: o carro e grande e o zumbi bate na lataria,
+## nao no boneco la dentro. Uso: _find_nearest_melee_player
+const VEHICLE_MELEE_RANGE := 3.6
 const DOOR_ATTACK_RANGE := 1.9
 const DOOR_ATTACK_HEIGHT := 0.9
 const FEET_OFFSET := 1.1
@@ -646,28 +649,54 @@ func _should_switch_target(candidate: CharacterBody3D) -> bool:
 	return global_position.distance_to(candidate.global_position) + TARGET_SWITCH_DISTANCE_MARGIN <= global_position.distance_to(alert_target.global_position)
 
 
-func _find_nearest_melee_player() -> CharacterBody3D:
-	var nearest: CharacterBody3D = null
-	var nearest_distance := MELEE_RANGE
+## Alvo de combate: se o jogador esta dentro de um veiculo, quem apanha e o
+## veiculo (o metal protege o boneco). Uso: interno do melee
+func _combat_target(player: Node3D) -> Node3D:
+	if player == null:
+		return null
+	if player.has_method("is_driving") and bool(player.call("is_driving")):
+		var car: Variant = player.get("driving_car")
+		if car != null and is_instance_valid(car):
+			return car as Node3D
+	if player.has_method("is_riding") and bool(player.call("is_riding")):
+		var car: Variant = player.get("riding_car")
+		if car != null and is_instance_valid(car):
+			return car as Node3D
+	return player
+
+
+## Jogador vivo mais proximo ao alcance do golpe. Se ele estiver em um veiculo,
+## o alvo devolvido e o proprio veiculo (com alcance maior, porque o carro e
+## grande). Uso: _drive_movement
+func _find_nearest_melee_player() -> Node3D:
+	var nearest: Node3D = null
+	var nearest_distance := INF
 	for player in ZombieFlockCoordinator.get_living_players(get_tree()):
 		var player_body := player as CharacterBody3D
 		if not _is_living_player(player_body):
 			continue
 		var distance := global_position.distance_to(player_body.global_position)
-		if distance <= nearest_distance and absf(player_body.global_position.y - global_position.y) <= MELEE_VERTICAL_RANGE:
-			nearest = player_body
-			nearest_distance = distance
+		if distance >= nearest_distance:
+			continue
+		if absf(player_body.global_position.y - global_position.y) > MELEE_VERTICAL_RANGE:
+			continue
+		var target := _combat_target(player_body)
+		var reach := VEHICLE_MELEE_RANGE if target != player_body else MELEE_RANGE
+		if distance > reach:
+			continue
+		nearest = target
+		nearest_distance = distance
 	return nearest
 
 
-func _perform_melee_attack(target: CharacterBody3D) -> void:
+func _perform_melee_attack(target: Node3D) -> void:
 	_attack_target_or_door(target)
 	attack_cooldown = 0.9
 	attack_animation_time = ATTACK_ANIMATION_DURATION
 	attack_sequence += 1
 
 
-func _attack_target_or_door(target: CharacterBody3D) -> void:
+func _attack_target_or_door(target: Node3D) -> void:
 	if absf(target.global_position.y - global_position.y) > MELEE_VERTICAL_RANGE:
 		return
 	var ray_start := global_position + Vector3.UP * 0.8
@@ -683,7 +712,7 @@ func _attack_target_or_door(target: CharacterBody3D) -> void:
 		if collider == target:
 			target.take_damage(attack_damage, (target.global_position - global_position).normalized(), "melee", self)
 			return
-		if collider.is_in_group("destructible_door") or (parent != null and parent.has_method("take_damage")):
+		if collider.is_in_group("destructible_door") or collider.has_method("take_damage") or (parent != null and parent.has_method("take_damage")):
 			if collider.has_method("take_damage"):
 				collider.take_damage(attack_damage, (target.global_position - global_position).normalized())
 			else:

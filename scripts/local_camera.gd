@@ -42,7 +42,16 @@ func _process(delta: float) -> void:
 	if inside_check_elapsed <= 0.0:
 		inside_check_elapsed = INSIDE_CHECK_INTERVAL
 		containing_building = _find_containing_building()
-	camera_offset = INDOOR_OFFSET if is_instance_valid(containing_building) else OUTDOOR_OFFSET
+	if is_instance_valid(containing_building):
+		camera_offset = INDOOR_OFFSET
+	else:
+		camera_offset = OUTDOOR_OFFSET
+	# Dirigindo a camera mantem a MESMA distancia e altura da isometrica a pe; o
+	# que muda e o giro do offset junto com o rumo do carro, para ela ficar atras
+	# do veiculo em vez de sempre no mesmo lado do mundo. O y nao muda, entao o
+	# shader de recorte continua derivando a posicao do jogador.
+	if _target_is_driving():
+		camera_offset = camera_offset.rotated(Vector3.UP, target.global_rotation.y)
 	if interior_focus_owner == self:
 		RenderingServer.global_shader_parameter_set(INTERIOR_FOCUS_PARAMETER, target.global_position)
 	var desired_position := target.global_position + camera_offset
@@ -57,6 +66,12 @@ func _process(delta: float) -> void:
 	var blend := minf(delta * CAMERA_SMOOTH_SPEED, 1.0)
 	global_position = global_position.lerp(desired_position, blend)
 	quaternion = quaternion.slerp(desired_transform.basis.get_rotation_quaternion(), blend)
+
+
+## Verdadeiro quando o alvo (jogador) esta dirigindo um carro; nesse caso a
+## camera usa o offset aproximado. Uso: interno de _process
+func _target_is_driving() -> bool:
+	return is_instance_valid(target) and target.has_method("is_driving") and bool(target.call("is_driving"))
 
 
 func _find_containing_building() -> Node3D:

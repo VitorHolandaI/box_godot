@@ -18,6 +18,15 @@ const HIT_TOLERANCE_RADIUS := 0.3
 var direction := Vector3.FORWARD
 var causes_damage := true
 var shooter: CollisionObject3D = null
+## Corpos extras que o projetil atravessa (ex.: o carro de onde o tiro saiu: o
+## cano fica dentro do chassi e sem isso a bala acertaria o proprio veiculo).
+var ignore_rids: Array[RID] = []
+
+
+## Faz o projetil ignorar um corpo. Uso: bullet.ignore_collider(car)
+func ignore_collider(body: CollisionObject3D) -> void:
+	if body != null:
+		ignore_rids.append(body.get_rid())
 
 
 ## Configura a direcao, o dano e o atirador do projetil para suporte a fogo amigo.
@@ -38,8 +47,10 @@ func _physics_process(delta: float) -> void:
 		_advance_damaging(next_position, delta)
 		return
 	var query := PhysicsRayQueryParameters3D.create(global_position, next_position, BULLET_MASK)
+	var exclude: Array[RID] = ignore_rids.duplicate()
 	if shooter != null:
-		query.exclude = [shooter.get_rid()]
+		exclude.append(shooter.get_rid())
+	query.exclude = exclude
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	if not hit.is_empty():
 		var collider: Object = hit.collider
@@ -60,7 +71,7 @@ func _physics_process(delta: float) -> void:
 
 ## Projetil autoritativo (servidor/partida local): trajeto com tolerancia.
 func _advance_damaging(next_position: Vector3, delta: float) -> void:
-	var exclude: Array[RID] = []
+	var exclude: Array[RID] = ignore_rids.duplicate()
 	if shooter != null:
 		exclude.append(shooter.get_rid())
 	var info := first_hit_info(get_world_3d().direct_space_state, global_position, next_position, exclude)
@@ -125,12 +136,13 @@ func _drop_disconnected_shooter() -> void:
 ## raycasts por tick (dano autoritativo na hora). Visual continua sendo
 ## tracer via RPC. Uso:
 ##   Bullet.hitscan_damage(origin, direcao, 10, player)
-static func hitscan_damage(origin: Vector3, direction: Vector3, damage: int, shooter: CollisionObject3D, pierce: int = 1) -> void:
+static func hitscan_damage(origin: Vector3, direction: Vector3, damage: int, shooter: CollisionObject3D, pierce: int = 1, extra_exclude: Array[RID] = []) -> void:
 	if shooter == null or not shooter.is_inside_tree():
 		return
 	var space := shooter.get_world_3d().direct_space_state
 	var reach := origin + direction * HITSACAN_RANGE
-	var exclude: Array[RID] = [shooter.get_rid()]
+	var exclude: Array[RID] = extra_exclude.duplicate()
+	exclude.append(shooter.get_rid())
 	# Railgun (pierce > 1): cada alvo atingido entra no exclude e o raio segue
 	# ate o proximo; parede ou objeto sem take_damage para o tiro.
 	for _hit_index in maxi(pierce, 1):
@@ -148,11 +160,13 @@ static func hitscan_damage(origin: Vector3, direction: Vector3, damage: int, sho
 ## tudo no raio com queda pela distancia; jogadores levam so um quinto do dano.
 ## Devolve o ponto de impacto para o efeito visual.
 ## Uso: var ponto := Bullet.explosive_shot(origem, direcao, 150, player, 5.0)
-static func explosive_shot(origin: Vector3, direction: Vector3, damage: int, shooter: CollisionObject3D, radius: float) -> Vector3:
+static func explosive_shot(origin: Vector3, direction: Vector3, damage: int, shooter: CollisionObject3D, radius: float, extra_exclude: Array[RID] = []) -> Vector3:
 	var reach := origin + direction * HITSACAN_RANGE
 	if shooter == null or not shooter.is_inside_tree():
 		return reach
-	var query := PhysicsRayQueryParameters3D.create(origin, reach, BULLET_MASK, [shooter.get_rid()])
+	var exclude: Array[RID] = extra_exclude.duplicate()
+	exclude.append(shooter.get_rid())
+	var query := PhysicsRayQueryParameters3D.create(origin, reach, BULLET_MASK, exclude)
 	var hit := shooter.get_world_3d().direct_space_state.intersect_ray(query)
 	var impact: Vector3 = hit.get("position", reach)
 	ZombieVariantAbilities.area_damage(shooter.get_tree(), impact, radius, maxi(damage / 5, 1), damage, damage, shooter)
