@@ -53,7 +53,7 @@ func _ready() -> void:
 			var along := (float(column) + 0.5) / PLANK_COLUMNS * panel_width
 			var offset := Vector3(along, (float(row) + 0.5) / PLANK_ROWS * panel_size.y, 0.0)
 			_add_piece(_orient_size(size, along_x), _orient_offset(offset, along_x), local_push, rng, 1.0)
-	for splinter in SPLINTER_COUNT:
+	for _splinter in SPLINTER_COUNT:
 		var size := Vector3(0.08, rng.randf_range(0.25, 0.6), 0.05)
 		var offset := Vector3(rng.randf() * panel_width, rng.randf_range(0.3, panel_size.y), 0.0)
 		_add_piece(_orient_size(size, along_x), _orient_offset(offset, along_x), local_push, rng, 1.6)
