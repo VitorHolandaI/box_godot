@@ -125,13 +125,15 @@ func _test_building_meshes_merge_without_touching_doors(test_root: Node) -> void
 ## unidade tem uma ancora de loot dentro dos limites do predio.
 func _test_enterable_buildings_have_interior_loot_anchors(test_root: Node) -> void:
 	print("Testando ancoras de loot dentro das casas e predios...")
-	for building_case in [["house", 240912, 1], ["apartment", 18273, 5], ["grocery", 18273, 1]]:
+	for building_case in [["house", 240912, 4], ["apartment", 18273, 10], ["grocery", 18273, 2]]:
 		var blueprint = BUILDING_GENERATOR_SCRIPT.generate(int(building_case[1]), String(building_case[0]))
 		var building: StaticBody3D = BUILDING_ASSEMBLER_SCRIPT.assemble(blueprint)
 		var anchors := building.find_children("LootAnchor_*", "Node3D", true, false)
+		var positions := {}
 		for anchor_node in anchors:
 			var anchor := anchor_node as Node3D
 			var local := anchor.position
+			positions[Vector3i(roundi(local.x * 10.0), roundi(local.y * 10.0), roundi(local.z * 10.0))] = true
 			if local.x < -0.01 or local.x > blueprint.width + 0.01 or local.z < -0.01 or local.z > blueprint.depth + 0.01 or local.y < -0.01:
 				_fail(test_root, "%s: ancora de loot em %s fora do predio (%.1fx%.1f)." % [building_case[0], local, blueprint.width, blueprint.depth])
 				building.free()
@@ -140,7 +142,10 @@ func _test_enterable_buildings_have_interior_loot_anchors(test_root: Node) -> vo
 		if anchors.size() < int(building_case[2]):
 			_fail(test_root, "%s deveria ter ao menos %d ancora(s) de loot; tem %d." % [building_case[0], int(building_case[2]), anchors.size()])
 			return
-	print("PASS: Casas, predios e comercio com ancoras de loot dentro dos limites.")
+		if positions.size() != anchors.size():
+			_fail(test_root, "%s tem ancoras de loot empilhadas (%d posicoes para %d ancoras)." % [building_case[0], positions.size(), anchors.size()])
+			return
+	print("PASS: Casas, predios e comercio com ancoras de loot espalhadas por comodo.")
 
 
 func _fail(test_root: Node, message: String) -> void:
