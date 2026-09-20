@@ -2,6 +2,7 @@ extends Control
 
 const LOCAL_CAMERA_SCRIPT := preload("res://scripts/local_camera.gd")
 const FIRST_PERSON_CAMERA_SCRIPT := preload("res://scripts/first_person_camera.gd")
+const AIM_RETICLE_SCRIPT := preload("res://scripts/aim_reticle.gd")
 const MINIMAP_SIZE := 150.0
 const MINIMAP_WORLD_EXTENT := 160.0
 # Fim de onda: com poucos zumbis vivos o minimapa mostra todos, para ninguem
@@ -264,10 +265,11 @@ func _update_hud_text() -> void:
 		var player := players[index]
 		if not is_instance_valid(player):
 			continue
+		var vehicle_line := String(player.call("get_vehicle_hud_text")) if player.has_method("get_vehicle_hud_text") else ""
 		if NetworkSession.pvp_mode:
 			# Mata-mata nao tem zumbi/sonar: o HUD fica so com vida, arma e a
 			# linha da partida (dinheiro/K-D ja vem no get_lives_text).
-			hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\n%s" % [
+			hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\n%s%s" % [
 				index + 1,
 				player.input_device_name,
 				player.get_lives_text(),
@@ -277,9 +279,10 @@ func _update_hud_text() -> void:
 				player.get_weapon_name(),
 				player.get_ammo_text(),
 				get_tree().current_scene.get_survival_hud_text() if get_tree().current_scene.has_method("get_survival_hud_text") else "",
+				"\n" + vehicle_line if not vehicle_line.is_empty() else "",
 			]
 			continue
-		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\n%s\nZumbis: %d | Abates: %d\n%s\n%s" % [
+		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\n%s\nZumbis: %d | Abates: %d\n%s\n%s%s" % [
 			index + 1,
 			player.input_device_name,
 			player.get_lives_text(),
@@ -293,6 +296,7 @@ func _update_hud_text() -> void:
 			player.zombie_kills,
 			player.get_sonar_text(),
 			get_tree().current_scene.get_survival_hud_text() if get_tree().current_scene.has_method("get_survival_hud_text") else "",
+			"\n" + vehicle_line if not vehicle_line.is_empty() else "",
 		]
 
 
@@ -361,6 +365,12 @@ func _create_player_view(index: int) -> void:
 	players[index].set("aim_camera", camera)
 	players[index].set("aim_viewport", viewport)
 	players[index].set("mouse_owner", players.size() == 1 or index == 0)
+
+	var reticle := AIM_RETICLE_SCRIPT.new() as Control
+	reticle.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	reticle.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	panel.add_child(reticle)
+	reticle.call("setup", players[index], camera)
 
 	var hud := Label.new()
 	hud.position = Vector2(14, 12)
