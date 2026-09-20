@@ -18,6 +18,7 @@ const CORPSE_CLEANUP_POLICY_SCRIPT := preload("res://scripts/corpse_cleanup_poli
 const ZOMBIE_SNAPSHOT_CODEC_SCRIPT := preload("res://scripts/zombie_snapshot_codec.gd")
 const LOAD_TEST_OPTIONS_SCRIPT := preload("res://scripts/load_test_options.gd")
 const SHOT_CAPTURE_SCRIPT := preload("res://scripts/shot_capture.gd")
+const CAR_BOT_DRIVER_SCRIPT := preload("res://scripts/car_bot_driver.gd")
 const CORPSE_CLEANUP_INTERVAL := 1.0
 const MAX_LOCAL_PLAYERS := 4
 const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
@@ -214,6 +215,7 @@ func _start_offline_match() -> void:
 	var offline_prespawn := LoadTestOptions.prespawn_zombie_count(OS.get_cmdline_user_args())
 	if offline_prespawn > 0:
 		_prespawn_load_test_zombies(offline_prespawn)
+	_start_car_bots_if_requested()
 
 
 ## Servidor ou cliente: roster de peers, smoke tests de dev e, no servidor, a
@@ -228,6 +230,7 @@ func _start_network_match() -> void:
 	if NetworkSession.is_server():
 		door_state_replicator.watch(get_tree())
 		_prespawn_load_test_zombies(LOAD_TEST_OPTIONS_SCRIPT.prespawn_zombie_count(OS.get_cmdline_user_args()))
+		_start_car_bots_if_requested()
 		if NetworkSession.pvp_mode:
 			pvp.spawn_bots_when_ready.call_deferred(LOAD_TEST_OPTIONS_SCRIPT.pvp_bot_count(OS.get_cmdline_user_args()))
 	_notify_scene_loaded.call_deferred()
@@ -256,6 +259,53 @@ func _prespawn_load_test_zombies(count: int) -> void:
 			spawned += 1
 	if count > 0:
 		print(JSON.stringify({"event": "prespawn_zombies", "requested": count, "spawned": spawned}))
+
+
+## Cria bots motoristas nos carros dirigiveis quando `--car-bot=N` foi pedido
+## (servidor dedicado/Docker ou partida offline). Serve para testar a rede do
+## carro sem um jogador humano: o bot dirige e o snapshot leva o movimento.
+## Uso: inicio da partida offline ou do servidor
+func _start_car_bots_if_requested() -> void:
+	var count := LoadTestOptions.car_bot_count(OS.get_cmdline_user_args())
+	if count > 0:
+		_spawn_car_bots_when_ready(count)
+
+
+## Espera os carros existirem e liga ate `count` bots motoristas. Uso: interno de
+## _start_car_bots_if_requested
+func _spawn_car_bots_when_ready(count: int) -> void:
+	var cars := await _await_drivable_cars()
+	var spawned := 0
+	for car in cars:
+		if spawned >= count:
+			break
+		if car.has_method("is_occupied") and bool(car.call("is_occupied")):
+			continue
+		_spawn_car_bot_for(car)
+		spawned += 1
+	print(JSON.stringify({"event": "car_bots", "requested": count, "spawned": spawned}))
+
+
+## Carros dirigiveis da cidade, esperando a geracao terminar (teto de ~6 s).
+## Uso: var cars := await _await_drivable_cars()
+func _await_drivable_cars() -> Array:
+	for _attempt in 60:
+		var cars := get_tree().get_nodes_in_group("drivable_cars")
+		if not cars.is_empty():
+			return cars
+		await get_tree().create_timer(0.1).timeout
+	return get_tree().get_nodes_in_group("drivable_cars")
+
+
+## Prende um CarBotDriver a um carro vazio: o bot entrega steer/throttle pelo
+## mesmo contrato do jogador (`get_vehicle_input`). Uso: _spawn_car_bot_for(car)
+func _spawn_car_bot_for(car: Node3D) -> void:
+	var bot := CAR_BOT_DRIVER_SCRIPT.new()
+	bot.name = "CarBotDriver"
+	bot.set("car", car)
+	bot.set("route_center", car.global_position)
+	add_child(bot)
+	car.call("enter", bot)
 
 
 func _notify_scene_loaded() -> void:
@@ -474,6 +524,7 @@ func _tick_server_network(delta: float) -> void:
 	_send_door_states()
 	_send_player_snapshots(_collect_player_states())
 	FramePerfProbe.end("snapshot_players", snapshot_start)
+	_send_car_snapshots(_collect_car_states())
 	snapshot_start = FramePerfProbe.begin()
 	_send_zombie_snapshots(_collect_zombie_states())
 	FramePerfProbe.end("snapshot_zombies", snapshot_start)
@@ -1038,6 +1089,7 @@ func _collect_neutral_inputs() -> Array:
 			"knife": false,
 			"pistol": false,
 			"reload": false,
+			"vehicle": {"steer": 0.0, "throttle": 0.0, "brake": true},
 		})
 	return states
 
@@ -1142,6 +1194,93 @@ func _send_player_snapshots(states: Array) -> void:
 		var payload := PlayerSnapshotCodec.encode(packet_states, include_slots)
 		for peer_id in NetworkSession.loaded_peers:
 			_apply_player_snapshot.rpc_id(int(peer_id), payload, door_open)
+
+
+## Carros dirigiveis: transform + vida/gasolina/estado a 10 Hz (junto do snapshot
+## de jogadores). O cliente congela a fisica do carro e interpola este estado.
+## Uso: _tick_server_network
+func _collect_car_states() -> Array:
+	var states: Array = []
+	for car in get_tree().get_nodes_in_group("drivable_cars"):
+		if car.has_method("get_network_state"):
+			var state: Dictionary = car.call("get_network_state")
+			state["driver_key"] = _occupant_key(car.get("driver"))
+			state["gunner_key"] = _occupant_key(car.get("gunner"))
+			states.append(state)
+	return states
+
+
+## Chave de rede (`peer:slot`) do ocupante de um assento, ou "" quando e um bot
+## (CarBotDriver) ou nao ha ninguem. Uso: _collect_car_states
+func _occupant_key(occupant: Variant) -> String:
+	if occupant == null or not (occupant is Node) or not is_instance_valid(occupant):
+		return ""
+	var node := occupant as Node
+	var peer_id: Variant = node.get("owner_peer_id")
+	var slot: Variant = node.get("local_slot")
+	if peer_id == null or slot == null:
+		return ""
+	return _player_key(int(peer_id), int(slot))
+
+
+func _send_car_snapshots(states: Array) -> void:
+	if states.is_empty():
+		return
+	for peer_id in NetworkSession.loaded_peers:
+		_apply_car_snapshot.rpc_id(int(peer_id), states)
+
+
+@rpc("authority", "call_remote", "unreliable_ordered")
+func _apply_car_snapshot(states: Array) -> void:
+	if not NetworkSession.is_client():
+		return
+	for state_value in states:
+		if not state_value is Dictionary:
+			continue
+		var state: Dictionary = state_value
+		var car := _find_drivable_car_by_name(String(state.get("name", "")))
+		if car == null:
+			continue
+		car.call("apply_network_state", state)
+		_apply_car_occupancy(car, String(state.get("driver_key", "")), String(state.get("gunner_key", "")))
+
+
+## No cliente, liga os proxies dos jogadores ao carro (`driver`/`gunner` no carro
+## e `driving_car`/`riding_car` no jogador) para a camera FPS (DriverEye), o HUD e
+## a pose. Uso: _apply_car_snapshot
+func _apply_car_occupancy(car: Node3D, driver_key: String, gunner_key: String) -> void:
+	_set_car_seat(car, "driver", "driving_car", driver_key)
+	_set_car_seat(car, "gunner", "riding_car", gunner_key)
+
+
+## Aplica um assento: solta o ocupante antigo e prende o novo (pelo key). Uso:
+## interno de _apply_car_occupancy
+func _set_car_seat(car: Node3D, car_field: String, player_field: String, key: String) -> void:
+	var current: Variant = car.get(car_field)
+	if current is Node and is_instance_valid(current):
+		var leaving := current as Node
+		if _occupant_key(leaving) != key and leaving.get(player_field) == car:
+			leaving.set(player_field, null)
+	if key.is_empty():
+		car.set(car_field, null)
+		return
+	var player: Variant = network_players.get(key)
+	if player == null or not is_instance_valid(player):
+		car.set(car_field, null)
+		return
+	car.set(car_field, player)
+	(player as Node).set(player_field, car)
+
+
+## Carro dirigivel pelo nome: a cidade gerada e deterministica nos dois lados,
+## entao o nome (`DrivableCar0`) identifica o mesmo carro. Uso: _apply_car_snapshot
+func _find_drivable_car_by_name(car_name: String) -> Node:
+	if car_name.is_empty():
+		return null
+	for car in get_tree().get_nodes_in_group("drivable_cars"):
+		if car.name == car_name:
+			return car
+	return null
 
 
 ## Portas dos predios: estado completo (confiavel) para quem acabou de carregar
