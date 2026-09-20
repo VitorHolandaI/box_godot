@@ -110,6 +110,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `survival_wave_controller.gd`: controla spawning, limpeza e conclusao das ondas, GAME OVER com reinicio automatico e sync de onda/restantes para o cliente. Sala vazia nao e derrota (`everyone_is_down([])` e falso): o servidor dedicado e um servico que espera jogador, e a partida so recomeca na transicao do ultimo jogador saindo (`room_emptied`).
 - `survival_wave_schedule.gd`: define a progressao ate a onda final de 600 zumbis.
 - `wave_supply_pickup.gd`: pickup interno autoritativo de vida ou municao.
+- `wave_loot_spawner.gd`: o que cai no chao por onda: o aviao do airdrop com o crate de paraquedas e os itens de vida/municao, quase todos DENTRO das casas pelas ancoras `building_loot_points`, com dois na rua. Saiu do `main.gd`.
 - `wave_supply_controller.gd`: renova quatro suprimentos da Safehouse e sorteia pontos internos por onda.
 - `supply_network_state.gd`: sincroniza disponibilidade de suprimentos por caminhos deterministicos.
 - `survival_wave_schedule.gd`: agenda de ondas (10 a 600 zumbis), ondas de airdrop e de chefe (horas 10, 20, 30), armas do crate por seed e mix percentual de variantes por fase.
