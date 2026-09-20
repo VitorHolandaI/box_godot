@@ -209,11 +209,42 @@ func _ready() -> void:
 	_update_weapon_models()
 
 
+## Tick do jogador, por papel: eliminado nao faz nada, o proxy do cliente so
+## interpola, o caido espera ser reanimado e o resto joga.
 func _physics_process(delta: float) -> void:
 	if is_eliminated:
 		velocity = Vector3.ZERO
 		return
+	_advance_action_clocks(delta)
+	if not simulation_enabled:
+		_interpolate_proxy(delta)
+		return
+	if is_downed:
+		# Caido (so onde e simulado: offline/servidor): sem acao; o aliado
+		# segurando interagir reanima em ~3s. O proxy do cliente apenas
+		# interpola, para nao brigar com o progresso sincronizado.
+		velocity = Vector3.ZERO
+		_update_revive_by_others(delta)
+		return
+	_collect_tick_input(delta)
+	_handle_interaction_input()
+	_handle_weapon_input()
+	equipment_cooldown = maxf(equipment_cooldown - delta, 0.0)
+	_handle_equipment_input()
+	_update_revive_by_others(delta)
+	var direction := Vector3(move_input.x, 0.0, move_input.y).normalized()
+	_update_stamina(delta, not direction.is_zero_approx() and sprint_pressed)
+	_update_noise(delta, direction)
+	_face_aim_or_movement(direction, delta)
+	_drive_body(direction, delta)
+	move_and_slide()
+	PlayerAnimator.animate_pose(self, delta, direction.length() > 0.0 and is_on_floor())
+	_clear_transient_input()
 
+
+## Relogios de golpe, animacao e sonar; andam em qualquer papel, ate no proxy,
+## porque o gesto visual continua rodando no cliente.
+func _advance_action_clocks(delta: float) -> void:
 	attack_cooldown = maxf(attack_cooldown - delta, 0.0)
 	unstuck_cooldown = maxf(unstuck_cooldown - delta, 0.0)
 	crate_weapon_stance_time = maxf(crate_weapon_stance_time - delta, 0.0)
@@ -230,72 +261,66 @@ func _physics_process(delta: float) -> void:
 	_poll_local_sonar()
 	_poll_view_toggle()
 	muzzle_flash.visible = muzzle_flash_time > 0.0
-	if not simulation_enabled:
-		var previous_position := global_position
-		# Interpolacao por buffer com atraso adaptativo; o move_and_collide segue
-		# no caminho do alvo para nao atravessar parede.
-		snapshot_buffer.sample(float(Time.get_ticks_msec()))
-		var target_pos := snapshot_buffer.position
-		var motion := target_pos - global_position
-		if motion.length_squared() > 0.00001:
-			var col := move_and_collide(motion)
-			if col != null:
-				move_and_collide(col.get_remainder().slide(col.get_normal()))
-		rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
-		PlayerAnimator.animate_pose(self, delta, previous_position.distance_squared_to(global_position) > 0.0001)
-		return
 
-	if is_downed:
-		# Caido (so onde e simulado: offline/servidor): sem acao; o aliado
-		# segurando interagir reanima em ~3s. O proxy do cliente apenas
-		# interpola, para nao brigar com o progresso sincronizado.
-		velocity = Vector3.ZERO
-		_update_revive_by_others(delta)
-		return
 
+## Proxy no cliente: interpolacao por buffer com atraso adaptativo; o
+## move_and_collide segue no caminho do alvo para nao atravessar parede.
+func _interpolate_proxy(delta: float) -> void:
+	var previous_position := global_position
+	snapshot_buffer.sample(float(Time.get_ticks_msec()))
+	var motion := snapshot_buffer.position - global_position
+	if motion.length_squared() > 0.00001:
+		var col := move_and_collide(motion)
+		if col != null:
+			move_and_collide(col.get_remainder().slide(col.get_normal()))
+	rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
+	PlayerAnimator.animate_pose(self, delta, previous_position.distance_squared_to(global_position) > 0.0001)
+
+
+## Input do teclado local, ou o que chegou pela rede. Pacote atrasado demais
+## zera o movimento, senao o boneco seguiria andando sozinho.
+func _collect_tick_input(delta: float) -> void:
 	if reads_local_input:
 		_poll_input()
-	else:
-		remote_input_age += delta
-		if remote_input_age > 0.3:
-			move_input = Vector2.ZERO
-			aim_input = Vector2.ZERO
-	_handle_interaction_input()
-	_handle_weapon_input()
-	equipment_cooldown = maxf(equipment_cooldown - delta, 0.0)
-	_handle_equipment_input()
-	_update_revive_by_others(delta)
+		return
+	remote_input_age += delta
+	if remote_input_age > 0.3:
+		move_input = Vector2.ZERO
+		aim_input = Vector2.ZERO
 
-	if not is_on_floor():
-		velocity.y -= gravity * delta
 
-	if jump_pressed and is_on_floor():
-		velocity.y = jump_velocity
-
-	var direction := Vector3(move_input.x, 0.0, move_input.y).normalized()
-	_update_stamina(delta, not direction.is_zero_approx() and sprint_pressed)
-	_update_noise(delta, direction)
+## Para onde o boneco olha: mouse em primeira pessoa, mira do analogico, ou a
+## propria direcao de caminhada.
+func _face_aim_or_movement(direction: Vector3, delta: float) -> void:
 	if first_person:
 		# FPS: o yaw vem do mouse (sem suavizar), o corpo inteiro segue.
 		rotation.y = camera_yaw
-	elif not aim_input.is_zero_approx():
-		var target_rotation := atan2(-aim_input.x, -aim_input.y)
-		rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
+		return
+	var target_rotation := 0.0
+	if not aim_input.is_zero_approx():
+		target_rotation = atan2(-aim_input.x, -aim_input.y)
 	elif not direction.is_zero_approx():
-		var target_rotation := atan2(-direction.x, -direction.z)
-		rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
-	var target_velocity := direction * (sprint_speed if is_sprinting else speed)
+		target_rotation = atan2(-direction.x, -direction.z)
+	else:
+		return
+	rotation.y = lerp_angle(rotation.y, target_rotation, minf(delta * 14.0, 1.0))
 
+
+## Gravidade, pulo e a velocidade horizontal; o empurrao forcado (lingua do
+## puxador, bote do espreitador) manda por cima do input.
+func _drive_body(direction: Vector3, delta: float) -> void:
+	if not is_on_floor():
+		velocity.y -= gravity * delta
+	if jump_pressed and is_on_floor():
+		velocity.y = jump_velocity
+	var target_velocity := direction * (sprint_speed if is_sprinting else speed)
 	velocity.x = move_toward(velocity.x, target_velocity.x, acceleration * delta)
 	velocity.z = move_toward(velocity.z, target_velocity.z, acceleration * delta)
-	if forced_move_time > 0.0:
-		forced_move_time = maxf(forced_move_time - delta, 0.0)
-		velocity.x = forced_move_velocity.x
-		velocity.z = forced_move_velocity.z
-
-	move_and_slide()
-	PlayerAnimator.animate_pose(self, delta, direction.length() > 0.0 and is_on_floor())
-	_clear_transient_input()
+	if forced_move_time <= 0.0:
+		return
+	forced_move_time = maxf(forced_move_time - delta, 0.0)
+	velocity.x = forced_move_velocity.x
+	velocity.z = forced_move_velocity.z
 
 
 func get_local_input_state() -> Dictionary:
@@ -391,57 +416,98 @@ func get_network_state() -> Dictionary:
 	}
 
 
+## Aplica no proxy o estado que veio do servidor, em blocos: posicao, vitais,
+## arma, relogios de animacao, caido e os extras (itens, PVP, eliminado).
+## Uso: chamado ao receber o snapshot de jogadores.
 func apply_network_state(state: Dictionary) -> void:
+	_apply_network_transform(state)
+	_apply_network_vitals(state)
+	_apply_network_weapon(state)
+	_apply_network_clocks(state)
+	_apply_network_downed(state)
+	_apply_network_extras(state)
+
+
+## Posicao e rotacao pelo buffer de interpolacao, com o salto do teleporte.
+func _apply_network_transform(state: Dictionary) -> void:
 	var position_value: Variant = state.get("position")
 	var received_teleport := int(state.get("teleport_sequence", teleport_sequence))
-	if position_value is Vector3:
-		var next_position: Vector3 = position_value
-		var next_rotation := float(state.get("rotation", snapshot_buffer.rotation))
-		if received_teleport != teleport_sequence:
-			# Teleporte autorizado (destravar/respawn): o buffer reinicia e o no
-			# pula, senao o proxy deslizaria atravessando o mapa.
-			snapshot_buffer.reset(float(Time.get_ticks_msec()), next_position, next_rotation)
-			global_position = next_position
-			rotation.y = next_rotation
-			velocity = Vector3.ZERO
-		elif snapshot_buffer.push(float(Time.get_ticks_msec()), next_position, next_rotation, global_position, rotation.y):
-			global_position = snapshot_buffer.position
-			rotation.y = snapshot_buffer.rotation
+	if not (position_value is Vector3):
+		teleport_sequence = received_teleport
+		return
+	var next_position: Vector3 = position_value
+	var next_rotation := float(state.get("rotation", snapshot_buffer.rotation))
+	if received_teleport != teleport_sequence:
+		# Teleporte autorizado (destravar/respawn): o buffer reinicia e o no
+		# pula, senao o proxy deslizaria atravessando o mapa.
+		snapshot_buffer.reset(float(Time.get_ticks_msec()), next_position, next_rotation)
+		global_position = next_position
+		rotation.y = next_rotation
+		velocity = Vector3.ZERO
+	elif snapshot_buffer.push(float(Time.get_ticks_msec()), next_position, next_rotation, global_position, rotation.y):
+		global_position = snapshot_buffer.position
+		rotation.y = snapshot_buffer.rotation
 	teleport_sequence = received_teleport
+
+
+func _apply_network_vitals(state: Dictionary) -> void:
 	health = clampi(int(state.get("health", health)), 0, max_health)
 	stamina = clampf(float(state.get("stamina", stamina)), 0.0, max_stamina)
 	is_sprinting = bool(state.get("sprinting", false))
 	pistol_ammo = clampi(int(state.get("pistol_ammo", pistol_ammo)), 0, 12)
 	reserve_ammo = maxi(int(state.get("reserve_ammo", reserve_ammo)), 0)
+	lives = clampi(int(state.get("lives", lives)), 0, MAX_LIVES)
+	zombie_kills = maxi(zombie_kills, int(state.get("zombie_kills", zombie_kills)))
+	revive_progress = clampf(float(state.get("revive_progress", revive_progress)), 0.0, 1.0)
+
+
+## Arma na mao e os pentes das vagas; so remonta o modelo quando algo mudou.
+func _apply_network_weapon(state: Dictionary) -> void:
 	var next_weapon := clampi(int(state.get("weapon", int(current_weapon))), 0, Weapon.size() - 1) as Weapon
 	if next_weapon != current_weapon:
 		current_weapon = next_weapon
 		_update_weapon_models()
 	var net_slots: Variant = state.get("weapon_slots")
-	if net_slots is Dictionary and int((net_slots as Dictionary).get("revision", -1)) != slots_revision:
-		weapon_slots.from_dict(net_slots)
-		slots_revision = int((net_slots as Dictionary).get("revision", slots_revision))
-		_update_weapon_models()
+	if not (net_slots is Dictionary):
+		return
+	if int((net_slots as Dictionary).get("revision", -1)) == slots_revision:
+		return
+	weapon_slots.from_dict(net_slots)
+	slots_revision = int((net_slots as Dictionary).get("revision", slots_revision))
+	_update_weapon_models()
+
+
+## Relogios de animacao: ficam com o MAIOR valor para o gesto nao ser cortado
+## por um snapshot que chegou no meio dele.
+func _apply_network_clocks(state: Dictionary) -> void:
 	pistol_stance_time = maxf(float(state.get("pistol_stance", 0.0)), pistol_stance_time)
 	pistol_recoil_time = maxf(float(state.get("pistol_recoil", 0.0)), pistol_recoil_time)
 	knife_attack_time = maxf(float(state.get("knife_attack", 0.0)), knife_attack_time)
 	muzzle_flash_time = maxf(float(state.get("muzzle_flash", 0.0)), muzzle_flash_time)
 	hit_reaction_time = maxf(float(state.get("hit_reaction", 0.0)), hit_reaction_time)
 	hit_direction.x = float(state.get("hit_dir_x", hit_direction.x))
-	lives = clampi(int(state.get("lives", lives)), 0, MAX_LIVES)
-	zombie_kills = maxi(zombie_kills, int(state.get("zombie_kills", zombie_kills)))
+
+
+## Caiu ou levantou: so age na TRANSICAO, senao o modelo seria deitado de novo
+## a cada snapshot.
+func _apply_network_downed(state: Dictionary) -> void:
 	var next_downed := bool(state.get("downed", is_downed))
-	if next_downed != is_downed:
-		if next_downed:
-			is_downed = true
-			visible = true
-			collision_layer = 2
-			collision_mask = 0
-			if model != null:
-				model.rotation.x = deg_to_rad(-86.0)
-		else:
-			_clear_downed()
-	revive_progress = clampf(float(state.get("revive_progress", revive_progress)), 0.0, 1.0)
+	if next_downed == is_downed:
+		return
+	if not next_downed:
+		_clear_downed()
+		return
+	is_downed = true
+	visible = true
+	collision_layer = 2
+	collision_mask = 0
+	if model != null:
+		model.rotation.x = deg_to_rad(-86.0)
+
+
+## Itens arremessaveis, placar do mata-mata e a eliminacao (tambem so na
+## transicao, que e quando o colisor e a visibilidade mudam).
+func _apply_network_extras(state: Dictionary) -> void:
 	var equipment_counts: Variant = state.get("equipment")
 	if equipment_counts is PackedByteArray:
 		equipment.apply_counts(equipment_counts)
@@ -451,11 +517,12 @@ func apply_network_state(state: Dictionary) -> void:
 		pvp_deaths = maxi(pvp_deaths, int(state.get("pvp_deaths", pvp_deaths)))
 		pvp_buy_left = float(state.get("pvp_buy_left", pvp_buy_left))
 	var next_eliminated := bool(state.get("eliminated", is_eliminated))
-	if next_eliminated != is_eliminated:
-		is_eliminated = next_eliminated
-		visible = not is_eliminated
-		collision_layer = 0 if is_eliminated else 1
-		collision_mask = 0 if is_eliminated else 1
+	if next_eliminated == is_eliminated:
+		return
+	is_eliminated = next_eliminated
+	visible = not is_eliminated
+	collision_layer = 0 if is_eliminated else 1
+	collision_mask = 0 if is_eliminated else 1
 
 
 func _handle_weapon_input() -> void:
