@@ -52,10 +52,12 @@ static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void
 		var recoil: float = 0.12 if float(player.get("pistol_recoil_time")) > 0.0 else 0.0
 		_anchor_weapon_to_hand(right_arm, weapon_holder, recoil, delta)
 	elif cur_weapon >= 2 and float(player.get("crate_weapon_stance_time")) > 0.0:
-		# Arma de crate: mira com as DUAS maos esticadas na arma (nao fica
-		# na postura tatica da pistola).
+		# Arma de crate: armas longas (fuzil, escopeta, sniper...) vao com as
+		# DUAS maos na arma (a esquerda alcanca o guarda-mao); pistola/revolver/
+		# serrada seguem de uma mao so.
+		var two_hands := WeaponStats.uses_two_hands(cur_weapon)
 		if left_arm != null:
-			_set_arm_pose(left_arm, Vector3(1.35, 0.0, 0.3), delta)
+			_set_arm_pose(left_arm, Vector3(1.45, 0.0, 0.52) if two_hands else Vector3(0.72, 0.0, 0.4), delta)
 		if right_arm != null:
 			_set_arm_pose(right_arm, Vector3(1.35, 0.0, -0.3), delta)
 		# Recuo proprio de cada arma, dirigido pelo clarao do cano (que ja viaja
