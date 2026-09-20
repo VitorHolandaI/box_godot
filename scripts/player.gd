@@ -368,8 +368,16 @@ func _collect_tick_input(delta: float) -> void:
 ## propria direcao de caminhada.
 func _face_aim_or_movement(direction: Vector3, delta: float) -> void:
 	if first_person:
-		# FPS: o yaw vem do mouse (sem suavizar), o corpo inteiro segue.
-		rotation.y = camera_yaw
+		# FPS: o yaw vem do mouse (sem suavizar), o corpo inteiro segue. No
+		# avatar REMOTO o `camera_yaw` nao chega pela rede (so a mira), entao o
+		# yaw sai da direcao de mira: sem isso o corpo ficava virado errado no
+		# servidor e a porta (ray pela frente do corpo) nao abria em 1a pessoa.
+		if reads_local_input:
+			rotation.y = camera_yaw
+		else:
+			var flat := _horizontal_from_direction(aim_direction)
+			if not flat.is_zero_approx():
+				rotation.y = atan2(-flat.x, -flat.y)
 		return
 	var target_rotation := 0.0
 	if not aim_input.is_zero_approx():
