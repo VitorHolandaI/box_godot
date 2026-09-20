@@ -11,6 +11,18 @@ const RELOAD_ANIM_SECONDS := 1.0
 ## Ponta do braco (a mao) no espaco do braco; a arma e presa ali (o -Z avanca a
 ## arma pra frente da mao). Antes a arma ficava num offset fixo e flutuava.
 const HAND_ANCHOR_LOCAL := Vector3(0.0, -0.72, -0.12)
+## Ajuste fino por ARMA (achado no tuner do --armas-lab): desloca no referencial
+## do Model e gira, somando por cima da ancora da mao. Chave = WeaponStats.Kind.
+## Uso: var tuned := WEAPON_HOLD_TUNE.get(kind, {})
+const WEAPON_HOLD_TUNE := {
+	1: {"pos": Vector3(-0.08, -0.02, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},   # pistol
+	6: {"pos": Vector3(0.0, 0.05, -0.05), "rot": Vector3(0.0, -PI, 0.0)},    # carbine (modelo invertido)
+	11: {"pos": Vector3(-0.05, 0.0, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},    # railgun
+	14: {"pos": Vector3(-0.05, 0.05, 0.05), "rot": Vector3(0.0, 0.0, 0.0)},  # aug
+	17: {"pos": Vector3(0.0, 0.05, 0.05), "rot": Vector3(0.0, 0.0, 0.0)},    # bazooka
+	20: {"pos": Vector3(0.0, -0.25, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},    # chainsaw
+	21: {"pos": Vector3(-0.05, 0.0, 0.0), "rot": Vector3(0.0, 0.0, 0.0)},    # flamethrower
+}
 
 
 static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void:
@@ -85,6 +97,36 @@ static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void
 
 	_apply_reload_pose(player, delta)
 	_animate_hit_reaction(player, delta)
+	_apply_hold_tuning(player)
+
+
+## Pose de ajuste por arma vinda do tuner (--armas-lab): desloca na mao e gira,
+## para achar o grip certo sem recompilar. Uso: lido de player.weapon_holds.
+static func _apply_hold_tuning(player: Node3D) -> void:
+	var kind := int(player.get("current_weapon"))
+	var offset := Vector3.ZERO
+	var rot := Vector3.ZERO
+	var tuned: Dictionary = WEAPON_HOLD_TUNE.get(kind, {})
+	offset += tuned.get("pos", Vector3.ZERO)
+	rot += tuned.get("rot", Vector3.ZERO)
+	# O tuner do --armas-lab soma por cima do ajuste fixo (permite continuar
+	# refinando sem recompilar).
+	var table: Variant = player.get("weapon_holds")
+	if table is Dictionary and (table as Dictionary).has(kind):
+		var hold: Dictionary = (table as Dictionary)[kind]
+		offset += hold.get("pos", Vector3.ZERO)
+		rot += hold.get("rot", Vector3.ZERO)
+	if offset.is_zero_approx() and rot.is_zero_approx():
+		return
+	var weapon_holder := player.get_node_or_null("Model/Weapons") as Node3D
+	var model := player.get_node_or_null("Model") as Node3D
+	if weapon_holder == null:
+		return
+	# Offset no referencial do MODEL (cima/lados/frente intuitivos), nao no
+	# referencial do braco (que fica girado na mira).
+	if model != null and not offset.is_zero_approx():
+		weapon_holder.global_position += model.global_transform.basis * offset
+	weapon_holder.rotation = rot
 
 
 ## Recarga (cosmetica): a mao esquerda desce ate a arma e o cano baixa, com pico
