@@ -23,6 +23,8 @@ static var interior_focus_owner: Camera3D = null
 func _ready() -> void:
 	rotation_degrees = Vector3(-48, 0, 0)
 	fov = 72.0
+	# Vista isometrica usa o recorte para ver dentro dos predios.
+	RenderingServer.global_shader_parameter_set(&"cutout_enabled", true)
 	if not is_instance_valid(interior_focus_owner):
 		interior_focus_owner = self
 
