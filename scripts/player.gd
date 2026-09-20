@@ -423,6 +423,7 @@ func get_local_input_state() -> Dictionary:
 		"swat": Input.is_action_pressed(input_action_prefix + "swat"),
 		"aim": _horizontal_from_direction(aim_dir),
 		"aim_dir": aim_dir,
+		"aim_point": _local_aim_target(),
 		"vehicle": _read_vehicle_input(),
 	}
 
@@ -441,10 +442,14 @@ func apply_network_input(state: Dictionary) -> void:
 	move_input = requested_move.limit_length(1.0) if requested_move is Vector2 else Vector2.ZERO
 	var requested_aim: Variant = state.get("aim", Vector2.ZERO)
 	aim_input = requested_aim.limit_length(1.0) if requested_aim is Vector2 else Vector2.ZERO
-	# "aim_dir" e a mira 3D (FPS/cursor); sem ela (bots/versoes antigas) cai na
-	# horizontal do "aim", para o pacote continuar compativel.
+	# Mira 3D: "aim_point" (ponto do retículo/cursor) e o principal — o servidor
+	# converge do cano DELE ate o ponto. "aim_dir" fica para bots/versoes antigas.
+	var requested_point: Variant = state.get("aim_point", null)
 	var requested_dir: Variant = state.get("aim_dir", null)
-	if requested_dir is Vector3 and not (requested_dir as Vector3).is_zero_approx():
+	if requested_point is Vector3:
+		var to_point: Vector3 = (requested_point as Vector3) - _muzzle_origin()
+		aim_direction = to_point.normalized() if to_point.length_squared() > 0.0001 else -global_transform.basis.z
+	elif requested_dir is Vector3 and not (requested_dir as Vector3).is_zero_approx():
 		aim_direction = (requested_dir as Vector3).normalized()
 	elif not aim_input.is_zero_approx():
 		aim_direction = Vector3(aim_input.x, 0.0, aim_input.y).normalized()
@@ -1846,23 +1851,30 @@ func _local_aim_input() -> Vector2:
 ## do aim_input/analogico. Uso: _poll_input e os disparos.
 func _local_aim_direction() -> Vector3:
 	var muzzle := _muzzle_origin()
+	var point: Variant = _local_aim_target()
+	if point is Vector3:
+		var to_point: Vector3 = (point as Vector3) - muzzle
+		if to_point.length_squared() > 0.0001:
+			return to_point.normalized()
 	if first_person:
-		var forward := _fps_forward()
-		if aim_camera != null and is_instance_valid(aim_camera):
-			var target := _fps_target_point(forward)
-			var converged := (target - muzzle).normalized()
-			if not converged.is_zero_approx():
-				return converged
-		return forward
-	if GameConfig.mouse_aim_enabled and mouse_aim and mouse_owner:
-		var point: Variant = _mouse_world_point()
-		if point is Vector3:
-			var to_point: Vector3 = (point as Vector3) - muzzle
-			if to_point.length_squared() > 0.0001:
-				return to_point.normalized()
+		return _fps_forward()
 	if not aim_input.is_zero_approx():
 		return Vector3(aim_input.x, 0.0, aim_input.y).normalized()
 	return -global_transform.basis.z
+
+
+## Ponto do mundo que a mira aponta (retículo no FPS, cursor na 3a pessoa), ou
+## null quando nao ha mira. Vai no pacote de input como "aim_point": o servidor
+## converge do cano DELE ate esse ponto, senao o cano do cliente (outro) mandava
+## a direcao e a bala desviava do retículo. Uso: _local_aim_direction e pacote.
+func _local_aim_target() -> Variant:
+	if first_person:
+		if aim_camera != null and is_instance_valid(aim_camera):
+			return _fps_target_point(_fps_forward())
+		return null
+	if GameConfig.mouse_aim_enabled and mouse_aim and mouse_owner:
+		return _mouse_world_point()
+	return null
 
 
 ## Frente da camera em FPS (com pitch). Sem camera (testes) cai na pose.
