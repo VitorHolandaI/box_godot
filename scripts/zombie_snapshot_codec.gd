@@ -2,12 +2,12 @@ class_name ZombieSnapshotCodec
 extends RefCounted
 
 ## Codifica o estado dos zumbis em bytes compactos para o snapshot de rede.
-## Um Dictionary serializado custava 324 bytes por zumbi; aqui sao 16 (22 se
+## Um Dictionary serializado custava 324 bytes por zumbi; aqui sao 17 (23 se
 ## morto). O tipo viaja nos 7 bits altos de `flags` (ate 127): desde o mix de variantes
 ## por onda o nome sozinho nao determina o tipo (o cliente mostrava outro). A
 ## aparencia o cliente deriva do nome + tipo, igual ao servidor.
 ## Layout little-endian por zumbi:
-##   u32 id | i16 x | i16 y | i16 z | u8 rotacao | u16 vida | u8 flags (bit0 morto, bits1-7 tipo) | u16 seq. ataque
+##   u32 id | i16 x | i16 y | i16 z | u8 rotacao | u16 vida | u8 flags (bit0 morto, bits1-7 tipo) | u8 membros perdidos | u16 seq. ataque
 ##   [i16 vx | i16 vy | i16 vz]  somente quando flags tem IS_DEAD
 ## Uso:
 ##   var bytes := ZombieSnapshotCodec.encode(states)
@@ -20,8 +20,8 @@ const FLAG_IS_DEAD := 1
 # Eram 4 bits (16 tipos); com cuspidor e investida passou de 16.
 const TYPE_SHIFT := 1
 const MAX_ENCODED_TYPE := 127
-const ALIVE_RECORD_BYTES := 16
-const DEAD_RECORD_BYTES := 22
+const ALIVE_RECORD_BYTES := 17
+const DEAD_RECORD_BYTES := 23
 
 
 ## Estados vindos de zombie.get_network_state() com "network_id" preenchido.
@@ -45,6 +45,7 @@ static func encode(states: Array) -> PackedByteArray:
 		buffer.put_u16(clampi(int(state.get("health", 0)), 0, 65535))
 		var zombie_type := clampi(int(state.get("zombie_type", 0)), 0, MAX_ENCODED_TYPE)
 		buffer.put_u8((FLAG_IS_DEAD if is_dead else 0) | (zombie_type << TYPE_SHIFT))
+		buffer.put_u8(clampi(int(state.get("limb_loss_mask", 0)), 0, 255))
 		buffer.put_u16(posmod(int(state.get("attack_sequence", 0)), 65536))
 		if is_dead:
 			var velocity: Vector3 = state.get("death_velocity", Vector3.ZERO)
@@ -68,6 +69,7 @@ static func decode(payload: PackedByteArray) -> Array[Dictionary]:
 		var rotation := _decode_angle(buffer.get_u8())
 		var health := buffer.get_u16()
 		var flags := buffer.get_u8()
+		var limb_loss_mask := buffer.get_u8()
 		var attack_sequence := buffer.get_u16()
 		var state := {
 			"name": NAME_PREFIX + str(network_id),
@@ -76,6 +78,7 @@ static func decode(payload: PackedByteArray) -> Array[Dictionary]:
 			"health": health,
 			"is_dead": flags & FLAG_IS_DEAD != 0,
 			"zombie_type": flags >> TYPE_SHIFT,
+			"limb_loss_mask": limb_loss_mask,
 			"attack_sequence": attack_sequence,
 		}
 		if flags & FLAG_IS_DEAD != 0:

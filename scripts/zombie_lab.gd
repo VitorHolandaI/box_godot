@@ -416,7 +416,7 @@ func consume_zombie_corpse(corpse: Node) -> bool:
 
 ## Cadaver visivel: espelha o main.gd (mesma assinatura), sem replicacao.
 ## Uso: chamado por zombie.gd/_spawn_ragdoll via has_method.
-func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0, appearance_hash: int = 0, source_name: String = "") -> void:
+func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3, z_type: int = 0, appearance_hash: int = 0, source_name: String = "", limb_loss_mask: int = 0) -> void:
 	if not source_name.is_empty() and is_instance_valid(ragdolls_by_zombie.get(source_name)):
 		return
 	var ragdoll := ZOMBIE_RAGDOLL_SCENE.instantiate()
@@ -424,7 +424,7 @@ func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3,
 	add_child(ragdoll)
 	ragdoll.position = position
 	ragdoll.rotation.y = rotation
-	ragdoll.setup(velocity, z_type, appearance_hash)
+	ragdoll.setup(velocity, z_type, appearance_hash, limb_loss_mask)
 	ragdolls.append(ragdoll)
 	if not source_name.is_empty():
 		ragdolls_by_zombie[source_name] = ragdoll
