@@ -161,7 +161,7 @@ func _shorten_rigid_limb(limb_name: String) -> void:
 
 ## Um tiro no cadaver remove o corpo do chao, evitando montanhas de corpos
 ## presas dentro de casa. Uso: ragdoll.take_damage(35, Vector3.FORWARD, "bullet")
-func take_damage(_amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null) -> void:
+func take_damage(_amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null, _hit_position: Vector3 = Vector3.INF) -> void:
 	if is_queued_for_deletion():
 		return
 	queue_free()
