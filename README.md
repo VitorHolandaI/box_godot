@@ -5,6 +5,10 @@ loot, safehouse) e **mata-mata PVP** (dois times, compra de armas, melhor de 3
 rodadas). Roda em janela única ou tela dividida (até 4 jogadores locais), com
 servidor dedicado e cliente para Linux, Windows e macOS.
 
+> **Proof of concept.** Projeto pessoal, feito só para me expor ao Godot e a
+> coisas de jogo. O jogo fica como está — não pretendo continuar evoluindo: no
+> futuro o foco vira pods, containers e infra.
+
 Autor: Vitor Holanda.
 
 ## Imagens
