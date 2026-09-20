@@ -27,6 +27,7 @@ func run(test_root: Node) -> void:
 	_test_public_server_port(test_root)
 	_test_server_port_validation(test_root)
 	_test_procedural_city_seed(test_root)
+	_test_procedural_city_alleys_and_irregular_lots(test_root)
 	_test_latency_hud(test_root)
 	_test_hud_alive_zombie_count(test_root)
 	_test_minimap_reveals_zombies_on_sonar(test_root)
@@ -77,7 +78,7 @@ func _test_procedural_city_seed(test_root: Node) -> void:
 	if first_city.signature() == other_city.signature():
 		_fail(test_root, "Seeds diferentes deveriam produzir blueprints diferentes.")
 		return
-	if first_city.roads.size() != 80 or first_city.blocks.size() != 9 or first_city.building_count() != 35:
+	if first_city.roads.size() != 89 or first_city.blocks.size() != 9 or first_city.building_count() != 35:
 		_fail(test_root, "A cidade procedural deveria conter 35 edificios e um lote reservado para a Safehouse.")
 		return
 	var has_curved_segment := false
@@ -149,6 +150,62 @@ func _test_procedural_city_seed(test_root: Node) -> void:
 		return
 	visual_root.free()
 	print("PASS: Cidade procedural deterministica e interiores conectados validados.")
+
+
+func _test_procedural_city_alleys_and_irregular_lots(test_root: Node) -> void:
+	print("Testando becos por seed e lotes irregulares...")
+	var city = PROCEDURAL_CITY_GENERATOR.generate_world(18273)
+	var vertical_alleys := 0
+	var horizontal_alleys := 0
+	var lot_sizes := {}
+	var moved_lot := false
+	var rotated_lot = null
+	for road in city.roads:
+		if road.road_type != "alley":
+			continue
+		if not is_equal_approx(road.width, 2.5):
+			_fail(test_root, "Beco deveria ter 2.5 m; veio %.2f." % road.width)
+			return
+		if is_equal_approx(road.start.x, road.finish.x):
+			vertical_alleys += 1
+		else:
+			horizontal_alleys += 1
+	for block in city.blocks:
+		for lot_index in block.lots.size():
+			var lot = block.lots[lot_index]
+			lot_sizes["%.2f:%.2f" % [lot.size.x, lot.size.y]] = true
+			if lot.building != null and absf(sin(lot.building_rotation_y)) > 0.5:
+				rotated_lot = lot
+				var footprint := Vector2(lot.building.depth, lot.building.width)
+				var building_area := Rect2(lot.position - footprint * 0.5, footprint)
+				for road in city.roads:
+					if road.road_type != "alley":
+						continue
+					var alley_start := Vector2(minf(road.start.x, road.finish.x), minf(road.start.y, road.finish.y))
+					var alley_size := Vector2(absf(road.finish.x - road.start.x) + road.width, absf(road.finish.y - road.start.y) + road.width)
+					var alley_area := Rect2(alley_start - Vector2.ONE * road.width * 0.5, alley_size)
+					if building_area.intersects(alley_area):
+						_fail(test_root, "Predio %s invade o beco entre lotes; predio=%s beco=%s." % [lot.id, building_area, alley_area])
+						return
+			var x_index: int = lot_index / 2
+			var z_index: int = lot_index % 2
+			var legacy_position: Vector2 = block.position + Vector2(-10.5 + float(x_index) * 21.0, -10.5 + float(z_index) * 21.0)
+			if lot.position.distance_to(legacy_position) > 0.05:
+				moved_lot = true
+	if vertical_alleys == 0 or horizontal_alleys == 0 or lot_sizes.size() < 4 or not moved_lot or rotated_lot == null:
+		_fail(test_root, "Layout: becos vertical/horizontal=%d/%d tamanhos=%d lote_movido=%s; esperado becos dos dois tipos, >=4 tamanhos e lote fora da grade." % [vertical_alleys, horizontal_alleys, lot_sizes.size(), moved_lot])
+		return
+	var assembled_root := Node3D.new()
+	test_root.add_child(assembled_root)
+	PROCEDURAL_CITY_ASSEMBLER._add_lot(assembled_root, rotated_lot)
+	var assembled := assembled_root.get_child(0) as StaticBody3D
+	var actual_center := assembled.to_global(Vector3(rotated_lot.building.width * 0.5, 0.0, rotated_lot.building.depth * 0.5))
+	var expected_center := Vector3(rotated_lot.position.x, 0.16, rotated_lot.position.y)
+	assembled_root.free()
+	if actual_center.distance_to(expected_center) > 0.01:
+		_fail(test_root, "Predio girado perdeu o centro do lote; atual=%s esperado=%s." % [actual_center, expected_center])
+		return
+	print("PASS: %d becos verticais, %d horizontais e %d tamanhos de lote por seed." % [vertical_alleys, horizontal_alleys, lot_sizes.size()])
 
 
 func _test_latency_hud(test_root: Node) -> void:

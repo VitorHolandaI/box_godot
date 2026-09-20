@@ -15,6 +15,7 @@ const MAX_LAYOUT_RADIUS := 110.0
 func run(test_root: Node) -> void:
 	_test_facing_to_minimap(test_root)
 	_test_city_layout_has_roads_and_buildings(test_root)
+	_test_rotated_lots_swap_minimap_footprint(test_root)
 
 
 ## A seta segue o forward (-Z) do Node3D projetado no plano (x, z) do minimapa.
@@ -54,6 +55,42 @@ func _test_city_layout_has_roads_and_buildings(test_root: Node) -> void:
 			_fail(test_root, "Rua sem largura ou comprimento: %s." % [road])
 			return
 	print("PASS: Mapa gerado tem %d ruas e %d predios dentro do alcance." % [roads.size(), buildings.size()])
+
+
+## Regressao: predio girado 90 graus tinha a pegada desenhada com largura e
+## profundidade invertidas no minimapa, cobrindo a rua que ele encara. A pegada
+## esperada e recalculada aqui de forma independente (troca em yaw de 90 graus)
+## para o teste nao herdar o mesmo bug do codigo de producao.
+func _test_rotated_lots_swap_minimap_footprint(test_root: Node) -> void:
+	print("Testando pegada de predio rotacionado no minimapa...")
+	var city = PROCEDURAL_CITY_GENERATOR.generate_world(WORLD_SEED)
+	var layout: Dictionary = CITY_GENERATOR_SCRIPT.build_minimap_layout(city)
+	var buildings: Array = layout.get("buildings", [])
+	var index := 0
+	var rotated_lots := 0
+	for block in city.blocks:
+		for lot in block.lots:
+			if lot.building == null:
+				continue
+			if index >= buildings.size():
+				_fail(test_root, "Minimapa tem menos predios que a cidade no indice %d." % index)
+				return
+			var expected := Vector2(lot.building.width, lot.building.depth)
+			if absf(sin(lot.building_rotation_y)) > 0.5:
+				expected = Vector2(lot.building.depth, lot.building.width)
+				rotated_lots += 1
+			var size: Vector2 = buildings[index]["size"]
+			if size.distance_to(expected) > 0.001:
+				_fail(test_root, "Pegada do lote %s ignorou rotacao %.2f: minimapa=%s esperado=%s." % [lot.id, lot.building_rotation_y, size, expected])
+				return
+			index += 1
+	if index != buildings.size():
+		_fail(test_root, "Minimapa tem %d predios, cidade percorreu %d." % [buildings.size(), index])
+		return
+	if rotated_lots == 0:
+		_fail(test_root, "Teste precisa de ao menos um lote girado para valer.")
+		return
+	print("PASS: Pegada do minimapa respeita a rotacao em %d lotes girados." % rotated_lots)
 
 
 func _fail(test_root: Node, message: String) -> void:
