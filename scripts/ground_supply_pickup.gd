@@ -211,8 +211,8 @@ func _add_class_label() -> void:
 	label.no_depth_test = false
 	label.visibility_range_end = 16.0
 	label.visibility_range_end_margin = 4.0
-	label.font_size = 40
-	label.pixel_size = 0.006
+	label.font_size = 30
+	label.pixel_size = 0.005
 	label.position = Vector3(0.0, 0.55, 0.0)
 	model_root.add_child(label)
 

@@ -203,13 +203,16 @@ func _build_visuals() -> void:
 	name_label = Label3D.new()
 	name_label.name = "NameLabel"
 	name_label.text = "%s\n[E] PEGAR" % String(WeaponStats.stats_for(weapon_kind).get("label", "Arma"))
-	name_label.font_size = 72
-	name_label.outline_size = 14
-	name_label.pixel_size = 0.006
+	name_label.font_size = 40
+	name_label.outline_size = 10
+	name_label.pixel_size = 0.0045
 	name_label.modulate = Color(1.0, 1.0, 1.0)
 	name_label.outline_modulate = Color(WeaponStats.tracer_color_for(weapon_kind).darkened(0.6), 1.0)
 	name_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	name_label.no_depth_test = true
+	# Sem atravessar parede e sumindo longe (a etiqueta ficava enorme na rua).
+	name_label.no_depth_test = false
+	name_label.visibility_range_end = 16.0
+	name_label.visibility_range_end_margin = 4.0
 	name_label.position.y = 1.6
 	name_label.visible = false
 	add_child(name_label)
