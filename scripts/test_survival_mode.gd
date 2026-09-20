@@ -802,13 +802,15 @@ func _test_house_gable_roof(test_root: Node) -> void:
 		house.free()
 		return
 	var doors := house.find_children("Door_*", "AnimatableBody3D", true, false)
-	if doors.size() < 5 or not (doors[0] as AnimatableBody3D).has_node("DoorKnob"):
-		_fail(test_root, "Casa procedural deveria possuir 5 portas visiveis; encontradas=%d." % doors.size())
+	# A planta procedural varia de 4 a 5 comodos, entao o numero de portas varia;
+	# o que nao pode faltar e porta com macaneta e interior mobiliado.
+	if doors.size() < 4 or not (doors[0] as AnimatableBody3D).has_node("DoorKnob"):
+		_fail(test_root, "Casa procedural deveria possuir ao menos 4 portas com macaneta; encontradas=%d." % doors.size())
 		house.free()
 		return
-	for furniture_name in ["FurnitureLivingTable", "FurnitureKitchenCounter", "FurnitureBathroomMirror", "FurnitureBed_bedroom_a", "FurnitureWardrobe_bedroom_b", "InteriorLight"]:
-		if not house.has_node(furniture_name):
-			_fail(test_root, "Interior residencial deveria possuir '%s'." % furniture_name)
+	for furniture_prefix in ["FurnitureLivingTable", "FurnitureKitchenCounter", "FurnitureKitchenStove", "FurnitureKitchenFridge", "FurnitureBathroomMirror", "FurnitureBed_", "FurnitureWardrobe_", "FurniturePicture_", "ExteriorAirConditioner", "InteriorLight"]:
+		if house.find_children(furniture_prefix + "*", "Node", true, false).is_empty():
+			_fail(test_root, "Interior residencial deveria possuir '%s*'." % furniture_prefix)
 			house.free()
 			return
 	for floor_blueprint in house_blueprint.floor_blueprints:
