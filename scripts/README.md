@@ -68,6 +68,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_support_calls.gd`: regressoes das chamadas de apoio: cargas ganhas por onda (aereo a cada 3, SWAT a cada 5), a linha bombardeada pelo ataque aereo e o esquadrao SWAT como jogadores simulados (fora do grupo player, invulneraveis, Uzi com municao infinita, leash e formacao).
 - `test_weapon_arsenal.gd`: regressoes do arsenal: cada arma de crate ligada em municao, drop, crate e modelo, railgun atravessando a fila e tracers futuristas. Inclui o papel da besta (silenciosa, perfura) e do lanca-granadas (area).
 - `test_weapon_damage.gd`: regressoes de dano das armas: hitscan de crate, projetil da pistola e tolerancia do tiro ao atraso de rede.
+- `test_weapon_reload.gd`: regressoes da recarga: encher o pente e ligar o temporizador da animacao de recarga (espelhado no PlayerAnimator).
 - `test_zombie_body_scale.gd`: regressoes do tamanho dos zumbis grandes: pes no chao, capsula do tamanho do corpo e cadaver na mesma escala.
 - `test_zombie_boss.gd`: regressoes do Tita: stats, horas de chefe, habilidades e onda que espera o chefe morrer.
 - `test_zombie_crowd_slots.gd`: regressoes da fila de ataque (anel cheio, vaga expirando, atacante sem esperar a propria vaga, zumbi real parado na fila).
@@ -89,7 +90,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `air_supply_pickup.gd`: crate de airdrop com varias armas, coleta por interacao e expiracao em 10 minutos (desce de paraquedas).
 - `ground_supply_pickup.gd`: item de vida/municao espalhado pelas ruas, com cor e etiqueta por classe; coleta ao tocar (municao de arma que o jogador nao tem vira bala de pistola), expira em 3 minutos.
 - `airdrop_controller.gd`: decide as ondas de airdrop e o ponto de queda aberto perto de um jogador.
-- `player_animator.gd`: gerenciador procedural de poses, marcha e animacao expressiva de impacto/flinch.
+- `player_animator.gd`: gerenciador procedural de poses, marcha, animacao expressiva de impacto/flinch e a pose cosmetica de recarga (mao esquerda desce e o cano baixa; le `reload_anim_time` do jogador).
 - `player_bot_ai.gd`: IA de bots com patrulha, tiro, aproximacao melee cautelosa, evasao e suporte a testes. No modo de teste (`--bot`) o alvo e espalhado por bot (k-esimo zumbi mais perto, k pelo nome) para N bots nao congestionarem a saida do abrigo; o limite do `BOT_TEST_PASS` e 30 s no PvE. No PvP o `BOT_TEST_PASS` vale por conectar, ver jogador, andar e gastar stamina (o bot cliente nao tem o roteamento por ruas do bot do servidor) e o limite sobe para 60 s.
 - `procedural/`: blueprints, geradores, assemblers e navegacao da cidade procedural experimental ativada por `--procedural-city`.
 - `pvp_match.gd`: mata-mata por times estilo CS autoritativo: 2 times equilibrados, melhor de 3 rodadas (fase de compra de 15 s -> combate de 180 s -> fim de rodada de 6 s), economia $800 inicial e +$300 por abate (teto $16000), sem respawn no meio da rodada (volta na proxima compra) e compra validada por fase/dinheiro (`buy_rejection`).

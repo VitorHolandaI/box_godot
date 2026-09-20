@@ -6,6 +6,8 @@ extends RefCounted
 ##   PlayerAnimator.animate_pose(player, delta, is_walking)
 
 const KNIFE_ATTACK_DURATION := 0.4
+## Duracao da animacao de recarga; espelha PlayerCharacter.RELOAD_ANIM_SECONDS.
+const RELOAD_ANIM_SECONDS := 1.0
 
 
 static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void:
@@ -77,7 +79,25 @@ static func animate_pose(player: Node3D, delta: float, is_walking: bool) -> void
 	if model != null:
 		model.rotation.x = lerpf(model.rotation.x, -0.14 if is_sprint else 0.0, minf(delta * 10.0, 1.0))
 
+	_apply_reload_pose(player, delta)
 	_animate_hit_reaction(player, delta)
+
+
+## Recarga (cosmetica): a mao esquerda desce ate a arma e o cano baixa, com pico
+## no meio da animacao; sempre volta a zero (inclusive quando nao recarrega).
+## Uso: chamado dentro de animate_pose apos as posturas.
+static func _apply_reload_pose(player: Node3D, delta: float) -> void:
+	var weapon_holder := player.get_node_or_null("Model/Weapons") as Node3D
+	var reload_t: float = float(player.get("reload_anim_time"))
+	var weight: float = 0.0
+	if reload_t > 0.0 and int(player.get("current_weapon")) >= 1:
+		var progress: float = 1.0 - reload_t / RELOAD_ANIM_SECONDS
+		weight = sin(clampf(progress, 0.0, 1.0) * PI)
+		var left_arm := player.get_node_or_null("Model/LeftArm") as Node3D
+		if left_arm != null:
+			_set_arm_pose(left_arm, Vector3(0.72, 0.0, 0.55).lerp(Vector3(0.95, 0.0, 0.7), weight), delta)
+	if weapon_holder != null:
+		weapon_holder.rotation.z = lerpf(weapon_holder.rotation.z, 0.5 * weight, minf(delta * 12.0, 1.0))
 
 
 static func _animate_hit_reaction(player: Node3D, delta: float) -> void:
