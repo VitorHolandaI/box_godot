@@ -1031,8 +1031,8 @@ func _spawn_scattered_loot(_wave_index: int = 0) -> void:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = NetworkSession.world_seed * 31337 + Time.get_ticks_msec()
 	var items: Array[Array] = [
-		[GroundSupplyPickup.Kind.HEALTH, 35], [GroundSupplyPickup.Kind.HEALTH, 35],
-		[GroundSupplyPickup.Kind.AMMO, 60], [GroundSupplyPickup.Kind.AMMO, 60],
+		[GroundSupplyPickup.Kind.HEALTH, 35], [GroundSupplyPickup.Kind.HEALTH, 35], [GroundSupplyPickup.Kind.HEALTH, 35],
+		[GroundSupplyPickup.Kind.AMMO, 60], [GroundSupplyPickup.Kind.AMMO, 60], [GroundSupplyPickup.Kind.AMMO, 60],
 		[GroundSupplyPickup.Kind.AMMO_SHOTGUN, 12], [GroundSupplyPickup.Kind.AMMO_UZI, 90],
 		[GroundSupplyPickup.Kind.AMMO_MAGNUM, 8], [GroundSupplyPickup.Kind.AMMO_DOUBLE_BARREL, 6],
 		[GroundSupplyPickup.Kind.AMMO_CARBINE, 30],
