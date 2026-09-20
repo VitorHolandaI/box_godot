@@ -62,6 +62,7 @@ static func assemble(building) -> StaticBody3D:
 	if building.archetype == "Shop_A" or building.archetype == "Grocery_A" or building.archetype == "GunShop_A":
 		COMMERCIAL_DETAIL_ASSEMBLER.add_details(body, building)
 	_add_wave_supply(body, building)
+	_add_loot_anchors(body, building)
 	# Adicionado por ultimo: o navmesh e assado no _ready a partir de todas as colisoes acima.
 	var navigation_height: float = building.floors * building.floor_height + (ROOF_TERRACE_ASSEMBLER.NAVIGATION_HEADROOM if building.has_roof_terrace else 0.0)
 	body.add_child(BUILDING_NAVIGATION_SCRIPT.new(Vector3(building.width, navigation_height, building.depth)))
@@ -555,6 +556,27 @@ static func _add_house_air_conditioners(body: StaticBody3D, building) -> void:
 	var z: float = building.depth + 0.17
 	BOX_BUILDER.add_box(body, "ExteriorAirConditioner", Vector3(1.05, 0.52, 0.28), Vector3(x, 2.05, z), unit_material, false)
 	BOX_BUILDER.add_box(body, "ExteriorAirConditionerGrille", Vector3(0.68, 0.28, 0.03), Vector3(x, 2.05, z + 0.15), grille_material, false)
+
+
+## Ancora de loot por unidade (casa/apartamento): o main espalha municao/arma
+## por aqui em vez de deixar tudo na rua. Uma ancora por unidade, no primeiro
+## comodo (sem escada) - apartamento rende loot nos andares de cima tambem.
+## Uso: interno do assemble.
+static func _add_loot_anchors(body: StaticBody3D, building) -> void:
+	for floor_blueprint in building.floor_blueprints:
+		var floor_y: float = float(floor_blueprint.floor_index) * building.floor_height
+		for placement in floor_blueprint.units:
+			var unit = placement["blueprint"]
+			var origin: Vector2 = placement["position"]
+			for room in unit.rooms:
+				if room.room_type == "stairs":
+					continue
+				var anchor := Node3D.new()
+				anchor.name = "LootAnchor_%d_%s" % [floor_blueprint.floor_index, room.id]
+				anchor.position = Vector3(origin.x + room.bounds.get_center().x, floor_y + 0.2, origin.y + room.bounds.get_center().y)
+				anchor.add_to_group("building_loot_points")
+				body.add_child(anchor)
+				break
 
 
 static func _add_wave_supply(body: StaticBody3D, building) -> void:

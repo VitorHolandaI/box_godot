@@ -17,6 +17,7 @@ func run(test_root: Node) -> void:
 	_test_house_roof_is_closed_and_pitched(test_root)
 	_test_house_rooms_fit_player_size(test_root)
 	_test_building_meshes_merge_without_touching_doors(test_root)
+	_test_enterable_buildings_have_interior_loot_anchors(test_root)
 
 
 func _test_street_lights_tower_over_player_on_sidewalks(test_root: Node) -> void:
@@ -118,6 +119,28 @@ func _test_building_meshes_merge_without_touching_doors(test_root: Node) -> void
 		_fail(test_root, "Fusao nao pode mexer em portas nem colisoes; portas %d->%d colisoes %d->%d." % [doors_before, doors_after, shapes_before, shapes_after])
 		return
 	print("PASS: %d malhas da casa viraram 1 no com %d superficies." % [merged_count, surfaces])
+
+
+## O loot da onda (municao/arma) vai para dentro das casas/apartamentos: cada
+## unidade tem uma ancora de loot dentro dos limites do predio.
+func _test_enterable_buildings_have_interior_loot_anchors(test_root: Node) -> void:
+	print("Testando ancoras de loot dentro das casas e predios...")
+	for building_case in [["house", 240912, 1], ["apartment", 18273, 5], ["grocery", 18273, 1]]:
+		var blueprint = BUILDING_GENERATOR_SCRIPT.generate(int(building_case[1]), String(building_case[0]))
+		var building: StaticBody3D = BUILDING_ASSEMBLER_SCRIPT.assemble(blueprint)
+		var anchors := building.find_children("LootAnchor_*", "Node3D", true, false)
+		for anchor_node in anchors:
+			var anchor := anchor_node as Node3D
+			var local := anchor.position
+			if local.x < -0.01 or local.x > blueprint.width + 0.01 or local.z < -0.01 or local.z > blueprint.depth + 0.01 or local.y < -0.01:
+				_fail(test_root, "%s: ancora de loot em %s fora do predio (%.1fx%.1f)." % [building_case[0], local, blueprint.width, blueprint.depth])
+				building.free()
+				return
+		building.free()
+		if anchors.size() < int(building_case[2]):
+			_fail(test_root, "%s deveria ter ao menos %d ancora(s) de loot; tem %d." % [building_case[0], int(building_case[2]), anchors.size()])
+			return
+	print("PASS: Casas, predios e comercio com ancoras de loot dentro dos limites.")
 
 
 func _fail(test_root: Node, message: String) -> void:
