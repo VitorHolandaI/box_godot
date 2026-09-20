@@ -28,6 +28,7 @@ func run(test_root: Node) -> void:
 	_test_stale_player_cache_survives(test_root)
 	_test_downed_and_revive(test_root)
 	_test_game_over_and_restart(test_root)
+	_test_empty_room_is_not_a_defeat(test_root)
 	_test_client_wave_sync(test_root)
 	_test_variant_mix(test_root)
 	_test_forced_variant_spawn(test_root)
@@ -424,6 +425,31 @@ func _test_game_over_and_restart(test_root: Node) -> void:
 		_fail(test_root, "Reinicio deveria zerar onda, abates e game over.")
 		return
 	print("PASS: Game over e reinicio da horda validados.")
+
+
+
+## Servidor dedicado e uma SALA: vazio ele espera, nao perde. `everyone_is_down`
+## com lista vazia devolvia true e o primeiro frame do servidor ja dava game
+## over, apagando a horda pre-criada antes de alguem conectar.
+func _test_empty_room_is_not_a_defeat(test_root: Node) -> void:
+	print("Testando sala vazia esperando em vez de dar game over...")
+	var empty_room: bool = SURVIVAL_WAVE_CONTROLLER_SCRIPT.everyone_is_down([])
+	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
+	player.set("reads_local_input", false)
+	test_root.add_child(player)
+	var standing: bool = SURVIVAL_WAVE_CONTROLLER_SCRIPT.everyone_is_down([player])
+	player.set("is_downed", true)
+	var downed: bool = SURVIVAL_WAVE_CONTROLLER_SCRIPT.everyone_is_down([player])
+	player.free()
+	# A sala so reinicia quando o ULTIMO jogador sai; sala que nunca teve
+	# ninguem (servidor recem-subido) mantem o mundo que ja esta montado.
+	var emptied: bool = SURVIVAL_WAVE_CONTROLLER_SCRIPT.room_emptied(2, 0)
+	var never_used: bool = SURVIVAL_WAVE_CONTROLLER_SCRIPT.room_emptied(0, 0)
+	var still_busy: bool = SURVIVAL_WAVE_CONTROLLER_SCRIPT.room_emptied(2, 1)
+	if empty_room or standing or not downed or not emptied or never_used or still_busy:
+		_fail(test_root, "Sala vazia: sem_jogador=%s de_pe=%s caido=%s esvaziou=%s nunca_usada=%s ocupada=%s." % [empty_room, standing, downed, emptied, never_used, still_busy])
+		return
+	print("PASS: Sala vazia espera e so reinicia quando o ultimo jogador sai.")
 
 
 func _test_client_wave_sync(test_root: Node) -> void:

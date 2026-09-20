@@ -106,8 +106,11 @@ func _test_bullet_from_disconnected_shooter(test_root: Node) -> void:
 	print("PASS: Bala de atirador desconectado acerta sem erro.")
 
 
+## Sala vazia deixou de ser derrota: o servidor dedicado e um servico que espera
+## jogador, e nao uma partida perdida. Antes o primeiro frame de um servidor
+## recem-subido ja dava game over e apagava o mundo montado.
 func _test_game_over_rule(test_root: Node) -> void:
-	print("Testando regra de game over (vazio, misto, todos caidos)...")
+	print("Testando regra de game over (vazio espera, misto, todos caidos)...")
 	var standing := PLAYER_SCENE.instantiate() as CharacterBody3D
 	var downed := PLAYER_SCENE.instantiate() as CharacterBody3D
 	downed.set("is_downed", true)
@@ -116,10 +119,10 @@ func _test_game_over_rule(test_root: Node) -> void:
 	var all_down: bool = SURVIVAL_WAVE_CONTROLLER_SCRIPT.everyone_is_down([downed])
 	standing.free()
 	downed.free()
-	if not empty_server or mixed or not all_down:
-		_fail(test_root, "Game over: servidor vazio sim, um de pe nao, todos caidos sim; veio %s/%s/%s." % [empty_server, mixed, all_down])
+	if empty_server or mixed or not all_down:
+		_fail(test_root, "Game over: sala vazia nao, um de pe nao, todos caidos sim; veio %s/%s/%s." % [empty_server, mixed, all_down])
 		return
-	print("PASS: Game over com servidor vazio ou todos caidos; um de pe segura a horda.")
+	print("PASS: Sala vazia espera; game over so com todos caidos e um de pe segura a horda.")
 
 
 func _test_client_wave_sync_uses_alive_count(test_root: Node) -> void:
