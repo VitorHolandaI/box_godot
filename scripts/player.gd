@@ -256,10 +256,14 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_riding():
 		# Passageiro: preso ao assento traseiro, mas ainda mira e atira (sem
-		# andar). Os relogios de acao e o input de arma continuam rodando; o
-		# assento e sincronizado depois do input para o corpo seguir a mira.
-		_handle_vehicle_exit()
+		# andar). No cliente o proxy segue o snapshot (posicao + mira que o
+		# servidor calculou); na autoridade o assento e sincronizado depois do
+		# input para o corpo seguir a mira.
 		_advance_action_clocks(delta)
+		if not simulation_enabled:
+			_interpolate_proxy(delta)
+			return
+		_handle_vehicle_exit()
 		_collect_tick_input(delta)
 		_sync_to_gunner_seat()
 		_handle_weapon_input()
@@ -323,6 +327,11 @@ func _interpolate_proxy(delta: float) -> void:
 		if col != null:
 			move_and_collide(col.get_remainder().slide(col.get_normal()))
 	rotation.y = lerp_angle(rotation.y, snapshot_buffer.rotation, minf(delta * 16.0, 1.0))
+	# Dentro do carro o proxy usa a pose do assento (sentado dirigindo / em pe no
+	# bed), nao a marcha.
+	if is_driving() or is_riding():
+		_apply_seated_pose(is_driving())
+		return
 	PlayerAnimator.animate_pose(self, delta, previous_position.distance_squared_to(global_position) > 0.0001)
 
 
@@ -398,6 +407,7 @@ func get_local_input_state() -> Dictionary:
 		"swat": Input.is_action_pressed(input_action_prefix + "swat"),
 		"aim": _horizontal_from_direction(aim_dir),
 		"aim_dir": aim_dir,
+		"vehicle": _read_vehicle_input(),
 	}
 
 
@@ -424,6 +434,12 @@ func apply_network_input(state: Dictionary) -> void:
 		aim_direction = Vector3(aim_input.x, 0.0, aim_input.y).normalized()
 	else:
 		aim_direction = -global_transform.basis.z
+	# Comando do carro: sem ele (bots/versoes antigas) o motorista nao acelera.
+	var requested_vehicle: Variant = state.get("vehicle", null)
+	if requested_vehicle is Dictionary:
+		vehicle_input = _sanitize_vehicle_input(requested_vehicle as Dictionary)
+	else:
+		vehicle_input = {"steer": 0.0, "throttle": 0.0, "brake": true}
 	# Cada botao guarda o clique ate o tick de fisica consumir; ver _latched_button.
 	jump_pressed = _latched_button(state, "jump", jump_pressed)
 	sprint_pressed = bool(state.get("sprint", false))
@@ -1124,6 +1140,11 @@ func _gunner_facing_yaw() -> float:
 ## enquanto dirige/anda de carona, entao o input de saida e lido aqui.
 ## Uso: interno de _physics_process
 func _handle_vehicle_exit() -> void:
+	# Entrar/sair e autoridade do servidor: no cliente o `interact` vai no pacote
+	# de input e o carro so aparece ocupado pelo snapshot. Sair localmente aqui
+	# brigaria com o servidor (o snapshot re-prenderia o jogador).
+	if not simulation_enabled:
+		return
 	if not reads_local_input:
 		return
 	if not Input.is_action_just_pressed(input_action_prefix + "interact"):
@@ -1137,7 +1158,24 @@ func _handle_vehicle_exit() -> void:
 ## Entrada de direcao do carro. Raw (sem girar pela camera): o volante nao pode
 ## depender do olhar. `steer` vai negado porque no Godot `steering` positivo
 ## vira a esquerda, e o jogador espera D = direita. Uso: DrivableCar.driver_input()
+## Comando cru do carro (steer/throttle/brake) do motorista. No host local vem do
+## Input; para avatares remotos vem no pacote de input, porque o servidor nao tem
+## Input local deles. Uso: DrivableCar.driver_input()
+var vehicle_input := {"steer": 0.0, "throttle": 0.0, "brake": true}
+
+
+## Comando do carro para a autoridade: local le o Input na hora; remoto usa o que
+## chegou pela rede. Uso: DrivableCar.driver_input()
 func get_vehicle_input() -> Dictionary:
+	if reads_local_input:
+		return _read_vehicle_input()
+	return vehicle_input
+
+
+## Comando cru do carro lido do Input local (sem girar pela camera). `steer` vai
+## negado porque no Godot `steering` positivo vira a esquerda, e o jogador espera
+## D = direita. Uso: get_vehicle_input e get_local_input_state.
+func _read_vehicle_input() -> Dictionary:
 	var raw := Input.get_vector(
 		input_action_prefix + "left",
 		input_action_prefix + "right",
@@ -1148,6 +1186,16 @@ func get_vehicle_input() -> Dictionary:
 		"steer": -raw.x,
 		"throttle": -raw.y,
 		"brake": Input.is_action_pressed(input_action_prefix + "jump"),
+	}
+
+
+## Normaliza o comando do carro vindo da rede (o cliente pode mandar qualquer
+## coisa). Uso: apply_network_input
+func _sanitize_vehicle_input(raw: Dictionary) -> Dictionary:
+	return {
+		"steer": clampf(float(raw.get("steer", 0.0)), -1.0, 1.0),
+		"throttle": clampf(float(raw.get("throttle", 0.0)), -1.0, 1.0),
+		"brake": bool(raw.get("brake", false)),
 	}
 
 
