@@ -23,8 +23,9 @@ void fragment() {
 	}
 	vec3 albedo = use_texture ? texture(albedo_texture, UV).rgb * base_color.rgb : base_color.rgb;
 	if (!FRONT_FACING) {
-		// Interior de uma caixa cortada: pinta como secao macica.
-		albedo = SECTION_CAP_COLOR;
+		// Interior de uma caixa cortada: pinta como secao macica. Com o cutout
+		// desligado (primeira pessoa) a face de tras e parede normal.
+		albedo = cutout_enabled ? SECTION_CAP_COLOR : albedo;
 		NORMAL = vec3(0.0, 1.0, 0.0);
 	}
 	ALBEDO = albedo;

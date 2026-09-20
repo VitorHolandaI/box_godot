@@ -17,6 +17,9 @@ uniform vec3 building_max = vec3(0.0);
 uniform bool section_cut_exempt = false;
 
 global uniform vec3 interior_focus_position;
+// Desligado na primeira pessoa: la a camera esta dentro do predio e nao pode
+// cortar parede/teto (o jogador veria atraves das paredes).
+global uniform bool cutout_enabled;
 
 const float SECTION_CUT_HEIGHT = 1.35;
 // Pes do jogador ficam ~1.17 m abaixo da origem; o andar so troca perto do topo
@@ -89,6 +92,9 @@ bool visibility_hidden_by_camera_tube(vec3 camera_position, vec3 player_position
 // na rua as faces de tras seguem invisiveis, como antes do cull_disabled.
 bool visibility_should_discard(vec3 camera_position, vec3 camera_forward, bool in_shadow_pass, bool front_facing, out float rim) {
 	rim = 0.0;
+	if (!cutout_enabled) {
+		return false;
+	}
 	vec3 player_position = in_shadow_pass
 		? interior_focus_position
 		: visibility_player_position(camera_position, camera_forward);
