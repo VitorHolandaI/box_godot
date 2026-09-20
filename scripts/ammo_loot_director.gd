@@ -11,11 +11,12 @@ extends RefCounted
 ##   var kind := AmmoLootDirector.drop_kind_for_kill(randf(), randf())
 
 # Municao farta (pedido de jogo): varias caixas de cada classe no mapa e reposicao a
-# cada 30 s. A queda por abate e ocasional e pequena (pedido: "nao muita").
-const RESTOCK_INTERVAL := 30.0
-# 3 por classe: com 17 classes sao 51 caixas; mais que isso a lista do chao
-# (replicada inteira a cada mudanca) fica grande demais para a rede.
-const MIN_ITEMS_PER_CLASS := 3
+# cada 25 s. A queda por abate e ocasional e pequena (pedido: "nao muita").
+const RESTOCK_INTERVAL := 25.0
+# 6 por classe: com 23 classes sao ate 138 caixas, espalhadas por dentro dos
+# predios. Mais que isso a lista do chao (replicada inteira a cada mudanca)
+# fica grande demais para a rede.
+const MIN_ITEMS_PER_CLASS := 6
 const KILL_DROP_CHANCE := 0.08
 const KILL_DROP_AMOUNT_FACTOR := 0.5
 ## Arma solta por zumbi (horda enorme: faz sentido achar armas nela), com pente

@@ -1,7 +1,7 @@
 class_name WaveSupplyController
 extends RefCounted
 
-const BUILDING_SUPPLY_CHANCE_PERCENT := 45
+const BUILDING_SUPPLY_CHANCE_PERCENT := 70
 
 var scene_tree: SceneTree
 var world_seed: int
