@@ -17,6 +17,9 @@ var stair_flights: Array[Dictionary] = []
 var unit_links: Array[Dictionary] = []
 ## Predios com terraco ganham um lance extra ate a laje do topo, com mureta.
 var has_roof_terrace := false
+## Dados extras do arquetipo lidos pelo assembler. Hoje o comercio guarda aqui
+## o layout da loja (entrada, estoque e escritorio) vindo do room_generator.
+var metadata: Dictionary = {}
 
 
 func _init(building_archetype: String, building_seed: int, building_width: float, building_depth: float, floor_count: int) -> void:

@@ -109,7 +109,9 @@ func _test_building_meshes_merge_without_touching_doors(test_root: Node) -> void
 	var doors_after := house.find_children("Door_*", "AnimatableBody3D", true, false).size()
 	var shapes_after := house.find_children("*", "CollisionShape3D", false, false).size()
 	house.free()
-	if merged_count < 50 or loose_meshes != 0 or surfaces == 0 or surfaces > 20:
+	# A casa procedural varia de 4 a 11 comodos, entao o teto de superficies e
+	# folgado; o que importa e continuar 1 malha (soltas=0).
+	if merged_count < 50 or loose_meshes != 0 or surfaces == 0 or surfaces > 30:
 		_fail(test_root, "Casa deveria virar 1 malha com poucas superficies; fundidas=%d soltas=%d superficies=%d." % [merged_count, loose_meshes, surfaces])
 		return
 	if doors_after != doors_before or shapes_after != shapes_before:

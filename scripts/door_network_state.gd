@@ -2,7 +2,8 @@ class_name DoorNetworkState
 extends RefCounted
 
 
-## Collects non-default door states using deterministic scene paths.
+## Collects non-default door states and their swing direction using deterministic
+## scene paths.
 ## Usage: var states := DoorNetworkState.collect(get_tree())
 static func collect(tree: SceneTree) -> Dictionary:
 	var states: Dictionary = {}
@@ -15,7 +16,7 @@ static func collect(tree: SceneTree) -> Dictionary:
 		var is_open := bool(door.get("is_open"))
 		var is_destroyed := bool(door.get("is_destroyed"))
 		if is_open or is_destroyed:
-			states[str(scene.get_path_to(door))] = [is_open, is_destroyed]
+			states[str(scene.get_path_to(door))] = [is_open, is_destroyed, float(door.get("swing_direction"))]
 	return states
 
 
@@ -29,14 +30,15 @@ static func apply(tree: SceneTree, states: Dictionary) -> void:
 		if not is_instance_valid(door) or not door.has_method("apply_network_state"):
 			continue
 		var state: Variant = states.get(str(scene.get_path_to(door)), [false, false])
-		if not state is Array or state.size() != 2:
+		if not state is Array or state.size() < 2:
 			continue
-		door.apply_network_state(bool(state[0]), bool(state[1]))
+		var swing_direction := float(state[2]) if state.size() >= 3 else 0.0
+		door.apply_network_state(bool(state[0]), bool(state[1]), swing_direction)
 
 
 ## Aplica mudancas pontuais recebidas do servidor; caminhos que nao existem
 ## neste cliente sao ignorados.
-## Usage: DoorNetworkState.apply_changes(get_tree(), {"GeneratedCity/Lot_3/House_A/Door_h_75_0_1": [true, false]})
+## Usage: DoorNetworkState.apply_changes(get_tree(), {"GeneratedCity/Lot_3/House_A/Door_h_75_0_1": [true, false, -1.0]})
 static func apply_changes(tree: SceneTree, changes: Dictionary) -> void:
 	var scene := tree.current_scene
 	if scene == null:
@@ -44,6 +46,7 @@ static func apply_changes(tree: SceneTree, changes: Dictionary) -> void:
 	for path in changes:
 		var state: Variant = changes[path]
 		var door := scene.get_node_or_null(NodePath(str(path)))
-		if door == null or not door.has_method("apply_network_state") or not state is Array or state.size() != 2:
+		if door == null or not door.has_method("apply_network_state") or not state is Array or state.size() < 2:
 			continue
-		door.apply_network_state(bool(state[0]), bool(state[1]))
+		var swing_direction := float(state[2]) if state.size() >= 3 else 0.0
+		door.apply_network_state(bool(state[0]), bool(state[1]), swing_direction)
