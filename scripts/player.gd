@@ -929,7 +929,7 @@ func can_pickup_health() -> bool:
 ## Aplica dano ao jogador, acionando flinch de impacto e empurrao fisico.
 ## Uso:
 ##   player.take_damage(25, Vector3.FORWARD, "bullet")
-func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", source: Node = null) -> void:
+func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", source: Node = null, _hit_position: Vector3 = Vector3.INF) -> void:
 	if is_swat_bot:
 		# Soldado do esquadrao e suporte, nao baixa: nada machuca ele.
 		return

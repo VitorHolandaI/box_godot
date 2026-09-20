@@ -52,6 +52,17 @@ const TITAN_SLAM_COLOR := Color(1.0, 0.45, 0.1)
 const STUCK_LOG_SECONDS := 15.0
 const STRANDED_SECONDS := 40.0
 const STRANDED_MIN_TARGET_DISTANCE := 30.0
+## Dano localizado (item 5): a zona e a parte do corpo mais proxima do ponto de
+## impacto. Cabeca leva multiplicador, perna derruba a velocidade e braco
+## enfraquece o golpe — cada membro so debuffa uma vez, sem empilhar por tiro.
+const HIT_ZONE_HEAD := "head"
+const HIT_ZONE_TORSO := "torso"
+const HIT_ZONE_ARM := "arm"
+const HIT_ZONE_LEG := "leg"
+const HEADSHOT_DAMAGE_MULTIPLIER := 2.0
+const LEG_SHOT_SPEED_FACTOR := 0.6
+const ARM_SHOT_ATTACK_FACTOR := 0.5
+const MIN_LIMP_SPEED := 0.6
 
 @export var speed := 2.2
 @export var gravity := 22.0
@@ -189,6 +200,10 @@ var stalker := ZombieStalker.new()
 ## Coletor (variante COLLECTOR): pedacos absorvidos dos cadaveres.
 var collector := ZombieCollector.new()
 var damage_taken_total := 0
+## Dano localizado: flags para o debuff nao empilhar e a ultima zona atingida.
+var leg_shot := false
+var arm_shot := false
+var last_hit_zone := HIT_ZONE_TORSO
 var _tongue_damage_start := 0
 var _tongue_burn := 0.0
 var leap_state = VARIANT_ABILITIES_SCRIPT.LeapState.new()
@@ -879,13 +894,16 @@ func _update_wander(delta: float) -> void:
 
 
 ## Applies incoming damage, triggers flinch reaction, and alerts the zombie to attacker.
-## Usage:
-##   zombie.take_damage(35, Vector3.FORWARD, "bullet")
-func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "bullet", source: Node = null) -> void:
+## `hit_position` (mundo) liga o dano localizado por parte do corpo; sem ele
+## (melee, fogo, explosao) tudo conta como torso. Usage:
+##   zombie.take_damage(35, Vector3.FORWARD, "bullet", atirador, ponto_de_impacto)
+func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "bullet", source: Node = null, hit_position: Vector3 = Vector3.INF) -> void:
 	if is_dead or not simulation_enabled:
 		return
 
 	amount = VARIANT_ABILITIES_SCRIPT.adjust_incoming_damage(int(zombie_type), amount, damage_kind, collector.has_ability(ZombieType.ARMORED))
+	if hit_position.is_finite():
+		amount = _apply_hit_zone(body_zone_for_points(to_local(hit_position), _visible_zone_points()), amount)
 	damage_taken_total += amount
 	health = maxi(health - mini(amount, max_health), 0)
 	_refresh_health_label()
@@ -906,6 +924,67 @@ func take_damage(amount: int, attack_direction: Vector3, damage_kind: String = "
 			alert_target = attacker
 			alert_forget_timer = ALERT_FORGET_TIME
 			_alert_nearby_zombies(attacker)
+
+
+## Aplica o efeito da zona atingida e devolve o dano corrigido (cabeca dobra).
+## Uso: amount = _apply_hit_zone(zona, amount)
+func _apply_hit_zone(zone: String, amount: int) -> int:
+	last_hit_zone = zone
+	if zone == HIT_ZONE_HEAD:
+		return maxi(int(roundf(float(amount) * HEADSHOT_DAMAGE_MULTIPLIER)), amount)
+	if zone == HIT_ZONE_LEG:
+		if not leg_shot:
+			leg_shot = true
+			speed = maxf(speed * LEG_SHOT_SPEED_FACTOR, MIN_LIMP_SPEED)
+	elif zone == HIT_ZONE_ARM:
+		if not arm_shot:
+			arm_shot = true
+			attack_damage = maxi(int(roundf(float(attack_damage) * ARM_SHOT_ATTACK_FACTOR)), 1)
+	return amount
+
+
+## Zona do corpo cuja parte esta mais perto do ponto local atingido. Puro e
+## testavel. Uso: var zona := Zombie.body_zone_for_points(local, {"head": [p], ...})
+static func body_zone_for_points(local_point: Vector3, zone_points: Dictionary) -> String:
+	var best_zone := HIT_ZONE_TORSO
+	var best_distance := INF
+	for zone in zone_points:
+		for point in zone_points[zone]:
+			var distance := (point as Vector3).distance_squared_to(local_point)
+			if distance < best_distance:
+				best_distance = distance
+				best_zone = zone
+	return best_zone
+
+
+## Posicoes locais das partes visiveis; membro ja arrancado nao conta como alvo.
+## Uso: var pontos := _visible_zone_points()
+func _visible_zone_points() -> Dictionary:
+	var points := {"head": [], "torso": [], "arm": [], "leg": []}
+	_add_zone_point(points, HIT_ZONE_HEAD, model.get_node_or_null("Head") as Node3D)
+	_add_zone_point(points, HIT_ZONE_TORSO, model.get_node_or_null("Torso") as Node3D)
+	_add_zone_point(points, HIT_ZONE_ARM, left_arm)
+	_add_zone_point(points, HIT_ZONE_ARM, right_arm)
+	_add_zone_point(points, HIT_ZONE_LEG, left_leg)
+	_add_zone_point(points, HIT_ZONE_LEG, right_leg)
+	return points
+
+
+func _add_zone_point(points: Dictionary, zone: String, part: Node3D) -> void:
+	if not _body_part_present(part):
+		return
+	(points[zone] as Array).append(to_local(part.global_position))
+
+
+## A parte conta se o no existe e o Mesh sob ele (quando ha) esta visivel: o
+## mutilador esconde o Mesh do membro, nao o no da pose.
+func _body_part_present(part: Node3D) -> bool:
+	if part == null or not is_instance_valid(part):
+		return false
+	var mesh := part.get_node_or_null("Mesh") as MeshInstance3D
+	if mesh != null:
+		return mesh.is_visible_in_tree()
+	return part.is_visible_in_tree()
 
 
 ## Incendeia (lanca-chamas); a autoridade avisa os clientes para mostrar o fogo.
