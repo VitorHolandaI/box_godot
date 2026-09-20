@@ -324,33 +324,39 @@ func get_local_input_state() -> Dictionary:
 	}
 
 
+## Trava de clique da rede: o botao fica marcado ate o tick de fisica consumir.
+## Dois pacotes de input no mesmo frame (jitter da internet) faziam o segundo
+## apagar o clique do primeiro, perdendo tiro, recarga ou coleta. A chamada a
+## _network_button_just_pressed vem antes do "or" para sempre atualizar o estado
+## anterior do botao. Uso: attack_pressed = _latched_button(state, "attack", attack_pressed)
+func _latched_button(state: Dictionary, key: String, current: bool) -> bool:
+	return _network_button_just_pressed(key, bool(state.get(key, false))) or current
+
+
 func apply_network_input(state: Dictionary) -> void:
 	var requested_move: Variant = state.get("move", Vector2.ZERO)
 	move_input = requested_move.limit_length(1.0) if requested_move is Vector2 else Vector2.ZERO
 	var requested_aim: Variant = state.get("aim", Vector2.ZERO)
 	aim_input = requested_aim.limit_length(1.0) if requested_aim is Vector2 else Vector2.ZERO
-	# Cliques acumulam ate o tick de fisica consumir (_clear_transient_input):
-	# dois pacotes de input no mesmo frame (jitter da internet) faziam o segundo
-	# apagar o clique do primeiro, perdendo tiro, recarga ou coleta. A funcao vem
-	# antes do "or" para sempre atualizar o estado anterior do botao.
-	jump_pressed = _network_button_just_pressed("jump", bool(state.get("jump", false))) or jump_pressed
+	# Cada botao guarda o clique ate o tick de fisica consumir; ver _latched_button.
+	jump_pressed = _latched_button(state, "jump", jump_pressed)
 	sprint_pressed = bool(state.get("sprint", false))
-	attack_pressed = _network_button_just_pressed("attack", bool(state.get("attack", false))) or attack_pressed
-	knife_pressed = _network_button_just_pressed("knife", bool(state.get("knife", false))) or knife_pressed
-	pistol_pressed = _network_button_just_pressed("pistol", bool(state.get("pistol", false))) or pistol_pressed
-	reload_pressed = _network_button_just_pressed("reload", bool(state.get("reload", false))) or reload_pressed
-	interact_pressed = _network_button_just_pressed("interact", bool(state.get("interact", false))) or interact_pressed
-	shotgun_pressed = _network_button_just_pressed("shotgun", bool(state.get("shotgun", false))) or shotgun_pressed
-	uzi_pressed = _network_button_just_pressed("uzi", bool(state.get("uzi", false))) or uzi_pressed
-	magnum_pressed = _network_button_just_pressed("magnum", bool(state.get("magnum", false))) or magnum_pressed
-	double_barrel_pressed = _network_button_just_pressed("double_barrel", bool(state.get("double_barrel", false))) or double_barrel_pressed
-	carbine_pressed = _network_button_just_pressed("carbine", bool(state.get("carbine", false))) or carbine_pressed
-	drop_pressed = _network_button_just_pressed("drop", bool(state.get("drop", false))) or drop_pressed
-	cycle_weapon_pressed = _network_button_just_pressed("cycle", bool(state.get("cycle", false))) or cycle_weapon_pressed
-	grenade_pressed = _network_button_just_pressed("grenade", bool(state.get("grenade", false))) or grenade_pressed
-	throw_knife_pressed = _network_button_just_pressed("throw_knife", bool(state.get("throw_knife", false))) or throw_knife_pressed
-	air_strike_pressed = _network_button_just_pressed("air_strike", bool(state.get("air_strike", false))) or air_strike_pressed
-	swat_pressed = _network_button_just_pressed("swat", bool(state.get("swat", false))) or swat_pressed
+	attack_pressed = _latched_button(state, "attack", attack_pressed)
+	knife_pressed = _latched_button(state, "knife", knife_pressed)
+	pistol_pressed = _latched_button(state, "pistol", pistol_pressed)
+	reload_pressed = _latched_button(state, "reload", reload_pressed)
+	interact_pressed = _latched_button(state, "interact", interact_pressed)
+	shotgun_pressed = _latched_button(state, "shotgun", shotgun_pressed)
+	uzi_pressed = _latched_button(state, "uzi", uzi_pressed)
+	magnum_pressed = _latched_button(state, "magnum", magnum_pressed)
+	double_barrel_pressed = _latched_button(state, "double_barrel", double_barrel_pressed)
+	carbine_pressed = _latched_button(state, "carbine", carbine_pressed)
+	drop_pressed = _latched_button(state, "drop", drop_pressed)
+	cycle_weapon_pressed = _latched_button(state, "cycle", cycle_weapon_pressed)
+	grenade_pressed = _latched_button(state, "grenade", grenade_pressed)
+	throw_knife_pressed = _latched_button(state, "throw_knife", throw_knife_pressed)
+	air_strike_pressed = _latched_button(state, "air_strike", air_strike_pressed)
+	swat_pressed = _latched_button(state, "swat", swat_pressed)
 	remote_input_age = 0.0
 
 
