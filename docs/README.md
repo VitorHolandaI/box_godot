@@ -10,6 +10,7 @@ essencial (o que e, como rodar, controles) e aponta para ca.
 | `multiplayer.md` | multiplayer local, servidor dedicado (ENet, portas), descoberta de salas e deploy/release na VPS |
 | `pvp.md` | modo mata-mata: bases, freezetime, compra, melhor de 3 rodadas, bots e HUD |
 | `desenvolvimento.md` | builds Linux/Windows/macOS, `build_exports.sh`, template de macOS, assinatura e testes automatizados |
+| `gotchas.md` | armadilhas ja vistas, com sintoma -> causa -> regra: rede/build, mira e tiro, carro, camera/render, GDScript, headless/shell |
 | `imagens/` | capturas otimizadas usadas no README da raiz (JPEG ~1600 px) |
 | `zumbis.md` | as 21 variantes de zumbi com vida/velocidade e um GIF de cada atacando |
 | `imagens/zumbis/` | um GIF por variante (`zumbi-00.gif` ... `zumbi-20.gif`) |
