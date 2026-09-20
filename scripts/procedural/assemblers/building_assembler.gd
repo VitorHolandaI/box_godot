@@ -558,10 +558,10 @@ static func _add_house_air_conditioners(body: StaticBody3D, building) -> void:
 	BOX_BUILDER.add_box(body, "ExteriorAirConditionerGrille", Vector3(0.68, 0.28, 0.03), Vector3(x, 2.05, z + 0.15), grille_material, false)
 
 
-## Ancora de loot por unidade (casa/apartamento): o main espalha municao/arma
-## por aqui em vez de deixar tudo na rua. Uma ancora por unidade, no primeiro
-## comodo (sem escada) - apartamento rende loot nos andares de cima tambem.
-## Uso: interno do assemble.
+## Ancora de loot por comodo (casa/apartamento/comercio): o main espalha
+## municao/arma por aqui em vez de deixar tudo na rua. Uma ancora por comodo
+## (sem escada) em cada andar, entao o loot se espalha de verdade e nao empilha
+## no mesmo ponto. Uso: interno do assemble.
 static func _add_loot_anchors(body: StaticBody3D, building) -> void:
 	for floor_blueprint in building.floor_blueprints:
 		var floor_y: float = float(floor_blueprint.floor_index) * building.floor_height
@@ -576,7 +576,6 @@ static func _add_loot_anchors(body: StaticBody3D, building) -> void:
 				anchor.position = Vector3(origin.x + room.bounds.get_center().x, floor_y + 0.2, origin.y + room.bounds.get_center().y)
 				anchor.add_to_group("building_loot_points")
 				body.add_child(anchor)
-				break
 
 
 static func _add_wave_supply(body: StaticBody3D, building) -> void:
