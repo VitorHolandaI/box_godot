@@ -69,7 +69,6 @@ func _update_building_lights(delta: float) -> void:
 	if _light_toggle_elapsed < LIGHT_TOGGLE_INTERVAL:
 		return
 	_light_toggle_elapsed = 0.0
-	var margin := Vector3.ONE * LIGHT_MARGIN
 	# get_living_players poda o cache: um peer que desconectou deixa o Node
 	# liberado em _cached_players, e o cast dele estourava com 8 peers.
 	var relevant_players: Array = get_living_players(get_tree())
@@ -77,22 +76,11 @@ func _update_building_lights(delta: float) -> void:
 		var building := building_value as Node
 		if building == null or String(building.name).begins_with("CentralSafehouse"):
 			continue
-		var min_value: Variant = building.get_meta("visibility_min", null)
-		var max_value: Variant = building.get_meta("visibility_max", null)
-		if not (min_value is Vector3 and max_value is Vector3):
+		var bounds: Variant = _building_visibility_bounds(building)
+		if bounds == null:
 			continue
-		var bounds_min := (min_value as Vector3) - margin
-		var bounds := AABB(bounds_min, (max_value as Vector3) + margin - bounds_min)
-		var want_on := false
-		for player in relevant_players:
-			if not is_instance_valid(player):
-				continue
-			var player_node := player as Node3D
-			if player_node != null and bounds.has_point(player_node.global_position):
-				want_on = true
-				break
 		var key := String(building.get_path())
-		if want_on:
+		if _any_player_in_bounds(relevant_players, bounds as AABB):
 			_light_off_ticks.erase(key)
 			ProceduralBuildingAssembler.set_building_lights_enabled(building, true)
 			continue
@@ -100,6 +88,29 @@ func _update_building_lights(delta: float) -> void:
 		_light_off_ticks[key] = off_ticks
 		if off_ticks >= LIGHT_OFF_TICKS:
 			ProceduralBuildingAssembler.set_building_lights_enabled(building, false)
+
+
+## AABB do volume de visibilidade do predio com a margem de luz, ou null se o
+## predio nao tem meta de visibilidade. Uso: var b := _building_visibility_bounds(predio)
+func _building_visibility_bounds(building: Node) -> Variant:
+	var min_value: Variant = building.get_meta("visibility_min", null)
+	var max_value: Variant = building.get_meta("visibility_max", null)
+	if not (min_value is Vector3 and max_value is Vector3):
+		return null
+	var margin := Vector3.ONE * LIGHT_MARGIN
+	var bounds_min := (min_value as Vector3) - margin
+	return AABB(bounds_min, (max_value as Vector3) + margin - bounds_min)
+
+
+## Algum jogador vivo dentro do volume? Uso: if _any_player_in_bounds(players, aabb)
+func _any_player_in_bounds(players: Array, bounds: AABB) -> bool:
+	for player in players:
+		if not is_instance_valid(player):
+			continue
+		var player_node := player as Node3D
+		if player_node != null and bounds.has_point(player_node.global_position):
+			return true
+	return false
 
 
 ## Canal estatico de som: usa o coordenador quando existe (mundo real) e cai
