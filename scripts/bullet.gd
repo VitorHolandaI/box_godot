@@ -63,9 +63,9 @@ func _advance_damaging(next_position: Vector3, delta: float) -> void:
 	var exclude: Array[RID] = []
 	if shooter != null:
 		exclude.append(shooter.get_rid())
-	var collider := first_hit_collider(get_world_3d().direct_space_state, global_position, next_position, exclude)
-	if collider != null:
-		_apply_damage(collider)
+	var info := first_hit_info(get_world_3d().direct_space_state, global_position, next_position, exclude)
+	if not info.is_empty():
+		_apply_damage(info["collider"] as Object, info["point"] as Vector3)
 		queue_free()
 		return
 	global_position = next_position
@@ -77,6 +77,13 @@ func _advance_damaging(next_position: Vector3, delta: float) -> void:
 ## Primeiro colisor que uma esfera de HIT_TOLERANCE_RADIUS encontra indo de
 ## `from` a `to`, ou null. Uso: var alvo := Bullet.first_hit_collider(space, a, b, [player.get_rid()])
 static func first_hit_collider(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, exclude: Array[RID]) -> Object:
+	return first_hit_info(space, from, to, exclude).get("collider") as Object
+
+
+## Primeiro impacto da esfera de tolerancia: {"collider": Object, "point": Vector3}
+## ou vazio. O ponto (na superficie do alvo) e o que permite dano localizado por
+## parte do corpo. Uso: var info := Bullet.first_hit_info(space, a, b, exclude)
+static func first_hit_info(space: PhysicsDirectSpaceState3D, from: Vector3, to: Vector3, exclude: Array[RID]) -> Dictionary:
 	var sphere := SphereShape3D.new()
 	sphere.radius = HIT_TOLERANCE_RADIUS
 	var query := PhysicsShapeQueryParameters3D.new()
@@ -87,21 +94,22 @@ static func first_hit_collider(space: PhysicsDirectSpaceState3D, from: Vector3, 
 	query.exclude = exclude
 	var fractions := space.cast_motion(query)
 	if fractions.size() < 2 or fractions[1] >= 1.0:
-		return null
+		return {}
 	query.transform = Transform3D(Basis.IDENTITY, from + query.motion * fractions[1])
 	query.motion = Vector3.ZERO
 	var info := space.get_rest_info(query)
 	if info.is_empty():
-		return null
-	return instance_from_id(int(info["collider_id"]))
+		return {}
+	var collider := instance_from_id(int(info["collider_id"]))
+	return {"collider": collider, "point": info.get("point", from + (to - from) * fractions[1])}
 
 
-func _apply_damage(collider: Object) -> void:
+func _apply_damage(collider: Object, hit_point: Vector3 = Vector3.INF) -> void:
 	_drop_disconnected_shooter()
 	var target: Node = collider as Node
 	while target != null:
 		if target.has_method("take_damage"):
-			target.take_damage(damage, direction, "bullet", shooter)
+			target.take_damage(damage, direction, "bullet", shooter, hit_point)
 			return
 		target = target.get_parent()
 
@@ -126,11 +134,12 @@ static func hitscan_damage(origin: Vector3, direction: Vector3, damage: int, sho
 	# Railgun (pierce > 1): cada alvo atingido entra no exclude e o raio segue
 	# ate o proximo; parede ou objeto sem take_damage para o tiro.
 	for _hit_index in maxi(pierce, 1):
-		var collider := first_hit_collider(space, origin, reach, exclude)
+		var info := first_hit_info(space, origin, reach, exclude)
+		var collider := info.get("collider") as Object
 		var target := _damageable_ancestor(collider as Node)
 		if target == null:
 			return
-		target.take_damage(damage, direction, "bullet", shooter)
+		target.take_damage(damage, direction, "bullet", shooter, info.get("point", origin) as Vector3)
 		if collider is CollisionObject3D:
 			exclude.append((collider as CollisionObject3D).get_rid())
 
