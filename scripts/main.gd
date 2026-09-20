@@ -120,6 +120,10 @@ var airdrop_controller
 var crate_index := 0
 ## Contador de nomes estaveis dos itens de vida/municao espalhados.
 var loot_index := 0
+## Fila de ancoras internas para o loot (grupo building_loot_points); recarrega
+## e reembaralha quando esvazia. Uso: _take_interior_loot_position.
+var _loot_points: Array[Vector3] = []
+var _loot_points_cursor := 0
 var door_state_replicator = DOOR_STATE_REPLICATOR_SCRIPT.new()
 var ammo_loot_director = AMMO_LOOT_DIRECTOR_SCRIPT.new()
 var player_slots_replication := PlayerSlotsReplication.new()
@@ -1026,9 +1030,6 @@ func _spawn_scattered_loot(_wave_index: int = 0) -> void:
 		return
 	var rng := RandomNumberGenerator.new()
 	rng.seed = NetworkSession.world_seed * 31337 + Time.get_ticks_msec()
-	var interior := _interior_loot_points()
-	_shuffle_with(interior, rng)
-	var next_index := 0
 	var items: Array[Array] = [
 		[GroundSupplyPickup.Kind.HEALTH, 35], [GroundSupplyPickup.Kind.HEALTH, 35],
 		[GroundSupplyPickup.Kind.AMMO, 60], [GroundSupplyPickup.Kind.AMMO, 60],
@@ -1037,22 +1038,14 @@ func _spawn_scattered_loot(_wave_index: int = 0) -> void:
 		[GroundSupplyPickup.Kind.AMMO_CARBINE, 30],
 	]
 	for entry in items:
-		var position := Vector3.ZERO
-		if next_index < interior.size():
-			position = interior[next_index]
-			next_index += 1
-		else:
-			position = AIRDROP_CONTROLLER_SCRIPT.pick_clear_position(get_tree(), rng, 20.0, 110.0)
-		if position == AIRDROP_CONTROLLER_SCRIPT.INVALID_DROP_POSITION:
-			continue
-		_add_loot_item(int(entry[0]), int(entry[1]), position)
+		_spawn_loot_item(rng, int(entry[0]), int(entry[1]), true)
 	# Poucas coisas na rua: dois itens ao ar livre.
 	for _street in 2:
-		_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO, 30)
+		_spawn_loot_item(rng, GroundSupplyPickup.Kind.AMMO, 30, false)
 
 
 ## Pontos internos (uma ancora por unidade) do loot, ja deslocados acima do
-## piso. Uso: interno do _spawn_scattered_loot.
+## piso. Uso: interno do _take_interior_loot_position.
 func _interior_loot_points() -> Array[Vector3]:
 	var points: Array[Vector3] = []
 	for node in get_tree().get_nodes_in_group("building_loot_points"):
@@ -1060,6 +1053,20 @@ func _interior_loot_points() -> Array[Vector3]:
 		if anchor != null and is_instance_valid(anchor):
 			points.append(anchor.global_position + Vector3.UP * 0.25)
 	return points
+
+
+## Proximo ponto interno livre; recarrega e reembaralha quando acaba. Devolve
+## INVALID quando a cidade ainda nao tem ancoras. Uso: interno.
+func _take_interior_loot_position(rng: RandomNumberGenerator) -> Vector3:
+	if _loot_points_cursor >= _loot_points.size():
+		_loot_points = _interior_loot_points()
+		_shuffle_with(_loot_points, rng)
+		_loot_points_cursor = 0
+	if _loot_points.is_empty():
+		return AIRDROP_CONTROLLER_SCRIPT.INVALID_DROP_POSITION
+	var point := _loot_points[_loot_points_cursor]
+	_loot_points_cursor += 1
+	return point
 
 
 ## Embaralha com o RNG LOCAL: Array.shuffle usa o RNG global e mudava o timing
@@ -1073,8 +1080,15 @@ func _shuffle_with(values: Array, rng: RandomNumberGenerator) -> void:
 		values[swap] = temporary
 
 
-func _spawn_loot_item(rng: RandomNumberGenerator, kind: int, amount: int) -> void:
-	var position := AIRDROP_CONTROLLER_SCRIPT.pick_clear_position(get_tree(), rng, 20.0, 110.0)
+## Item de municao/vida: por padrao DENTRO de um predio (ancora interna); sem
+## ancora cai para a rua. `prefer_interior=false` forca a rua (poucos itens).
+## Uso: _spawn_loot_item(rng, kind, amount, true)
+func _spawn_loot_item(rng: RandomNumberGenerator, kind: int, amount: int, prefer_interior: bool = true) -> void:
+	var position := AIRDROP_CONTROLLER_SCRIPT.INVALID_DROP_POSITION
+	if prefer_interior:
+		position = _take_interior_loot_position(rng)
+	if position == AIRDROP_CONTROLLER_SCRIPT.INVALID_DROP_POSITION:
+		position = AIRDROP_CONTROLLER_SCRIPT.pick_clear_position(get_tree(), rng, 20.0, 110.0)
 	if position == AIRDROP_CONTROLLER_SCRIPT.INVALID_DROP_POSITION:
 		return
 	_add_loot_item(kind, amount, position)
