@@ -75,11 +75,16 @@ var _previous_speed := 0.0
 ## Cliente de rede: o servidor e autoritativo, entao este carro NAO simula
 ## fisica. Ele congela e persegue o transform que chega no snapshot do carro.
 var network_proxy := false
-## Alvo do snapshot (posicao + rotacao) que o proxy persegue.
+## Alvo do snapshot (posicao + rotacao) mais recente.
 var _target_transform := Transform3D.IDENTITY
-var _has_target := false
-## Velocidade da interpolacao do proxy (por segundo).
-const PROXY_INTERP_RATE := 12.0
+## Buffer dos ultimos transforms do snapshot: o proxy interpola por tempo de
+## render (como o SnapshotInterpBuffer dos jogadores). Perseguir o alvo direto
+## dava mini-teleportes, porque o carro andava em passos de 10 Hz.
+var _proxy_samples: Array = []
+## Atraso de render: interpola entre os dois snapshots que envolvem
+## (agora - atraso). Esconde o passo de 10 Hz ao custo de ~120 ms de latencia.
+const PROXY_INTERP_DELAY := 0.12
+const PROXY_MAX_SAMPLES := 24
 
 ## Volante visual proprio: o aro gira com o esterço por cima do volante estatico
 ## do modelo (o GLB e malha unica e nao da pra girar so a peca do volante).
@@ -277,7 +282,9 @@ func apply_network_state(state: Dictionary) -> void:
 	var basis: Variant = state.get("basis")
 	if position is Vector3 and basis is Basis:
 		_target_transform = Transform3D(basis as Basis, position as Vector3)
-		_has_target = true
+		_proxy_samples.append({"t": _now_seconds(), "xf": _target_transform})
+		while _proxy_samples.size() > PROXY_MAX_SAMPLES:
+			_proxy_samples.pop_front()
 	health = int(state.get("health", health))
 	fuel = float(state.get("fuel", fuel))
 	steering = float(state.get("steering", steering))
@@ -418,13 +425,39 @@ func _physics_process(delta: float) -> void:
 	fuel = maxf(fuel - fuel_burn_per_second * delta, 0.0)
 
 
-## Proxy do cliente: persegue o transform do snapshot (posicao + rotacao) sem
-## simular fisica. Uso: topo de _physics_process quando network_proxy
-func _interpolate_proxy(delta: float) -> void:
-	if not _has_target:
+## Proxy do cliente: interpola o transform por tempo de render entre os dois
+## snapshots que envolvem (agora - PROXY_INTERP_DELAY), sem simular fisica.
+## Uso: topo de _physics_process quando network_proxy
+func _interpolate_proxy(_delta: float) -> void:
+	if _proxy_samples.is_empty():
 		return
-	var weight := clampf(delta * PROXY_INTERP_RATE, 0.0, 1.0)
-	global_transform = global_transform.interpolate_with(_target_transform, weight)
+	if _proxy_samples.size() == 1:
+		global_transform = _proxy_samples[0]["xf"] as Transform3D
+		return
+	global_transform = _sample_proxy_transform(_now_seconds() - PROXY_INTERP_DELAY)
+
+
+## Transform interpolado no instante pedido. Uso: _interpolate_proxy
+func _sample_proxy_transform(render_time: float) -> Transform3D:
+	var first: Dictionary = _proxy_samples[0]
+	var last: Dictionary = _proxy_samples[_proxy_samples.size() - 1]
+	if render_time <= float(first["t"]):
+		return first["xf"] as Transform3D
+	if render_time >= float(last["t"]):
+		return last["xf"] as Transform3D
+	for index in range(_proxy_samples.size() - 1):
+		var before: Dictionary = _proxy_samples[index]
+		var after: Dictionary = _proxy_samples[index + 1]
+		if render_time < float(before["t"]) or render_time > float(after["t"]):
+			continue
+		var span := float(after["t"]) - float(before["t"])
+		var weight := 0.5 if span <= 0.0001 else (render_time - float(before["t"])) / span
+		return (before["xf"] as Transform3D).interpolate_with(after["xf"] as Transform3D, weight)
+	return last["xf"] as Transform3D
+
+
+func _now_seconds() -> float:
+	return float(Time.get_ticks_msec()) / 1000.0
 
 
 ## Gira o aro visual conforme o esterco atual. Uso: interno de _physics_process
