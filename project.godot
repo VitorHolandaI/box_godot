@@ -91,3 +91,7 @@ interior_focus_position={
 "type": "vec3",
 "value": Vector3(0, -10000, 0)
 }
+cutout_enabled={
+"type": "bool",
+"value": true
+}
