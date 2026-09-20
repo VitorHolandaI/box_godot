@@ -8,6 +8,25 @@ extends RefCounted
 
 const MAX_PRESPAWN_ZOMBIES := 2000
 const MAX_PVP_BOTS := 8
+const MAX_CAR_BOTS := 4
+
+
+## Quantos carros dirigiveis ganham um bot motorista no servidor (0 quando
+## ausente). Serve para testar a rede do carro no servidor dedicado sem um
+## jogador humano: o bot dirige e o snapshot leva o movimento aos clientes.
+## Uso: var count := LoadTestOptions.car_bot_count(PackedStringArray(["--car-bot=1"]))
+static func car_bot_count(arguments: PackedStringArray) -> int:
+	for argument in arguments:
+		if argument == "--car-bot":
+			return 1
+		if not argument.begins_with("--car-bot="):
+			continue
+		var raw_value := argument.trim_prefix("--car-bot=")
+		if not raw_value.is_valid_int() or int(raw_value) < 0 or int(raw_value) > MAX_CAR_BOTS:
+			push_error("Valor invalido para --car-bot: '%s'; esperado inteiro entre 0 e %d." % [raw_value, MAX_CAR_BOTS])
+			return 0
+		return int(raw_value)
+	return 0
 
 
 ## Quantidade de bots de mata-mata a criar no servidor (0 quando ausente).
