@@ -15,6 +15,8 @@ var target: Node3D
 func _ready() -> void:
 	fov = 78.0
 	near = 0.05
+	# Dentro do predio a camera nao pode cortar parede/teto.
+	RenderingServer.global_shader_parameter_set(&"cutout_enabled", false)
 
 
 func _process(_delta: float) -> void:
@@ -40,3 +42,5 @@ func _set_head_hidden(hidden: bool) -> void:
 func _exit_tree() -> void:
 	if is_instance_valid(target):
 		_set_head_hidden(false)
+	# Devolve o recorte para a isometrica (o manager reavalia se ha varios).
+	RenderingServer.global_shader_parameter_set(&"cutout_enabled", true)
