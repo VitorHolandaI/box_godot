@@ -193,6 +193,7 @@ var zombie_weapon_drops: Array[Node] = []
 
 
 func _ready() -> void:
+	GameConfig.menu_open = false
 	FramePerfProbe.active = perf_probe
 	loot_rng.randomize()
 	in_game_menu.unstuck_requested.connect(_on_unstuck_requested)

@@ -32,6 +32,7 @@ func _unhandled_input(event: InputEvent) -> void:
 func open_menu() -> void:
 	is_open = true
 	visible = true
+	GameConfig.menu_open = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if NetworkSession.is_offline():
 		title.text = "JOGO PAUSADO"
@@ -47,6 +48,11 @@ func close_menu() -> void:
 	get_tree().paused = false
 	is_open = false
 	visible = false
+	GameConfig.menu_open = false
+	# Devolve o cursor ao estado da camera (FPS prende, isometrica solta).
+	for node in get_tree().get_nodes_in_group("player"):
+		if node.get("is_local_controller") == true and node.has_method("_apply_mouse_capture"):
+			node.call("_apply_mouse_capture")
 
 
 ## Graficos e teclas dos jogadores locais sem sair da partida.

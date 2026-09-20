@@ -26,11 +26,12 @@ Logica de jogo, rede, interface e testes automatizados.
 - `door_state_replicator.gd`: no servidor, junta as mudancas de portas e marca quem ja recebeu o estado completo; vai por RPC confiavel, fora do snapshot.
 - `floor_plan_generator.gd`: gera planta de casa por squarified treemap (subdivide o retangulo na proporcao dos pesos dos comodos) com portas por arvore geradora, garantindo todo comodo alcancavel; `program_for_seed(seed, area, include_utility)` monta o programa (quartos/banheiros/cozinhas e a despensa da entrada de servico) conforme o tamanho da casa; `draft_interior` vira paredes e vaos.
 - `frame_perf_probe.gd`: sonda de custo por frame (ligada por padrao, `--perf-probe=off` desliga): `perf_report` a cada 5 s com FPS, p95, frames fora do orcamento de 60 Hz, ticks de fisica extras e custo por secao; `perf_hitch` em frame >= 33 ms com a quebra daquele frame.
-- `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
+- `game_config.gd`: controles, preferencias graficas (resolucao/qualidade/tela cheia) e de jogabilidade (mira pelo mouse e primeira pessoa) e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local, navegacao, configuracoes e teclas (Esc) e botao "Destravar personagem" durante a partida.
-- `in_game_settings_panel.gd`: configuracoes abertas pelo Esc na partida: graficos e teclas de cada jogador local, valendo na hora.
+- `in_game_settings_panel.gd`: configuracoes abertas pelo Esc na partida: graficos, jogabilidade (mira pelo mouse e primeira pessoa) e teclas de cada jogador local, valendo na hora.
 - `keybinding_editor.gd`: troca de teclas compartilhada pelo menu principal e pelo menu do Esc (rotulos das acoes, captura por dispositivo e nome curto da tecla).
 - `local_camera.gd`: acompanhamento afastado do jogador com yaw fixo, angulo inclinado dentro de predios, publicacao do foco para sombras e sem limitar a posicao dentro da casa, mantendo a aura/recorte alinhada ao boneco.
+- `first_person_camera.gd`: camera em primeira pessoa presa na cabeca do jogador (yaw do corpo/`camera_yaw` + `view_pitch`), escondendo a cabeca enquanto ativa e restaurando ao sair.
 - `local_host_launcher.gd`: "Hospedar partida" do menu: sobe o servidor dedicado como processo filho headless, entra por 127.0.0.1, encerra ao voltar ao menu/fechar o jogo e o filho sai sozinho sem peers (`--host-idle-exit=`).
 - `main.gd`: ciclo da partida, populacao global, FOV local, reset de vidas por onda, snapshots, ragdolls unicos que so somem longe dos jogadores e bot de teste.
 - `load_test_options.gd`: opcoes `--prespawn-zombies=N` (teste de carga) e `--pvp-bots=N` (bots de mata-mata no servidor, para jogar player vs bot sem outro cliente) do servidor dedicado; `--smoke-test-swat` (main.gd) chama o esquadrao perto do primeiro jogador, spawna alvos em anel e imprime o estado dos 4 soldados a cada 2 s ate o esquadrao expirar.
@@ -40,7 +41,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `network_session.gd`: sessao ENet (limite de jogadores via `PlayerCapacity`), roster, handshake, ping, descoberta UDP de salas e suporte a modo de teste unitario.
 - `network_zombie_proxy_factory.gd`: cria o zumbi do cliente a partir do snapshot, com a variante sorteada pelo servidor aplicada antes do _ready.
 - `performance_hud.gd`: HUD de FPS, draw calls, objetos e memoria (alterna com F3).
-- `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao).
+- `player.gd`: personagem jogavel militar com faca que tambem arromba portas, bolha de visao de 4m ao redor, 3 vidas restauradas a cada onda, pulso sonar passivo (10s) que revela zumbis num raio de 45m, cone visual, armas com fogo amigo, linha de visao para melee, tiro contido pela colisao e sincronizacao em rede. Tres armas no total: faca e pistola fixas + 1 slot de arma de crate (pegar outra troca e dropa a da mao no chao por interacao). Mira pelo cursor do mouse e modo primeira pessoa (tecla "view", rebindavel).
 - `player_capacity.gd`: limite de jogadores por servidor separado da tela dividida (`--max-players=N`, padrao 8; ate 4 locais por computador) e spawn em aneis para quem passa dos 4 marcadores.
 - `player_equipment.gd`: contagem de granadas, facas de arremesso, ataques aereos e SWAT (inicio, maximo, consumo e 4 bytes no snapshot). Ganha ataque aereo a cada 3 ondas e SWAT a cada 5.
 - `player_slots_replication.gd`: decide quando os slots de arma entram no snapshot (3 snapshots apos cada mudanca e refresh a cada 20 com fase por jogador).
@@ -106,7 +107,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `server_ping_probe.gd`: mede RTT usando o ping nativo do ENet na porta do jogo.
 - `safehouse_door.gd`: porta vertical automatica autoritativa, acionada por jogadores, indestrutivel e replicada aos clientes.
 - `solid_venue.gd`: construcao oca (piso, paredes e porta) e colisao de casas, lojas e apartamentos.
-- `split_screen_manager.gd`: viewports com audio 3D, cameras, HUDs locais e minimapa com o jogador, os aliados, os zumbis dentro do raio do sonar e todos os zumbis quando restam 5 ou menos.
+- `split_screen_manager.gd`: viewports com audio 3D, cameras (isometrica ou primeira pessoa por jogador), HUDs locais e minimapa com o jogador, os aliados, os zumbis dentro do raio do sonar e todos os zumbis quando restam 5 ou menos.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_building_navigation.gd`: regressoes da escada alternada, navmesh por edificio, zumbi subindo/descendo, jogador subindo e zumbi saindo de casa arrombando portas.
 - `test_city_props.gd`: regressoes da altura/posicao dos postes e do telhado das casas.

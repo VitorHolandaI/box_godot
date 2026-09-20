@@ -34,6 +34,7 @@ const ACTION_LABELS := [
 	["air_strike", "Chamar ataque aereo"],
 	["swat", "Chamar SWAT"],
 	["buy", "Comprar arma (PVP)"],
+	["view", "Primeira pessoa / 3a pessoa"],
 ]
 
 

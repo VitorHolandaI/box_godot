@@ -1,6 +1,7 @@
 extends Control
 
 const LOCAL_CAMERA_SCRIPT := preload("res://scripts/local_camera.gd")
+const FIRST_PERSON_CAMERA_SCRIPT := preload("res://scripts/first_person_camera.gd")
 const MINIMAP_SIZE := 150.0
 const MINIMAP_WORLD_EXTENT := 160.0
 # Fim de onda: com poucos zumbis vivos o minimapa mostra todos, para ninguem
@@ -113,6 +114,32 @@ func configure(local_players: Array[Node]) -> void:
 	for index in players.size():
 		_create_player_view(index)
 	call_deferred("_layout_views")
+	_apply_mouse_capture()
+	for index in players.size():
+		var player := players[index]
+		if is_instance_valid(player) and player.has_signal("first_person_changed") and not player.first_person_changed.is_connected(_on_player_view_mode_changed):
+			player.first_person_changed.connect(_on_player_view_mode_changed)
+
+
+## Troca isometrica <-> primeira pessoa: reconstroi a camera do jogador e
+## reavalia o cursor. Uso: conectado a Player.first_person_changed.
+func _on_player_view_mode_changed(_enabled: bool) -> void:
+	configure(players)
+
+
+## Prende o cursor quando algum jogador local esta em primeira pessoa; solta
+## quando todos voltam para a isometrica. O menu aberto sempre tem prioridade.
+func _apply_mouse_capture() -> void:
+	if GameConfig.menu_open:
+		return
+	var any_first_person := false
+	for player in players:
+		if is_instance_valid(player) and bool(player.get("first_person")):
+			any_first_person = true
+			break
+	var wanted := Input.MOUSE_MODE_CAPTURED if any_first_person else Input.MOUSE_MODE_VISIBLE
+	if Input.mouse_mode != wanted:
+		Input.mouse_mode = wanted
 
 
 func _process(delta: float) -> void:
@@ -247,10 +274,17 @@ func _create_player_view(index: int) -> void:
 	viewports.append(viewport)
 
 	var camera := Camera3D.new()
-	camera.set_script(LOCAL_CAMERA_SCRIPT)
+	if bool(players[index].get("first_person")):
+		camera.set_script(FIRST_PERSON_CAMERA_SCRIPT)
+	else:
+		camera.set_script(LOCAL_CAMERA_SCRIPT)
 	viewport.add_child(camera)
 	camera.set("target", players[index])
 	camera.make_current()
+	# Mira pelo cursor: a camera/viewport do jogador projetam o chao.
+	players[index].set("aim_camera", camera)
+	players[index].set("aim_viewport", viewport)
+	players[index].set("mouse_owner", players.size() == 1 or index == 0)
 
 	var hud := Label.new()
 	hud.position = Vector2(14, 12)
