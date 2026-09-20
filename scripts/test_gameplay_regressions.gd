@@ -364,15 +364,17 @@ func _test_first_person_camera_follows_head(test_root: Node) -> void:
 	var forward: Vector2 = player.call("_local_aim_input")
 	player.set("camera_yaw", PI * 0.5)
 	var right: Vector2 = player.call("_local_aim_input")
+	var forward_move: Vector2 = player.call("_aim_relative_move", Vector2(0.0, -1.0))
 	var aim_ok := forward.distance_to(Vector2(0.0, -1.0)) < 0.01 and right.distance_to(Vector2(-1.0, 0.0)) < 0.01
+	var move_ok := forward_move.distance_to(Vector2(-1.0, 0.0)) < 0.01
 	player.call("set_first_person", false)
 	camera.free()
 	var head_visible := head.visible
 	player.free()
-	if not camera_ok or not aim_ok or not head_visible:
-		_fail(test_root, "FPS: camera=%s mira=%s cabeca_voltou=%s; esperado camera na cabeca, mira pelo yaw e cabeca visivel ao sair." % [camera_ok, aim_ok, head_visible])
+	if not camera_ok or not aim_ok or not move_ok or not head_visible:
+		_fail(test_root, "FPS: camera=%s mira=%s movimento=%s cabeca_voltou=%s; esperado camera na cabeca, mira pelo yaw e W na frente do olhar." % [camera_ok, aim_ok, move_ok, head_visible])
 		return
-	print("PASS: Primeira pessoa com camera na cabeca, mira pelo yaw e cabeca escondida.")
+	print("PASS: Primeira pessoa com camera na cabeca, mira pelo yaw, W relativo ao olhar e cabeca escondida.")
 
 
 func _test_enterable_building_spawn_marker(test_root: Node) -> void:
