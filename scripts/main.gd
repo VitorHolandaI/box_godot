@@ -241,6 +241,9 @@ func _ready() -> void:
 		for slot in configs.size():
 			_spawn_offline_player(slot, configs[slot])
 		split_screen.configure(local_players)
+		if NetworkSession.weapons_lab:
+			_build_weapons_lab()
+			return
 		# Teste offline com horda: --test-wave=8 --prespawn-zombies=200
 		var offline_prespawn := LoadTestOptions.prespawn_zombie_count(OS.get_cmdline_user_args())
 		if offline_prespawn > 0:
@@ -357,6 +360,9 @@ func _process(delta: float) -> void:
 		return
 	if not _procedural_city_ready():
 		# Cidade ainda montando: nada de wave/zumbi sobre predio inexistente.
+		return
+	if NetworkSession.weapons_lab:
+		# Campo de armas: sem porta, loot aleatorio nem onda de zumbi.
 		return
 	if not _city_doors_watched:
 		# watch() no _ready corria com a cidade pela metade: as portas montam
@@ -910,6 +916,25 @@ func _spawn_offline_player(slot: int, config: Dictionary) -> void:
 	_connect_crate_weapon_signals(player)
 	local_players.append(player)
 	_register_pvp_player(player)
+
+
+## Campo de testes de armas (--armas-lab): arena vazia e uma arma de crate de
+## cada tipo no chao para pegar e testar. Uso: godot --path . -- --armas-lab
+func _build_weapons_lab() -> void:
+	SurvivalMapBuilder.build(self)
+	var kinds: Array[int] = []
+	for kind in WeaponStats.Kind.values():
+		if WeaponStats.is_crate_weapon(kind):
+			kinds.append(kind)
+	var columns := 5
+	var spacing := 3.0
+	var origin := Vector3(-6.0, 0.05, -6.0)
+	for index in kinds.size():
+		var kind: int = kinds[index]
+		var stats := WeaponStats.stats_for(kind)
+		var position := origin + Vector3(float(index % columns) * spacing, 0.0, float(index / columns) * spacing)
+		_add_ground_weapon(kind, int(stats["mag_size"]), int(stats["grant_reserve"]), int(stats["max_durability"]), position)
+	print(JSON.stringify({"event": "weapons_lab", "weapons": kinds.size(), "players": local_players.size()}))
 
 
 func _connect_crate_weapon_signals(player: Node) -> void:
