@@ -59,6 +59,7 @@ const WEAPON_ANCHOR_TESTS_SCRIPT := preload("res://scripts/test_weapon_anchor.gd
 const LOT_FEASIBILITY_TESTS_SCRIPT := preload("res://scripts/test_lot_feasibility.gd")
 const PLAN_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_plan_layout.gd")
 const COMMERCIAL_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_commercial_layout.gd")
+const DRIVABLE_CAR_TESTS_SCRIPT := preload("res://scripts/test_drivable_car.gd")
 # Grupos rodaveis sozinhos com `-- --test-group=<nome>` para iterar rapido.
 const FOCUSED_TEST_GROUPS := {
 	"apartment_layout": APARTMENT_LAYOUT_TESTS_SCRIPT,
@@ -107,6 +108,7 @@ const FOCUSED_TEST_GROUPS := {
 	"zombie_spider": ZOMBIE_SPIDER_TESTS_SCRIPT,
 	"weapon_reload": WEAPON_RELOAD_TESTS_SCRIPT,
 	"weapon_anchor": WEAPON_ANCHOR_TESTS_SCRIPT,
+	"drivable_car": DRIVABLE_CAR_TESTS_SCRIPT,
 }
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
@@ -175,6 +177,7 @@ func _ready() -> void:
 	COMMERCIAL_LAYOUT_TESTS_SCRIPT.new().run(self)
 	CORPSE_CLEANUP_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SNAPSHOT_CODEC_TESTS_SCRIPT.new().run(self)
+	await DRIVABLE_CAR_TESTS_SCRIPT.new().run(self)
 	if bool(get_meta("unit_test_failed", false)):
 		failure_count += 1
 	_test_hit_reaction_flinch()
