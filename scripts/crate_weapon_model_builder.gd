@@ -81,9 +81,12 @@ static func _add_parts(node: Node3D, model: String, body: Material, wood: Materi
 			add_box(node, Vector3(0.14, 0.15, 0.3), Vector3(0.0, 0.0, 0.08), body)
 			add_box(node, Vector3(0.12, 0.16, 0.44), Vector3(0.0, -0.03, 0.52), wood)
 		"smg":
-			add_box(node, Vector3(0.16, 0.16, 0.55), Vector3.ZERO, body)
-			add_box(node, Vector3(0.12, 0.3, 0.12), Vector3(0.0, -0.2, 0.05), body)
-			add_box(node, Vector3(0.08, 0.34, 0.08), Vector3(0.0, 0.22, 0.06), body)
+			# Uzi: corpo, PENTE PARA BAIXO e mira baixinha em cima. Antes tinha uma
+			# caixa fina alta em +Y (pente pra cima) e a arma parecia de cabeca
+			# pra baixo.
+			add_box(node, Vector3(0.16, 0.16, 0.5), Vector3(0.0, 0.04, -0.05), body)
+			add_box(node, Vector3(0.12, 0.26, 0.12), Vector3(0.0, -0.19, 0.02), body)
+			add_box(node, Vector3(0.06, 0.06, 0.16), Vector3(0.0, 0.14, -0.05), body)
 		"revolver":
 			# Cano para FRENTE (-Z), tambor no meio e cabo atras/embaixo.
 			add_box(node, Vector3(0.1, 0.11, 0.42), Vector3(0.0, 0.03, -0.26), body)
