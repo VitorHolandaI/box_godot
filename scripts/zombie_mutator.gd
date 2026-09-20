@@ -60,6 +60,12 @@ const MAX_CAPSULE_RADIUS := 0.95
 const MAX_CAPSULE_HEIGHT := 2.6
 ## Patas extras da aranha (nomeadas SpiderLimb0..3 na montagem).
 const SPIDER_LIMB_COUNT := 4
+## Aranha: rebaixamento EXTRA do corpo (somado ao ajuste de escala) e inclinacao.
+## Sem isso ela ficava de pe com as 4 patas no ar: o ajuste generico de escala
+## reescrevia model.position.y (o antigo -0.55 virava -0.12) e a marcha somava ~0.
+## Uso: model_y_offset_for / body_rest_y.
+const SPIDER_EXTRA_DROP := -0.45
+const SPIDER_PITCH_DEG := 58.0
 ## Camada procedural: balanco vertical da cabeca no ritmo do passo (2x a
 ## passada). Barato e vale para qualquer variante.
 const HEAD_BOB_AMPLITUDE := 0.05
@@ -173,17 +179,29 @@ static func body_scale_for(z_type: int) -> Vector3:
 	return BODY_SCALES.get(z_type, Vector3.ONE)
 
 
+## Rebaixamento extra do modelo por variante (0 = nenhum). Uso:
+## var y := model_y_offset_for(ZombieMutator.Type.SPIDER)
+static func model_y_offset_for(z_type: int) -> float:
+	return SPIDER_EXTRA_DROP if z_type == Type.SPIDER else 0.0
+
+
+## Y de repouso do modelo: pes no chao com a escala, mais o rebaixamento da
+## variante (aranha). Uso: var y := ZombieMutator.body_rest_y(ZombieMutator.Type.SPIDER)
+static func body_rest_y(z_type: int) -> float:
+	return MODEL_FEET_Y * (1.0 - body_scale_for(z_type).y) + model_y_offset_for(z_type)
+
+
 ## Amplia modelo e capsula mantendo os pes no chao. Antes o modelo crescia a
 ## partir do centro: o Tita afundava ~1 m e ficava maior que a colisao, parecendo
 ## atravessar tudo. Uso: ZombieMutator.apply_body_scale(zombie, ZombieMutator.Type.BRUTE)
 static func apply_body_scale(zombie: CharacterBody3D, z_type: int) -> void:
 	var body_scale := body_scale_for(z_type)
-	if body_scale == Vector3.ONE:
+	if body_scale == Vector3.ONE and is_zero_approx(model_y_offset_for(z_type)):
 		return
 	var model := zombie.get_node_or_null("Model") as Node3D
 	if model != null:
 		model.scale = body_scale
-		model.position.y = MODEL_FEET_Y * (1.0 - body_scale.y)
+		model.position.y = body_rest_y(z_type)
 	var collision := zombie.get_node_or_null("CollisionShape") as CollisionShape3D
 	if collision != null and collision.shape is CapsuleShape3D:
 		# A forma da cena e compartilhada entre todos os zumbis: duplica antes.
@@ -347,7 +365,8 @@ static func _apply_anatomy(zombie: CharacterBody3D, z_type: int) -> void:
 ## O tamanho do corpo vem de BODY_SCALES (padrao das outras variantes); aqui so
 ## o que e proprio dela. Uso: chamado pelo _apply_anatomy.
 static func _setup_spider(zombie: CharacterBody3D, model: Node3D) -> void:
-	model.rotation.x = deg_to_rad(58.0)
+	model.position.y = body_rest_y(Type.SPIDER)
+	model.rotation.x = deg_to_rad(SPIDER_PITCH_DEG)
 	var head := zombie.get_node_or_null("Model/Head") as Node3D
 	if head != null:
 		head.rotation.x = deg_to_rad(-45.0)
@@ -669,7 +688,7 @@ static func animate_variant_pose(
 			right_leg.rotation.x = lerpf(right_leg.rotation.x, 1.15 + counter, minf(delta * 14.0, 1.0))
 			left_arm.rotation.x = lerpf(left_arm.rotation.x, 0.95 + counter + attack_w * 1.1, minf(delta * 14.0, 1.0))
 			right_arm.rotation.x = lerpf(right_arm.rotation.x, 0.95 + trot + attack_w * 1.1, minf(delta * 14.0, 1.0))
-			model.position.y = lerpf(model.position.y, (sin(walk_time * 2.0) * 0.05) if is_walking else 0.0, minf(delta * 12.0, 1.0))
+			model.position.y = lerpf(model.position.y, body_rest_y(z_type) + (sin(walk_time * 2.0) * 0.05 if is_walking else 0.0), minf(delta * 12.0, 1.0))
 			for limb_index in SPIDER_LIMB_COUNT:
 				var limb := _pose_node(zombie, cached_nodes, "Model/SpiderLimb%d" % limb_index)
 				if limb == null:

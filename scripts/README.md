@@ -75,6 +75,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_zombie_l4d_specials.gd`: regressoes do puxador, curandeiro e espreitador (registro e ondas, lingua, movimento forcado, cura e cadaver, bote e revelacao).
 - `test_zombie_new_variants.gd`: regressoes de bloater, leaper e armored e do mix das ondas.
 - `test_zombie_specials.gd`: regressoes do cuspidor, da investida, dos tipos acima de 15 no snapshot e das especiais desde a hora 1.
+- `test_zombie_spider.gd`: regressoes da aranha: corpo rebaixado (body_rest_y) e inclinado para as 4 patas tocarem o chao, com as 4 SpiderLimb presentes.
 - `test_zombie_tick_budget.gd`: regressoes do orcamento de tick, teto global, zumbi parado batendo, proxy leve no client, alvo desconectado liberado e flock espalhando hordas entre ticks.
 - `thrown_grenade.gd`: granada de mao com gravidade e quique que explode no pavio ferindo zumbis e portas (visual no cliente).
 - `weapon_cone_attack.gd`: dano em cone curto com linha de visao das armas continuas (motosserra, lanca-chamas), incendiando quando a arma tem `burn_seconds`.
@@ -157,7 +158,7 @@ Logica de jogo, rede, interface e testes automatizados.
 - `zombie_variant_abilities.gd`: habilidades de variantes: colete do armored, dano em area, arrancadas (bote do leaper, investida, pulo alto do saltador, se jogar do bloater) e cuspe do cuspidor.
 - `zombie_wall_detour.gd`: na rua, segue a parede pela tangente ate a linha ate o alvo ficar livre.
 - `zombie_flock_coordinator.gd`: hordas persistentes com um cerebro, drones, fusao aleatoria de lideres, Boids e LOD. As luzes de predio podam o cache de jogadores antes do cast (um peer que desconectou deixava o Node liberado e estourava com 8 peers).
-- `zombie_mutator.gd`: configurador procedural de 18 variantes (classico, amputados, rastejante, manco, corredor, cabeca dividida, brute, screamer, bloater kamikaze, leaper, armored, cuspidor, investida, saltador e o chefe Tita), escala de corpo e animacoes.
+- `zombie_mutator.gd`: configurador procedural de 18 variantes (classico, amputados, rastejante, manco, corredor, cabeca dividida, brute, screamer, bloater kamikaze, leaper, armored, cuspidor, investida, saltador e o chefe Tita), escala de corpo e animacoes. O Y de repouso vem de `body_rest_y` (pes no chao + rebaixamento da variante) para a escala nao anular a pose da aranha.
 - `zombie_ragdoll.gd`: ragdoll articulado com pescoco limitado, camada propria de cadaver (nao prende o jogador) que some ao ser atingido, e suporte as amputacoes das 9 variantes.
 - `zombie_snapshot_codec.gd`: snapshot binario de zumbis (16 bytes por zumbi, tipo nos 4 bits altos das flags) em pacotes abaixo do MTU.
 - `zombie_spawn_locator.gd`: escolhe pontos desocupados na floresta distante ou no anel da sobrevivencia, sempre em chao aberto (fora de paredes e predios).
