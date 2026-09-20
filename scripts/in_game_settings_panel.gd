@@ -21,6 +21,8 @@ var _message: Label
 var _resolution: OptionButton
 var _quality: OptionButton
 var _fullscreen: CheckButton
+var _mouse_aim: CheckButton
+var _first_person: CheckButton
 var _button_styles: Dictionary = {}
 
 
@@ -91,6 +93,7 @@ func _build() -> void:
 	content.add_theme_constant_override("separation", 8)
 	scroll.add_child(content)
 	_build_graphics(content)
+	_build_gameplay(content)
 	for slot in GameConfig.player_input_configs.size():
 		_build_player_bindings(content, slot)
 	_message = Label.new()
@@ -143,6 +146,43 @@ func _build_graphics(content: VBoxContainer) -> void:
 	apply.text = "APLICAR GRAFICOS"
 	apply.pressed.connect(_apply_graphics)
 	content.add_child(apply)
+
+
+## Jogabilidade: mira pelo cursor e primeira pessoa. Aplicam na hora nos
+## jogadores locais e ficam salvos em settings.cfg.
+func _build_gameplay(content: VBoxContainer) -> void:
+	content.add_child(_title_label("JOGABILIDADE", 20))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 8)
+	content.add_child(grid)
+	_mouse_aim = CheckButton.new()
+	_mouse_aim.name = "MouseAim"
+	_mouse_aim.button_pressed = GameConfig.mouse_aim_enabled
+	_first_person = CheckButton.new()
+	_first_person.name = "FirstPerson"
+	_first_person.button_pressed = GameConfig.first_person_enabled
+	for pair in [["Mira pelo mouse", _mouse_aim], ["Primeira pessoa (FPS)", _first_person]]:
+		var label := Label.new()
+		label.text = pair[0]
+		label.custom_minimum_size = Vector2(200.0, 32.0)
+		grid.add_child(label)
+		grid.add_child(pair[1])
+	_mouse_aim.toggled.connect(_apply_gameplay)
+	_first_person.toggled.connect(_apply_gameplay)
+
+
+## Salva e aplica mira/FPS na hora nos jogadores locais. Uso: toggled dos check.
+func _apply_gameplay(_pressed: bool = false) -> void:
+	GameConfig.set_mouse_aim(_mouse_aim.button_pressed)
+	GameConfig.set_first_person(_first_person.button_pressed)
+	for node in get_tree().get_nodes_in_group("player"):
+		if node.get("is_local_controller") != true:
+			continue
+		node.set("mouse_aim", _mouse_aim.button_pressed)
+		node.call("set_first_person", _first_person.button_pressed)
+	if _message != null:
+		_message.text = "Mira e camera atualizadas."
 
 
 func _build_player_bindings(content: VBoxContainer, slot: int) -> void:

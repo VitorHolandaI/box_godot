@@ -1,6 +1,6 @@
 extends Node
 
-const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload", "interact", "sonar", "shotgun", "uzi", "magnum", "drop_weapon", "double_barrel", "carbine", "cycle_weapon", "grenade", "throw_knife", "air_strike", "swat", "buy"]
+const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload", "interact", "sonar", "shotgun", "uzi", "magnum", "drop_weapon", "double_barrel", "carbine", "cycle_weapon", "grenade", "throw_knife", "air_strike", "swat", "buy", "view"]
 const SETTINGS_PATH := "user://settings.cfg"
 const MAX_SAVED_SERVERS := 12
 const MIN_SERVER_PORT := 1024
@@ -20,6 +20,13 @@ var graphics_resolution := Vector2i(1280, 720)
 var graphics_quality := GraphicsQuality.HIGH
 var graphics_fullscreen := false
 var saved_servers: Array[Dictionary] = []
+## Mira pelo cursor do mouse (isometrica) e cameras em primeira pessoa. O menu
+## de configuracoes e a tecla "view" alternam a primeira pessoa por jogador.
+var mouse_aim_enabled := true
+var first_person_enabled := false
+## Verdadeiro enquanto um menu esta aberto: o jogador solta o mouse e para de
+## recapturar (senao o cursor sumia ao fechar o menu com a primeira pessoa ligada).
+var menu_open := false
 
 
 func _ready() -> void:
@@ -125,6 +132,8 @@ func _load_graphics_settings() -> bool:
 		GraphicsQuality.HIGH
 	) as GraphicsQuality
 	graphics_fullscreen = bool(config.get_value("graphics", "fullscreen", graphics_fullscreen))
+	mouse_aim_enabled = bool(config.get_value("gameplay", "mouse_aim", mouse_aim_enabled))
+	first_person_enabled = bool(config.get_value("gameplay", "first_person", first_person_enabled))
 	var configured_servers: Variant = config.get_value("network", "saved_servers", [])
 	if configured_servers is Array:
 		for configured_server in configured_servers:
@@ -148,6 +157,33 @@ func _save_graphics_settings() -> Error:
 	var error := config.save(SETTINGS_PATH)
 	if error != OK:
 		push_error("Nao foi possivel salvar %s: %s." % [SETTINGS_PATH, error_string(error)])
+	return error
+
+
+## Salva mira pelo mouse e primeira pessoa; valem para os jogadores locais.
+## Uso: GameConfig.set_mouse_aim(false)
+func set_mouse_aim(enabled: bool) -> Error:
+	mouse_aim_enabled = enabled
+	return _save_gameplay_settings()
+
+
+## Uso: GameConfig.set_first_person(true)
+func set_first_person(enabled: bool) -> Error:
+	first_person_enabled = enabled
+	return _save_gameplay_settings()
+
+
+func _save_gameplay_settings() -> Error:
+	var config := ConfigFile.new()
+	var load_error := config.load(SETTINGS_PATH)
+	if load_error != OK and load_error != ERR_FILE_NOT_FOUND:
+		push_error("Nao foi possivel atualizar %s: %s." % [SETTINGS_PATH, error_string(load_error)])
+		return load_error
+	config.set_value("gameplay", "mouse_aim", mouse_aim_enabled)
+	config.set_value("gameplay", "first_person", first_person_enabled)
+	var error := config.save(SETTINGS_PATH)
+	if error != OK:
+		push_error("Nao foi possivel salvar gameplay em %s: %s." % [SETTINGS_PATH, error_string(error)])
 	return error
 
 
@@ -184,10 +220,10 @@ func configure_local_players(configs: Array[Dictionary]) -> void:
 
 func create_keyboard_config(slot: int) -> Dictionary:
 	var profiles := [
-		[KEY_W, KEY_S, KEY_A, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_F, KEY_1, KEY_2, KEY_R, KEY_E, KEY_Q, KEY_3, KEY_4, KEY_5, KEY_G, KEY_6, KEY_7, KEY_TAB, KEY_C, KEY_V, KEY_Z, KEY_X, KEY_B],
-		[KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SHIFT, KEY_CTRL, KEY_ENTER, KEY_DELETE, KEY_END, KEY_PAGEDOWN, KEY_HOME, KEY_PAGEUP, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_INSERT, KEY_KP_1, KEY_KP_2, KEY_KP_3, KEY_KP_0, KEY_KP_ENTER],
-		[KEY_I, KEY_K, KEY_J, KEY_L, KEY_U, KEY_Y, KEY_O, KEY_7, KEY_8, KEY_P, KEY_0, KEY_9, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_BRACKETRIGHT, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_BRACKETLEFT],
-		[KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_G, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_Q, KEY_H, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_T, KEY_SEMICOLON, KEY_APOSTROPHE, KEY_SLASH, KEY_BACKSLASH, KEY_MINUS],
+		[KEY_W, KEY_S, KEY_A, KEY_D, KEY_SPACE, KEY_SHIFT, KEY_F, KEY_1, KEY_2, KEY_R, KEY_E, KEY_Q, KEY_3, KEY_4, KEY_5, KEY_G, KEY_6, KEY_7, KEY_TAB, KEY_C, KEY_V, KEY_Z, KEY_X, KEY_B, KEY_H],
+		[KEY_UP, KEY_DOWN, KEY_LEFT, KEY_RIGHT, KEY_SHIFT, KEY_CTRL, KEY_ENTER, KEY_DELETE, KEY_END, KEY_PAGEDOWN, KEY_HOME, KEY_PAGEUP, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_INSERT, KEY_KP_1, KEY_KP_2, KEY_KP_3, KEY_KP_0, KEY_KP_ENTER, KEY_F7],
+		[KEY_I, KEY_K, KEY_J, KEY_L, KEY_U, KEY_Y, KEY_O, KEY_7, KEY_8, KEY_P, KEY_0, KEY_9, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_BRACKETRIGHT, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_BRACKETLEFT, KEY_F7],
+		[KEY_Z, KEY_X, KEY_C, KEY_V, KEY_B, KEY_G, KEY_N, KEY_M, KEY_COMMA, KEY_PERIOD, KEY_Q, KEY_H, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F5, KEY_F6, KEY_T, KEY_SEMICOLON, KEY_APOSTROPHE, KEY_SLASH, KEY_BACKSLASH, KEY_MINUS, KEY_F7],
 	]
 	var bindings: Dictionary = {}
 	var profile: Array = profiles[slot % profiles.size()]
@@ -258,7 +294,7 @@ func _apply_input_map() -> void:
 				InputMap.action_add_event(mapped_action, event)
 
 
-const FALLBACK_KEYS: Dictionary = {"sonar": KEY_Q, "shotgun": KEY_3, "uzi": KEY_4, "magnum": KEY_5, "drop_weapon": KEY_G, "double_barrel": KEY_6, "carbine": KEY_7, "cycle_weapon": KEY_TAB, "grenade": KEY_C, "throw_knife": KEY_V, "air_strike": KEY_Z, "swat": KEY_X, "buy": KEY_B}
+const FALLBACK_KEYS: Dictionary = {"sonar": KEY_Q, "shotgun": KEY_3, "uzi": KEY_4, "magnum": KEY_5, "drop_weapon": KEY_G, "double_barrel": KEY_6, "carbine": KEY_7, "cycle_weapon": KEY_TAB, "grenade": KEY_C, "throw_knife": KEY_V, "air_strike": KEY_Z, "swat": KEY_X, "buy": KEY_B, "view": KEY_H}
 const FALLBACK_JOY_BUTTONS: Dictionary = {
 	"sonar": JOY_BUTTON_DPAD_RIGHT,
 	# Selecao direta de arma foi para as paletas: D-pad e Start/Back ficaram com

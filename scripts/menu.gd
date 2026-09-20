@@ -44,6 +44,7 @@ var host_address_hint := ""
 
 
 func _ready() -> void:
+	GameConfig.menu_open = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	if NetworkSession.bot_mode or NetworkSession.autoplay_bot or NetworkSession.is_server():
 		return
