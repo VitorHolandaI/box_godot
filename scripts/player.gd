@@ -216,6 +216,7 @@ func _physics_process(delta: float) -> void:
 	if sonar_interval_timer <= 0.0:
 		trigger_sonar()
 	_poll_local_sonar()
+	_poll_view_toggle()
 	muzzle_flash.visible = muzzle_flash_time > 0.0
 	if not simulation_enabled:
 		var previous_position := global_position
@@ -288,7 +289,7 @@ func _physics_process(delta: float) -> void:
 func get_local_input_state() -> Dictionary:
 	return {
 		"slot": local_slot,
-		"move": Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down"),
+		"move": _aim_relative_move(Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down")),
 		"jump": Input.is_action_pressed(input_action_prefix + "jump"),
 		"sprint": Input.is_action_pressed(input_action_prefix + "sprint"),
 		"attack": Input.is_action_pressed(input_action_prefix + "attack"),
@@ -1248,9 +1249,7 @@ func _update_stamina(delta: float, wants_to_sprint: bool) -> void:
 
 
 func _poll_input() -> void:
-	move_input = Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down")
-	if Input.is_action_just_pressed(input_action_prefix + "view"):
-		toggle_first_person()
+	move_input = _aim_relative_move(Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down"))
 	aim_input = _local_aim_input()
 	jump_pressed = Input.is_action_just_pressed(input_action_prefix + "jump")
 	sprint_pressed = Input.is_action_pressed(input_action_prefix + "sprint")
@@ -1281,6 +1280,16 @@ func _poll_local_sonar() -> void:
 		return
 	if Input.is_action_just_pressed(input_action_prefix + "sonar"):
 		trigger_sonar()
+
+
+## Alterna isometrica/FPS pela tecla "view". Fora do _poll_input porque o cliente
+## de rede nao le input de movimento (reads_local_input=false), mas o dono local
+## ainda troca de camera. Uso: chamado a cada tick de fisica.
+func _poll_view_toggle() -> void:
+	if not is_local_controller:
+		return
+	if Input.is_action_just_pressed(input_action_prefix + "view"):
+		toggle_first_person()
 
 
 func _network_button_just_pressed(action: String, pressed: bool) -> bool:
@@ -1331,6 +1340,14 @@ func _local_aim_input() -> Vector2:
 	if GameConfig.mouse_aim_enabled and mouse_aim and mouse_owner:
 		return _mouse_ground_direction()
 	return Vector2.ZERO
+
+
+## No FPS o WASD vira relativo ao olhar (W = frente da camera); na isometrica o
+## movimento continua alinhado ao mundo/camera fixa. Uso: interno.
+func _aim_relative_move(raw: Vector2) -> Vector2:
+	if not first_person:
+		return raw
+	return raw.rotated(-camera_yaw)
 
 
 ## Projeta o cursor do viewport do jogador no plano do chao e devolve a direcao
