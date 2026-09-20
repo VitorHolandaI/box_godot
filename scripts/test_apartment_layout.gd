@@ -19,8 +19,94 @@ func run(test_root: Node) -> void:
 	_test_doorways_are_not_crossed_by_walls(test_root)
 	_test_every_room_reachable_from_street(test_root)
 	_test_apartment_rooms_fit_player_size(test_root)
+	_test_residential_floors_have_variable_apartments(test_root)
+	_test_apartments_are_furnished(test_root)
+	_test_ground_floor_has_reception_and_trash(test_root)
+	_test_building_has_air_conditioners(test_root)
 	_test_roof_terrace_has_parapet_and_last_flight(test_root)
 	await _test_navigation_reaches_roof_terrace(test_root)
+
+
+## Cada andar alto tem 1, 2 ou 4 apartamentos (planta varia por seed) e o
+## corredor aparece quando ha mais de um. Uso: interno do run.
+func _test_residential_floors_have_variable_apartments(test_root: Node) -> void:
+	print("Testando 1, 2 ou 4 apartamentos por andar...")
+	var seen: Dictionary = {}
+	for building_seed in [18273, 5501, 99120, 777, 1234, 4242]:
+		var blueprint = BUILDING_GENERATOR_SCRIPT.generate(building_seed, "apartment")
+		for floor_blueprint in blueprint.floor_blueprints:
+			if floor_blueprint.floor_index == 0:
+				continue
+			var apartments := 0
+			var corridor_units := 0
+			for placement in floor_blueprint.units:
+				var unit = placement["blueprint"]
+				if unit.rooms.size() == 1 and unit.rooms[0].room_type == "corridor":
+					corridor_units += 1
+				for room in unit.rooms:
+					if room.room_type == "living_room":
+						apartments += 1
+			if not [1, 2, 4].has(apartments):
+				_fail(test_root, "Andar %d com %d apartamentos; esperado 1, 2 ou 4." % [floor_blueprint.floor_index, apartments])
+				return
+			var expected_corridors := 0 if apartments == 1 else 1
+			if corridor_units != expected_corridors:
+				_fail(test_root, "Andar %d com %d apartamento(s) deveria ter %d corredor(es); tem %d." % [floor_blueprint.floor_index, apartments, expected_corridors, corridor_units])
+				return
+			seen[apartments] = true
+	if seen.size() < 2:
+		_fail(test_root, "Predios deveriam variar o numero de apartamentos por andar; vistos=%s." % [seen.keys()])
+		return
+	print("PASS: Andares com %s apartamentos em %d seeds." % [seen.keys(), 6])
+
+
+## Apartamento mobiliado: sala com cozinha integrada, quarto e banheiro.
+func _test_apartments_are_furnished(test_root: Node) -> void:
+	print("Testando mobilia dos apartamentos...")
+	var blueprint = BUILDING_GENERATOR_SCRIPT.generate(APARTMENT_SEEDS[0], "apartment")
+	var building: StaticBody3D = BUILDING_ASSEMBLER_SCRIPT.assemble(blueprint)
+	var missing := ""
+	for furniture_prefix in ["FurnitureLivingTable", "FurnitureKitchenCounter", "FurnitureKitchenFridge", "FurnitureBathroomMirror", "FurnitureBed_", "FurnitureWardrobe_", "FurniturePicture_"]:
+		if building.find_children(furniture_prefix + "*", "Node", true, false).is_empty():
+			missing = furniture_prefix
+			break
+	building.free()
+	if not missing.is_empty():
+		_fail(test_root, "Apartamento deveria ter mobilia; faltou '%s*'." % missing)
+		return
+	print("PASS: Apartamentos com sala, cozinha integrada, quarto e banheiro mobiliados.")
+
+
+## Terreo com recepcao (entrada) e sala de lixo com porta de servico.
+func _test_ground_floor_has_reception_and_trash(test_root: Node) -> void:
+	print("Testando recepcao e lixo no terreo...")
+	var blueprint = BUILDING_GENERATOR_SCRIPT.generate(APARTMENT_SEEDS[0], "apartment")
+	var room_types: Dictionary = {}
+	var trash_has_service_door := false
+	for placement in blueprint.floor_blueprints[0].units:
+		for room in placement["blueprint"].rooms:
+			room_types[room.room_type] = true
+		for door in placement["blueprint"].doors:
+			if door.get("room_a", "") == "trash_room" and door.get("room_b", "") == "outside":
+				trash_has_service_door = true
+	if not room_types.has("reception") or not room_types.has("trash_room") or not trash_has_service_door:
+		_fail(test_root, "Terreo deveria ter recepcao, lixo e porta de servico do lixo; comodos=%s servico=%s." % [room_types.keys(), trash_has_service_door])
+		return
+	print("PASS: Terreo com recepcao e sala de lixo com coleta.")
+
+
+## Ar-condicionado: condensadora por andar na fachada e split nos apartamentos.
+func _test_building_has_air_conditioners(test_root: Node) -> void:
+	print("Testando ar-condicionado do predio...")
+	var blueprint = BUILDING_GENERATOR_SCRIPT.generate(APARTMENT_SEEDS[0], "apartment")
+	var building: StaticBody3D = BUILDING_ASSEMBLER_SCRIPT.assemble(blueprint)
+	var exterior := building.find_children("ExteriorAirConditioner_*", "MeshInstance3D", true, false).size()
+	var interior := building.find_children("InteriorAirConditioner_*", "MeshInstance3D", true, false).size()
+	building.free()
+	if exterior != blueprint.floors or interior < 4:
+		_fail(test_root, "Predio deveria ter %d condensadoras e >=4 splits; tem %d/%d." % [blueprint.floors, exterior, interior])
+		return
+	print("PASS: Predio com %d condensadoras e %d splits de ar-condicionado." % [exterior, interior])
 
 
 func _test_doorways_are_not_crossed_by_walls(test_root: Node) -> void:

@@ -27,7 +27,7 @@ func watch(tree: SceneTree) -> void:
 			door.connect("network_state_changed", _on_door_state_changed)
 
 
-## Mudancas desde a ultima chamada, {caminho_na_cena: [aberta, quebrada]}.
+## Mudancas desde a ultima chamada, {caminho_na_cena: [aberta, quebrada, giro]}.
 ## Uso: var changes := replicator.take_changes()
 func take_changes() -> Dictionary:
 	var changes := _pending_changes
@@ -56,4 +56,4 @@ func take_unsynced_peers(loaded_peer_ids: Array) -> Array[int]:
 func _on_door_state_changed(door: Node) -> void:
 	if _scene == null or not is_instance_valid(door) or not _scene.is_ancestor_of(door):
 		return
-	_pending_changes[str(_scene.get_path_to(door))] = [bool(door.get("is_open")), bool(door.get("is_destroyed"))]
+	_pending_changes[str(_scene.get_path_to(door))] = [bool(door.get("is_open")), bool(door.get("is_destroyed")), float(door.get("swing_direction"))]

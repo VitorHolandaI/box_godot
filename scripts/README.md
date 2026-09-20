@@ -17,13 +17,14 @@ Logica de jogo, rede, interface e testes automatizados.
 - `bullet.gd`: trajetoria fixa, impacto e dano dos projeteis e do hitscan com esfera de tolerancia ao atraso de rede, mascara para fogo amigo, remocao de cadaveres e exclusao do atirador.
 - `capture_shots.sh`: captura os frames de divulgacao do README pelo modo `--capture` do jogo e otimiza para `docs/imagens/` (`--shot=NOME`, `--list`, `--no-optimize`; brutos em `dist/capturas/`).
 - `corpse_cleanup_policy.gd`: escolhe quais ragdolls somem: so os longe de todos os jogadores, com teto que remove o mais distante.
-- `casa_lab.gd`: monta a fileira de construcoes da cena `casas_lab.tscn` chamando BuildingAssembler3D.build_lot (o mesmo caminho do `city_generator`), com chao, sol, nomes flutuantes e o player do jogo em primeira pessoa para andar por dentro (WASD; `usar_player = false` volta a camera de voo).
+- `casa_lab.gd`: gera uma construcao por vez (casa/loja/mercado/predio) pelo caminho da cidade procedural (`building_generator` -> `ProceduralCityAssembler`) e regenera com outra seed pelo botao Gerar/tecla G, para ver a variacao de layout interno; `[`/`]` trocam o tipo e a camera e a do survival/PVP (`local_camera.gd`; ESC solta o mouse, `--lab-voo` usa a camera de voo).
 - `city_generator.gd`: geracao deterministica de ruas, calcadas urbanas de concreto, Safehouse com recorte por limites, veiculos oxidados/queimados e muralhas.
 - `crate_weapon_model_builder.gd`: modelos em caixas das armas de crate na mao do jogador (escopetas, fuzis, sniper, bazuca e armas futuristas com faixas brilhando).
-- `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores, tremida ao apanhar e arrombamento por zumbis, faca ou tiro que libera o vao.
+- `destructible_door.gd`: porta comum com macaneta, aberta/fechada so por jogadores e que abre para longe de quem interage; a direcao e replicada na rede. Tambem treme ao apanhar e pode ser arrombada por zumbis, faca ou tiro, liberando o vao.
 - `door_debris_effect.gd`: animacao visual de tabuas e lascas voando quando uma porta e arrombada.
 - `door_network_state.gd`: coleta e aplica estados autoritativos das portas comuns por caminho deterministico (completo ou so as mudancas).
 - `door_state_replicator.gd`: no servidor, junta as mudancas de portas e marca quem ja recebeu o estado completo; vai por RPC confiavel, fora do snapshot.
+- `floor_plan_generator.gd`: gera planta de casa por squarified treemap (subdivide o retangulo na proporcao dos pesos dos comodos) com portas por arvore geradora, garantindo todo comodo alcancavel; `program_for_seed(seed, area, include_utility)` monta o programa (quartos/banheiros/cozinhas e a despensa da entrada de servico) conforme o tamanho da casa; `draft_interior` vira paredes e vaos.
 - `frame_perf_probe.gd`: sonda de custo por frame (ligada por padrao, `--perf-probe=off` desliga): `perf_report` a cada 5 s com FPS, p95, frames fora do orcamento de 60 Hz, ticks de fisica extras e custo por secao; `perf_hitch` em frame >= 33 ms com a quebra daquele frame.
 - `game_config.gd`: controles, preferencias graficas e servidores favoritos persistentes.
 - `in_game_menu.gd`: pausa local, navegacao, configuracoes e teclas (Esc) e botao "Destravar personagem" durante a partida.
@@ -109,10 +110,12 @@ Logica de jogo, rede, interface e testes automatizados.
 - `test_combat_and_variants.gd`: testes de combate, bloqueio por paredes, trajetoria, variantes, vidas, safehouse, som, hordas e populacao global.
 - `test_building_navigation.gd`: regressoes da escada alternada, navmesh por edificio, zumbi subindo/descendo, jogador subindo e zumbi saindo de casa arrombando portas.
 - `test_city_props.gd`: regressoes da altura/posicao dos postes e do telhado das casas.
+- `test_lot_feasibility.gd`: regressoes da viabilidade por lote (frentes de rua, declive, distrito e peso por arquetipo) e da escolha deterministica.
 - `test_corpse_cleanup.gd`: regressoes do sumico de cadaveres por distancia. Inclui a fila de corpos com o mais antigo ja liberado.
 - `test_collision_boundaries.gd`: regressao focada para faca, tiro e ataque de zumbi bloqueados por paredes.
 - `test_door_breaking.gd`: regressoes de destrocos, vao liberado, tremida, faca do jogador, replicacao da quebra e envio so das portas que mudaram.
 - `test_apartment_layout.gd`: regressoes da planta dos predios: vao de porta sem parede atravessada, comodos alcancaveis, tamanho para o boneco e terraco acessivel.
+- `test_plan_layout.gd`: regressoes do adaptador planta procedural -> UnitBlueprint (comodos contidos, sem sobreposicao, alcancaveis, proporcionais ao boneco e variando por seed) e da flag `use_plan_layout`.
 - `test_player_unstuck.gd`: regressoes do destravar do jogador: sai de bloco, sai pelo lado sob teto baixo, recarga e teleporte no cliente.
 - `test_zombie_unstuck.gd`: regressoes de zumbis presos: medidor de progresso, desvio de muro, casa segura contornada, realocacao, spawn em chao aberto e minimapa do fim de onda.
 - `test_gameplay_regressions.gd`: regressoes de bots melee, HUD, spawn autorizado, replicas, ragdoll e fusao de hordas.
