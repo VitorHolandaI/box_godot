@@ -54,6 +54,7 @@ const IN_GAME_SETTINGS_TESTS_SCRIPT := preload("res://scripts/test_in_game_setti
 const MINIMAP_TESTS_SCRIPT := preload("res://scripts/test_minimap.gd")
 const ZOMBIE_HIT_ZONE_TESTS_SCRIPT := preload("res://scripts/test_zombie_hit_zones.gd")
 const ZOMBIE_SPIDER_TESTS_SCRIPT := preload("res://scripts/test_zombie_spider.gd")
+const WEAPON_RELOAD_TESTS_SCRIPT := preload("res://scripts/test_weapon_reload.gd")
 const LOT_FEASIBILITY_TESTS_SCRIPT := preload("res://scripts/test_lot_feasibility.gd")
 const PLAN_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_plan_layout.gd")
 const COMMERCIAL_LAYOUT_TESTS_SCRIPT := preload("res://scripts/test_commercial_layout.gd")
@@ -103,6 +104,7 @@ const FOCUSED_TEST_GROUPS := {
 	"minimap": MINIMAP_TESTS_SCRIPT,
 	"zombie_hit_zones": ZOMBIE_HIT_ZONE_TESTS_SCRIPT,
 	"zombie_spider": ZOMBIE_SPIDER_TESTS_SCRIPT,
+	"weapon_reload": WEAPON_RELOAD_TESTS_SCRIPT,
 }
 const MAIN_SCRIPT := preload("res://scripts/main.gd")
 const DESTRUCTIBLE_DOOR_SCRIPT := preload("res://scripts/destructible_door.gd")
@@ -163,6 +165,7 @@ func _ready() -> void:
 	MINIMAP_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_HIT_ZONE_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SPIDER_TESTS_SCRIPT.new().run(self)
+	WEAPON_RELOAD_TESTS_SCRIPT.new().run(self)
 	CITY_PROPS_TESTS_SCRIPT.new().run(self)
 	LOT_FEASIBILITY_TESTS_SCRIPT.new().run(self)
 	PLAN_LAYOUT_TESTS_SCRIPT.new().run(self)
