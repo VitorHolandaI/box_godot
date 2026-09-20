@@ -36,6 +36,9 @@ var bot_name := ""
 var loaded_peers: Dictionary = {}
 var latency_ms := -1
 var procedural_city_enabled := true
+## Campo de testes de armas (`--armas-lab`): mapa vazio (so o chao + arena) com
+## todas as armas de crate no chao. Mantem cameras/tela dividida do survival.
+var weapons_lab := false
 var survival_mode := true
 ## Mata-mata estilo CS: sem zumbis/ondas, economia e placar proprios.
 var pvp_mode := false
@@ -140,6 +143,13 @@ func _ready() -> void:
 	if SHOT_CAPTURE_SCRIPT.is_requested():
 		# Dev (--capture): entra direto numa partida offline, sem passar pelo menu.
 		leave_session()
+		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
+		return
+
+	if weapons_lab:
+		# Campo de testes de armas: entra direto numa partida offline, sem menu.
+		var lab_config: Array[Dictionary] = [GameConfig.create_keyboard_config(0)]
+		GameConfig.configure_local_players(lab_config)
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
 		return
 
@@ -543,7 +553,11 @@ func _reset_world_config_from_arguments() -> void:
 	procedural_city_enabled = not unit_test_mode and "--legacy-city" not in arguments
 	survival_mode = not unit_test_mode and "--classic-mode" not in arguments
 	pvp_mode = not unit_test_mode and "--pvp" in arguments
-	if pvp_mode:
+	weapons_lab = "--armas-lab" in arguments
+	if weapons_lab:
+		# Sem cidade, sem onda, sem PVP: so o campo de armas.
+		survival_mode = false
+	elif pvp_mode:
 		# PVP nao tem onda de sobrevivencia: o modo substitui o survival.
 		survival_mode = false
 	world_seed = DEFAULT_WORLD_SEED
