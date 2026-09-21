@@ -28,6 +28,21 @@ func _physics_process(delta: float) -> void:
 		queue_free()
 
 
+## Material compartilhado por todos os debris: um material novo por spawn morreria
+## junto com a malha e o Godot logaria "Parameter material is null"
+## (godotengine/godot#85817). Uso: interno de spawn
+static var _material: StandardMaterial3D = null
+
+
+static func _shared_material() -> StandardMaterial3D:
+	if _material == null:
+		_material = StandardMaterial3D.new()
+		_material.albedo_color = Color(0.12, 0.13, 0.15)
+		_material.metallic = 0.6
+		_material.roughness = 0.45
+	return _material
+
+
 ## Spawna pedacos de arma quebrada caindo no chao do jogador.
 ## Uso: WeaponBreakDebris.spawn(scene, origin)
 static func spawn(scene_root: Node, origin: Vector3) -> void:
@@ -37,10 +52,7 @@ static func spawn(scene_root: Node, origin: Vector3) -> void:
 	debris.add_to_group("weapon_debris")
 	scene_root.add_child(debris)
 	debris.global_position = origin
-	var metallic := StandardMaterial3D.new()
-	metallic.albedo_color = Color(0.12, 0.13, 0.15)
-	metallic.metallic = 0.6
-	metallic.roughness = 0.45
+	var metallic := _shared_material()
 	var rng := RandomNumberGenerator.new()
 	rng.randomize()
 	for _piece_index in PIECE_COUNT:
