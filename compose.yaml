@@ -1,24 +1,98 @@
+# Um servico POR MODO: cada modo de jogo e um container em si, com porta e nome
+# proprios, e voce escolhe qual subir pelo profile do compose. Antes havia um
+# servico so (`game-server`) e o modo ia por variavel de ambiente: trocar de
+# modo RECRIAVA o mesmo container, entao nunca dava para ter sobrevivencia e
+# mata-mata no ar ao mesmo tempo, e o que estava rodando so aparecia lendo o
+# `command` do container.
+#
+# Uso:
+#   docker compose --profile survival up -d --build
+#   docker compose --profile tdm up -d --build
+#   docker compose --profile classic up -d --build
+#   docker compose --profile survival --profile tdm up -d   # os dois juntos
+#   docker compose ps
+#   scripts/server_menu.sh                                  # menu interativo
+#
+# Variaveis por modo (SURVIVAL_*, TDM_*, CLASSIC_*): PORT, DISCOVERY_PORT,
+# NAME, WORLD_SEED e TEST_MODE (este ultimo so para o smoke test do container,
+# ver scripts/test_container.sh; no jogo de verdade fica --production).
+#
+# Sem profile nenhum o `up` nao sobe nada, de proposito: o modo e escolha.
+
+x-server-base: &server-base
+  build:
+    context: .
+  image: box-godot-server:local
+  restart: unless-stopped
+  read_only: true
+  tmpfs:
+    - /tmp:size=64m,mode=1777
+    - /home/godot/.local/share/godot:size=64m,uid=10001,gid=10001,mode=0700
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  pids_limit: 128
+  # Mesmos limites da VPS: e com eles que as medidas de horda foram feitas.
+  mem_limit: 512m
+  cpus: 1.0
+
 services:
-  game-server:
-    build:
-      context: .
-    image: box-godot-server:local
-    command: ["--server", "--server-port=${GAME_SERVER_PORT:-27015}", "${GAME_SERVER_TEST_MODE:---production}", "${GAME_SERVER_CITY_MODE:---procedural-city}", "${GAME_SERVER_GAME_MODE:---survival}", "${GAME_SERVER_PVP_BOTS:---pvp-bots=0}", "${GAME_SERVER_CAR_BOT:---car-bot=0}", "--server-name=${GAME_SERVER_NAME:-}"]
+  # Cooperativo contra zumbis, com ondas. E o modo padrao do jogo.
+  survival:
+    <<: *server-base
+    profiles: ["survival"]
+    container_name: box-godot-survival
+    command:
+      - "--server"
+      - "--server-port=${SURVIVAL_PORT:-27015}"
+      - "${SURVIVAL_TEST_MODE:---production}"
+      - "--procedural-city"
+      - "--survival"
+      - "--car-bot=${SURVIVAL_CAR_BOT:-0}"
+      - "--server-name=${SURVIVAL_NAME:-}"
     environment:
-      GAME_SERVER_WORLD_SEED: "${GAME_SERVER_WORLD_SEED:-}"
-      GAME_SERVER_NAME: "${GAME_SERVER_NAME:-}"
-    restart: unless-stopped
+      GAME_SERVER_WORLD_SEED: "${SURVIVAL_WORLD_SEED:-}"
     ports:
-      - "${GAME_SERVER_PORT:-27015}:${GAME_SERVER_PORT:-27015}/udp"
-      - "${GAME_SERVER_DISCOVERY_PORT:-27016}:${GAME_SERVER_DISCOVERY_PORT:-27016}/udp"
-    read_only: true
-    tmpfs:
-      - /tmp:size=64m,mode=1777
-      - /home/godot/.local/share/godot:size=64m,uid=10001,gid=10001,mode=0700
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    pids_limit: 128
-    mem_limit: 512m
-    cpus: 1.0
+      - "${SURVIVAL_PORT:-27015}:${SURVIVAL_PORT:-27015}/udp"
+      - "${SURVIVAL_DISCOVERY_PORT:-27016}:${SURVIVAL_DISCOVERY_PORT:-27016}/udp"
+
+  # Mata-mata por times (Team Deathmatch): duas bases em cantos opostos, placar
+  # continuo de abates, respawn com invulnerabilidade. Ver docs/pvp.md.
+  tdm:
+    <<: *server-base
+    profiles: ["tdm", "pvp"]
+    container_name: box-godot-tdm
+    command:
+      - "--server"
+      - "--server-port=${TDM_PORT:-27017}"
+      - "${TDM_TEST_MODE:---production}"
+      - "--procedural-city"
+      - "--pvp"
+      - "--pvp-bots=${TDM_BOTS:-0}"
+      - "--car-bot=0"
+      - "--server-name=${TDM_NAME:-}"
+    environment:
+      GAME_SERVER_WORLD_SEED: "${TDM_WORLD_SEED:-}"
+    ports:
+      - "${TDM_PORT:-27017}:${TDM_PORT:-27017}/udp"
+      - "${TDM_DISCOVERY_PORT:-27018}:${TDM_DISCOVERY_PORT:-27018}/udp"
+
+  # Classico: zumbis sem a progressao de ondas do survival (--classic-mode).
+  classic:
+    <<: *server-base
+    profiles: ["classic"]
+    container_name: box-godot-classic
+    command:
+      - "--server"
+      - "--server-port=${CLASSIC_PORT:-27019}"
+      - "${CLASSIC_TEST_MODE:---production}"
+      - "--procedural-city"
+      - "--classic-mode"
+      - "--car-bot=0"
+      - "--server-name=${CLASSIC_NAME:-}"
+    environment:
+      GAME_SERVER_WORLD_SEED: "${CLASSIC_WORLD_SEED:-}"
+    ports:
+      - "${CLASSIC_PORT:-27019}:${CLASSIC_PORT:-27019}/udp"
+      - "${CLASSIC_DISCOVERY_PORT:-27020}:${CLASSIC_DISCOVERY_PORT:-27020}/udp"
