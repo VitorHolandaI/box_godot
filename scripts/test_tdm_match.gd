@@ -8,6 +8,7 @@ extends RefCounted
 const TDMMATCH_SCRIPT := preload("res://scripts/tdm_match.gd")
 const WEAPON_SLOTS_SCRIPT := preload("res://scripts/weapon_slots.gd")
 const PVP_DIRECTOR_SCRIPT := preload("res://scripts/pvp_server_director.gd")
+const PLAYER_SCENE: PackedScene = preload("res://scenes/player.tscn")
 const A1 := "101:0"
 const A2 := "102:0"
 const B1 := "201:0"
@@ -27,7 +28,9 @@ func run(test_root: Node) -> void:
 	_test_protection_drops_when_the_protected_attacks(test_root)
 	_test_only_two_team_colors(test_root)
 	_test_every_weapon_is_choosable_for_free(test_root)
-	_test_pvp_gives_huge_reserve_and_no_wear(test_root)
+	_test_pvp_keeps_reserve_but_still_wears(test_root)
+	_test_death_drops_the_held_weapon(test_root)
+	_test_respawn_brings_the_chosen_weapon_back_whole(test_root)
 	_test_route_leaves_the_base_before_the_next_corner(test_root)
 	_test_route_has_no_long_straight_leg(test_root)
 	_test_death_signal_connected_once(test_root)
@@ -262,10 +265,12 @@ func _test_every_weapon_is_choosable_for_free(test_root: Node) -> void:
 	print("PASS: %d armas escolhiveis de graca no loadout." % kinds.size())
 
 
-## Mata-mata: arma vem com reserva multiplicada e o tiro NAO desgasta.
-## Tambem garante que o survival continua desgastando normalmente.
-func _test_pvp_gives_huge_reserve_and_no_wear(test_root: Node) -> void:
-	print("Testando reserva grande e sem durabilidade no PVP...")
+## Mata-mata: a arma vem com reserva multiplicada (municao nao e o recurso
+## escasso aqui), MAS desgasta igual ao survival. Escolher a arma de graca nao
+## pode virar arma eterna: a durabilidade e o que faz a arma degradar (spread
+## dobrado, chance de falha) e obriga a trocar ou pegar a do chao.
+func _test_pvp_keeps_reserve_but_still_wears(test_root: Node) -> void:
+	print("Testando reserva grande COM desgaste no mata-mata...")
 	var kind := WeaponStats.Kind.AK47
 	var stats := WeaponStats.stats_for(kind)
 	var base_reserve := int(stats["grant_reserve"])
@@ -279,18 +284,28 @@ func _test_pvp_gives_huge_reserve_and_no_wear(test_root: Node) -> void:
 		_fail(test_root, "Reserva do PVP deveria ser %d (base %d); veio %s." % [expected_reserve, base_reserve, pvp_state["reserve"]])
 		NetworkSession.pvp_mode = pvp_before
 		return
-	var durability_before := int(pvp_state["durability"])
-	for shot in 200:
-		pvp_slots.wear(kind)
-	if int(pvp_slots.state_of(kind)["durability"]) != durability_before:
-		_fail(test_root, "No PVP a durabilidade nao pode cair; foi de %d para %s." % [durability_before, pvp_slots.state_of(kind)["durability"]])
+	var max_durability := int(stats["max_durability"])
+	if pvp_slots.wear(kind) != max_durability - 1:
+		_fail(test_root, "No mata-mata o tiro TEM que desgastar 1 ponto; veio %s de %d." % [pvp_slots.state_of(kind)["durability"], max_durability])
 		NetworkSession.pvp_mode = pvp_before
 		return
-	if pvp_slots.is_degraded(kind):
-		_fail(test_root, "Arma do PVP nunca fica degradada.")
+	# Desgastando ate o fim: a arma degrada antes de quebrar e quebra no 0.
+	var degraded_at := -1
+	for shot in max_durability:
+		var left := pvp_slots.wear(kind)
+		if degraded_at < 0 and pvp_slots.is_degraded(kind):
+			degraded_at = left
+		if left <= 0:
+			break
+	if degraded_at <= 0:
+		_fail(test_root, "A arma deveria degradar antes de quebrar; degradou em %d." % degraded_at)
 		NetworkSession.pvp_mode = pvp_before
 		return
-	# Survival continua igual: desgasta e degrada.
+	if int(pvp_slots.state_of(kind)["durability"]) != 0:
+		_fail(test_root, "Depois de %d tiros a durabilidade deveria zerar; veio %s." % [max_durability, pvp_slots.state_of(kind)["durability"]])
+		NetworkSession.pvp_mode = pvp_before
+		return
+	# Survival continua igual: mesma reserva base e mesmo desgaste.
 	NetworkSession.pvp_mode = false
 	var survival_slots: WeaponSlots = WEAPON_SLOTS_SCRIPT.new()
 	survival_slots.grant(kind)
@@ -298,13 +313,99 @@ func _test_pvp_gives_huge_reserve_and_no_wear(test_root: Node) -> void:
 		_fail(test_root, "No survival a reserva deveria continuar %d; veio %s." % [base_reserve, survival_slots.state_of(kind)["reserve"]])
 		NetworkSession.pvp_mode = pvp_before
 		return
-	survival_slots.wear(kind)
-	if int(survival_slots.state_of(kind)["durability"]) != durability_before - 1:
+	if survival_slots.wear(kind) != max_durability - 1:
 		_fail(test_root, "No survival o tiro deveria desgastar 1 ponto; veio %s." % survival_slots.state_of(kind)["durability"])
 		NetworkSession.pvp_mode = pvp_before
 		return
 	NetworkSession.pvp_mode = pvp_before
-	print("PASS: PVP com reserva %d (base %d) e sem desgaste." % [expected_reserve, base_reserve])
+	print("PASS: Reserva %d (base %d) e desgaste valendo nos dois modos." % [expected_reserve, base_reserve])
+
+
+## Quem morre DEIXA a arma no chao, com a municao e o desgaste que ela tinha:
+## o abate vira despojo e quem passa pode pegar. Antes a arma sumia com o morto.
+func _test_death_drops_the_held_weapon(test_root: Node) -> void:
+	print("Testando arma caindo no chao na morte...")
+	var pvp_before: bool = NetworkSession.pvp_mode
+	NetworkSession.pvp_mode = true
+	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
+	player.name = "PlayerQueMorre"
+	player.reads_local_input = false
+	test_root.add_child(player)
+	var dropped: Array = []
+	player.crate_weapon_dropped.connect(func(kind: int, mag: int, reserve: int, durability: int) -> void:
+		dropped.append({"kind": kind, "mag": mag, "reserve": reserve, "durability": durability})
+	)
+	var kind := WeaponStats.Kind.AK47
+	player.choose_pvp_loadout(kind)
+	player.equip_crate_weapon(kind)
+	# Gasta um pouco: o que cai no chao tem que ser o estado REAL, nao o de fabrica.
+	player.weapon_slots.wear(kind)
+	player.weapon_slots.consume_mag(kind)
+	var mag_before := int(player.weapon_slots.state_of(kind)["mag"])
+	var durability_before := int(player.weapon_slots.state_of(kind)["durability"])
+	player.take_damage(player.max_health * 10, Vector3.FORWARD, "bullet", null)
+	if not bool(player.get("is_eliminated")):
+		_fail(test_root, "O jogador deveria ter morrido com dano acima da vida.")
+		_cleanup(player, pvp_before)
+		return
+	if dropped.size() != 1:
+		_fail(test_root, "A morte deveria soltar exatamente 1 arma; soltou %d." % dropped.size())
+		_cleanup(player, pvp_before)
+		return
+	var loot: Dictionary = dropped[0]
+	if int(loot["kind"]) != kind:
+		_fail(test_root, "A arma no chao deveria ser a que estava na mao (%d); veio %s." % [kind, loot["kind"]])
+		_cleanup(player, pvp_before)
+		return
+	if int(loot["mag"]) != mag_before or int(loot["durability"]) != durability_before:
+		_fail(test_root, "A arma deveria cair com o estado de uso (mag %d, durabilidade %d); veio mag %s, durabilidade %s." % [mag_before, durability_before, loot["mag"], loot["durability"]])
+		_cleanup(player, pvp_before)
+		return
+	if player.weapon_slots.has_kind(kind):
+		_fail(test_root, "Quem morreu nao pode continuar com a arma no slot.")
+		_cleanup(player, pvp_before)
+		return
+	_cleanup(player, pvp_before)
+	print("PASS: A arma cai no chao com mag %d e durabilidade %d." % [mag_before, durability_before])
+
+
+## Renascer devolve a arma ESCOLHIDA no loadout, nova: quem morreu perde o
+## desgaste da vida anterior (a arma gasta ficou no chao para os outros).
+func _test_respawn_brings_the_chosen_weapon_back_whole(test_root: Node) -> void:
+	print("Testando respawn com a arma escolhida inteira...")
+	var pvp_before: bool = NetworkSession.pvp_mode
+	NetworkSession.pvp_mode = true
+	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
+	player.name = "PlayerQueRenasce"
+	player.reads_local_input = false
+	test_root.add_child(player)
+	var kind := WeaponStats.Kind.UZI
+	player.choose_pvp_loadout(kind)
+	player.equip_crate_weapon(kind)
+	player.weapon_slots.wear(kind)
+	player.take_damage(player.max_health * 10, Vector3.FORWARD, "bullet", null)
+	player.pvp_respawn_at(Vector3(5.0, 1.0, 5.0))
+	if not player.weapon_slots.has_kind(kind):
+		_fail(test_root, "Renascer deveria devolver a arma escolhida (%d)." % kind)
+		_cleanup(player, pvp_before)
+		return
+	var max_durability := int(WeaponStats.stats_for(kind)["max_durability"])
+	if int(player.weapon_slots.state_of(kind)["durability"]) != max_durability:
+		_fail(test_root, "A arma do respawn vem nova (%d de durabilidade); veio %s." % [max_durability, player.weapon_slots.state_of(kind)["durability"]])
+		_cleanup(player, pvp_before)
+		return
+	if player.spawn_protection_left <= 0.0:
+		_fail(test_root, "Renascer tem que ligar a invulnerabilidade; veio %f." % player.spawn_protection_left)
+		_cleanup(player, pvp_before)
+		return
+	_cleanup(player, pvp_before)
+	print("PASS: Respawn devolve a arma escolhida nova, com protecao.")
+
+
+## Devolve o modo anterior e libera o jogador do teste.
+func _cleanup(player: Node, pvp_before: bool) -> void:
+	NetworkSession.pvp_mode = pvp_before
+	player.queue_free()
 
 
 ## Regressao: o bot nascia no quintal a 5,9 m da primeira esquina, e o raio de
