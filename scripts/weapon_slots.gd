@@ -10,9 +10,12 @@ extends RefCounted
 ##   slots.grant(WeaponStats.Kind.SHOTGUN)
 
 const MAX_SLOTS := 1
-## Mata-mata: arma comprada vem com MUITA reserva e sem desgaste. No survival a
-## municao e um recurso escasso (voce repoe com drops); no PVP a rodada dura
-## pouco e morrer ja custa caro, entao reserva curta so vira tempo perdido.
+## Mata-mata: a arma vem com MUITA reserva, mas desgasta igual ao survival. No
+## survival a municao e um recurso escasso (voce repoe com drops); no mata-mata
+## procurar municao so tira o jogador do tiroteio. A DURABILIDADE fica valendo:
+## a arma e escolhida de graca, entao sem desgaste ela seria eterna — e e o
+## desgaste que degrada (spread dobrado, chance de falha) e faz a arma do chao,
+## largada por quem morreu, valer alguma coisa.
 const PVP_RESERVE_MULTIPLIER := 4
 const PVP_RESERVE_CAP := 2000
 
@@ -125,9 +128,6 @@ func wear(kind: int) -> int:
 	var state := state_of(kind)
 	if state.is_empty():
 		return 0
-	if NetworkSession.pvp_mode:
-		# Mata-mata nao tem durabilidade: a arma comprada dura a partida toda.
-		return int(state["durability"])
 	state["durability"] = maxi(int(state["durability"]) - 1, 0)
 	_bump()
 	return int(state["durability"])

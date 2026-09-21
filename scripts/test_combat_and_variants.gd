@@ -40,7 +40,7 @@ const FRAME_PERF_PROBE_TESTS_SCRIPT := preload("res://scripts/test_frame_perf_pr
 const SERVER_TICK_POLICY_TESTS_SCRIPT := preload("res://scripts/test_server_tick_policy.gd")
 const SNAPSHOT_INTERP_BUFFER_TESTS_SCRIPT := preload("res://scripts/test_snapshot_interp_buffer.gd")
 const BUILD_INFO_TESTS_SCRIPT := preload("res://scripts/test_build_info.gd")
-const PVP_MATCH_TESTS_SCRIPT := preload("res://scripts/test_pvp_match.gd")
+const TDM_MATCH_TESTS_SCRIPT := preload("res://scripts/test_tdm_match.gd")
 const LOCAL_HOST_LAUNCHER_TESTS_SCRIPT := preload("res://scripts/test_local_host_launcher.gd")
 const ZOMBIE_TICK_BUDGET_TESTS_SCRIPT := preload("res://scripts/test_zombie_tick_budget.gd")
 const ZOMBIE_CROWD_SLOTS_TESTS_SCRIPT := preload("res://scripts/test_zombie_crowd_slots.gd")
@@ -91,7 +91,7 @@ const FOCUSED_TEST_GROUPS := {
 	"server_tick_policy": SERVER_TICK_POLICY_TESTS_SCRIPT,
 	"snapshot_interp_buffer": SNAPSHOT_INTERP_BUFFER_TESTS_SCRIPT,
 	"build_info": BUILD_INFO_TESTS_SCRIPT,
-	"pvp_match": PVP_MATCH_TESTS_SCRIPT,
+	"tdm_match": TDM_MATCH_TESTS_SCRIPT,
 	"local_host_launcher": LOCAL_HOST_LAUNCHER_TESTS_SCRIPT,
 	"zombie_tick_budget": ZOMBIE_TICK_BUDGET_TESTS_SCRIPT,
 	"corpse_cleanup": CORPSE_CLEANUP_TESTS_SCRIPT,
@@ -155,7 +155,7 @@ func _ready() -> void:
 	SERVER_TICK_POLICY_TESTS_SCRIPT.new().run(self)
 	SNAPSHOT_INTERP_BUFFER_TESTS_SCRIPT.new().run(self)
 	BUILD_INFO_TESTS_SCRIPT.new().run(self)
-	PVP_MATCH_TESTS_SCRIPT.new().run(self)
+	TDM_MATCH_TESTS_SCRIPT.new().run(self)
 	LOCAL_HOST_LAUNCHER_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_TICK_BUDGET_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_CROWD_SLOTS_TESTS_SCRIPT.new().run(self)
@@ -313,8 +313,11 @@ func _test_pistol_fixed_trajectory() -> void:
 	print("Testando trajetoria fixa da pistola sem teleguiamento...")
 	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
 	player.reads_local_input = false
-	player.aim_input = Vector2.RIGHT
 	add_child(player)
+	# A mira entra pelo CAMINHO REAL (pacote de input -> aim_direction): cravar
+	# `aim_input` na mao nao aponta mais nada, porque o tiro passou a sair pela
+	# `aim_direction`, e o teste media a direcao padrao em vez da mira.
+	player.apply_network_input({"aim": Vector2.RIGHT})
 	var off_axis_target := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	off_axis_target.position = Vector3(8.0, 1.0, -9.0)
 	add_child(off_axis_target)

@@ -1,9 +1,11 @@
 # Box Godot
 
-Jogo de zumbis em Godot 4 com dois modos: **sobrevivência** (ondas de zumbis,
-loot, safehouse) e **mata-mata PVP** (dois times, compra de armas, melhor de 3
-rodadas). Roda em janela única ou tela dividida (até 4 jogadores locais), com
-servidor dedicado e cliente para Linux, Windows e macOS.
+Jogo de zumbis em Godot 4 com três modos: **sobrevivência** (ondas de zumbis,
+loot, safehouse), **mata-mata por times** (TDM: duas bases, placar contínuo de
+abates, arma à escolha) e **clássico** (zumbis sem progressão de onda). Cada
+modo é um container próprio no servidor. Roda em janela única ou tela dividida
+(até 4 jogadores locais), com servidor dedicado e cliente para Linux, Windows e
+macOS.
 
 > **Proof of concept.** Projeto pessoal, feito só para me expor ao Godot e a
 > coisas de jogo. O jogo fica como está — não pretendo continuar evoluindo: no
@@ -25,13 +27,14 @@ Ataque aereo: o alvo e marcado no chao e as bombas caem em linha sobre a horda.
 
 Airdrop: o aviao cruza baixo sobre as ruas e o crate de armas desce de paraquedas.
 
-![Mata-mata PVP: tempo de compra na base](docs/imagens/pvp-freezetime.jpg)
+![Mata-mata por times: menu de arma na base](docs/imagens/pvp-loadout.jpg)
 
-Mata-mata PVP: tempo de compra na base, com o menu de armas e o placar `Time A x Time B`.
+Mata-mata por times: o menu de arma (tecla B) com o arsenal inteiro de graca, o
+time do jogador e o placar `Azul x Vermelho`.
 
-![Fim de rodada no mata-mata](docs/imagens/pvp-fim-de-rodada.jpg)
+![Fim de partida no mata-mata](docs/imagens/pvp-fim-de-partida.jpg)
 
-Fim de rodada por eliminacao, com o placar atualizado.
+Fim de partida, com o placar de abates dos dois times.
 
 ![Tela dividida com 4 jogadores locais](docs/imagens/tela-dividida.jpg)
 
@@ -68,23 +71,32 @@ godot --path . -- --join=127.0.0.1 --server-port=27015
 # servidor dedicado direto pelo Godot (sobrevivência)
 godot --headless --path . -- --server --server-port=27015 --survival
 
-# servidor via Docker, escolhendo o modo na hora
-scripts/server_menu.sh            # menu interativo
-scripts/server_menu.sh pvp up     # mata-mata (sem bots)
-scripts/server_menu.sh survival up
-PVP_BOTS=4 scripts/server_menu.sh pvp up   # com 4 bots, para testar
+# servidor via Docker: um container POR MODO, você escolhe qual sobe
+docker compose --profile survival up -d --build   # sobrevivência, porta 27015
+docker compose --profile tdm up -d --build        # mata-mata, porta 27017
+scripts/server_menu.sh            # menu interativo (faz o mesmo)
+scripts/server_menu.sh tdm up     # mata-mata (sem bots)
+PVP_BOTS=4 scripts/server_menu.sh tdm up   # com 4 bots, para testar
 ```
 
-Portas: **27015/udp** (jogo) e **27016/udp** (descoberta de salas na LAN). Não
+Portas: **27015/udp** (sobrevivência), **27017/udp** (mata-mata), **27019/udp**
+(clássico); a porta seguinte de cada uma é a descoberta de salas na LAN. Não
 abra TCP.
 
 ## Modos
 
+Cada modo é um serviço próprio no `compose.yaml`, com porta e container
+próprios, escolhido pelo profile — dá para deixar mais de um no ar ao mesmo
+tempo. Ver [modos e containers](docs/modos-e-containers.md).
+
 - **Sobrevivência**: ondas progressivas até 600 zumbis vivos, safehouse com 3
   vidas por jogador, arma que desgasta e munição escassa.
-- **Mata-mata PVP**: duas bases em cantos opostos, compra de arma só na fase de
-  compra e dentro da própria base, sem respawn durante a rodada, melhor de 3.
-  Munição abundante e arma sem durabilidade. Bots de teste opcionais.
+- **Mata-mata por times (TDM)**: duas bases em cantos opostos, 2 times de uma
+  cor cada, placar contínuo até 50 abates (teto de 10 min), respawn em 5 s com
+  4 s de invulnerabilidade e **arma à escolha, de graça**. Sem fogo amigo.
+  Munição abundante, mas a arma desgasta e quebra — e quem morre **larga a arma
+  no chão** para quem passar. Bots de teste opcionais.
+- **Clássico**: zumbis sem a progressão de ondas do survival.
 
 ## Controles
 
@@ -94,7 +106,7 @@ abra TCP.
 - `1` / `2`: faca / pistola
 - Clique esquerdo ou `F`: atacar
 - `R`: recarregar
-- `B`: menu de compra (só no PVP)
+- `B`: menu de arma (só no mata-mata)
 - `Esc`: menu da partida (pausa no local, continua no servidor)
 
 No gamepad: analógico esquerdo move; `A` pula, `B` corre, `X` ataca, `LB`/`RB`
@@ -117,7 +129,8 @@ docs/             documentação detalhada
 - [Cidade e mundo](docs/cidade-e-mundo.md)
 - [Mecânicas](docs/mecanicas.md)
 - [Multiplayer e servidor](docs/multiplayer.md)
-- [Modo mata-mata (PVP)](docs/pvp.md)
+- [Modo mata-mata por times (TDM)](docs/pvp.md)
+- [Modos e containers](docs/modos-e-containers.md)
 - [Desenvolvimento, builds e testes](docs/desenvolvimento.md)
 
 ## Testes

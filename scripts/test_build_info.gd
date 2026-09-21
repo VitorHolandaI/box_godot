@@ -11,7 +11,7 @@ extends RefCounted
 
 const BUILD_INFO_SCRIPT := preload("res://scripts/build_info.gd")
 ## Hash da superficie de RPC; atualize junto com BuildInfo.GAME_BUILD.
-const RPC_SIGNATURE := "89b313985f050cc7"
+const RPC_SIGNATURE := "efc55480734781a1"
 
 
 func run(test_root: Node) -> void:

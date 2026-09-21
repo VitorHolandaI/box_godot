@@ -54,6 +54,10 @@ const STEERING_ARM_SWING := 0.6
 ## Porta pode ser usada antes de encostar nela; ainda exige o raycast estar na
 ## frente do boneco, para nao abrir porta atraves de parede.
 const DOOR_INTERACT_REACH := 3.5
+## Distancia HORIZONTAL minima entre o jogador e o ponto de mira para a mira
+## valer (ver aim_point_is_usable). 1,2 m fica fora do corpo do boneco e do
+## alcance da faca, entao nao atrapalha mirar em quem esta colado.
+const MIN_AIM_PLANAR_DISTANCE := 1.2
 ## Segurando interagir ao lado do caido, reanimacao completa em ~3s.
 const REVIVE_DURATION := 3.0
 ## Duracao da animacao de recarga (cosmetica: a municao entra na hora; o valor
@@ -102,13 +106,18 @@ var is_local_controller := true
 ## municao nem durabilidade (suporte temporario; ver SwatSquadBot.configure).
 var is_swat_bot := false
 const SWAT_UNIFORM_COLOR := Color(0.07, 0.08, 0.1)
-## Mata-mata: dinheiro, placar e janela de compra (autoridade no servidor).
-var pvp_money := 0
+## Mata-mata: time, placar pessoal e relogios (autoridade no servidor).
+## -1 = fora da partida (survival, SWAT, cliente antes do primeiro snapshot).
+var pvp_team := -1
 var pvp_kills := 0
 var pvp_deaths := 0
-## Segundos restantes de compra e de respawn (0 = liberado / vivo).
-var pvp_buy_left := 0.0
+## Segundos restantes de respawn (0 = vivo) e de invulnerabilidade de base.
 var pvp_respawn_left := 0.0
+var spawn_protection_left := 0.0
+## Arma escolhida no menu de loadout; volta com o jogador a cada respawn. 0 = so
+## a pistola padrao. Substituiu a compra: no mata-mata a arma e escolha, nao
+## economia (ver TdmMatch).
+var pvp_loadout_kind := 0
 ## Ultimo a machucar este jogador: e quem leva o credito do abate.
 var last_attacker: Node = null
 const PVP_START_PISTOL_MAG := 12
@@ -162,6 +171,12 @@ var aim_input := Vector2.ZERO
 ## Foxhole); sem mouse/analogico: horizontal do aim_input. E o que os tiros usam.
 ## ZERO = ainda nao mirada; os disparos caem para a frente do corpo.
 var aim_direction := Vector3.ZERO
+## Ponto do mundo que o retículo/cursor aponta, como veio no pacote de input
+## (Vector3.INF = nao ha). O raio de interagir sai da CABECA ate ele: a
+## `aim_direction` sozinha sai do CANO, e encostado numa porta o cano esta a um
+## palmo do alvo — o angulo dele erra alguns graus, o bastante para o raio
+## passar ao lado da porta. Uso: ver interact_ray_direction.
+var aim_world_point := Vector3.INF
 ## Mira pelo cursor (isometrica) e primeira pessoa. `camera_yaw` e o yaw livre
 ## do modo FPS (o corpo segue ele); `view_pitch` inclina so a camera.
 const AIM_SENSITIVITY := 0.0022
@@ -260,12 +275,12 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_riding():
 		# Passageiro: preso ao assento traseiro, mas ainda mira e atira (sem
-		# andar). No cliente o proxy segue o snapshot (posicao + mira que o
-		# servidor calculou); na autoridade o assento e sincronizado depois do
-		# input para o corpo seguir a mira.
+		# andar). No cliente o proxy GRUDA no banco do carro (nao no snapshot
+		# dele); na autoridade o assento e sincronizado depois do input para o
+		# corpo seguir a mira.
 		_advance_action_clocks(delta)
 		if not simulation_enabled:
-			_interpolate_proxy(delta)
+			_ride_as_proxy()
 			return
 		_handle_vehicle_exit()
 		_collect_tick_input(delta)
@@ -454,6 +469,7 @@ func apply_network_input(state: Dictionary) -> void:
 	# converge do cano DELE ate o ponto. "aim_dir" fica para bots/versoes antigas.
 	var requested_point: Variant = state.get("aim_point", null)
 	var requested_dir: Variant = state.get("aim_dir", null)
+	aim_world_point = requested_point if requested_point is Vector3 else Vector3.INF
 	if requested_point is Vector3:
 		var to_point: Vector3 = (requested_point as Vector3) - _muzzle_origin()
 		aim_direction = to_point.normalized() if to_point.length_squared() > 0.0001 else -global_transform.basis.z
@@ -515,10 +531,10 @@ func get_network_state() -> Dictionary:
 		"downed": is_downed,
 		"revive_progress": revive_progress,
 		"equipment": equipment.to_counts(),
-		"pvp_money": pvp_money,
+		"pvp_team": pvp_team,
 		"pvp_kills": pvp_kills,
 		"pvp_deaths": pvp_deaths,
-		"pvp_buy_left": pvp_buy_left,
+		"spawn_protection_left": spawn_protection_left,
 	}
 
 
@@ -618,10 +634,12 @@ func _apply_network_extras(state: Dictionary) -> void:
 	if equipment_counts is PackedByteArray:
 		equipment.apply_counts(equipment_counts)
 	if NetworkSession.pvp_mode:
-		pvp_money = maxi(pvp_money, int(state.get("pvp_money", pvp_money)))
+		# O time chega pelo snapshot: e ele que pinta o uniforme no cliente, que
+		# nao ve o register_player do servidor.
+		set_pvp_team(int(state.get("pvp_team", pvp_team)))
 		pvp_kills = maxi(pvp_kills, int(state.get("pvp_kills", pvp_kills)))
 		pvp_deaths = maxi(pvp_deaths, int(state.get("pvp_deaths", pvp_deaths)))
-		pvp_buy_left = float(state.get("pvp_buy_left", pvp_buy_left))
+		spawn_protection_left = float(state.get("spawn_protection_left", spawn_protection_left))
 	var next_eliminated := bool(state.get("eliminated", is_eliminated))
 	if next_eliminated == is_eliminated:
 		return
@@ -645,6 +663,10 @@ func _handle_weapon_input() -> void:
 	if bool(WeaponStats.stats_for(current_weapon).get("is_auto", false)):
 		wants_to_attack = _is_attack_held()
 	if wants_to_attack and attack_cooldown <= 0.0:
+		if spawn_protection_left > 0.0:
+			# Atirar abre mao da invulnerabilidade: sem isso da para sair da base
+			# imortal e limpar o time inimigo de graca.
+			spawn_protection_left = TdmMatch.protection_after_attack(spawn_protection_left)
 		match current_weapon:
 			Weapon.KNIFE:
 				_attack_with_knife()
@@ -790,13 +812,27 @@ func _spawn_break_debris() -> void:
 
 
 func _drop_current_crate_weapon() -> void:
-	var dropped_kind := current_weapon
+	_drop_crate_weapon(current_weapon)
+
+
+## Larga TODA arma de crate do slot, nao so a que esta na mao. Usado na morte do
+## mata-mata: o abate vira despojo, com a municao e o desgaste que a arma tinha.
+## Uso: player.drop_all_crate_weapons()
+func drop_all_crate_weapons() -> void:
+	for kind in weapon_slots.kinds.duplicate():
+		_drop_crate_weapon(int(kind))
+
+
+## Tira a arma do slot e avisa quem cria a pickup no chao (o main). Sem arma de
+## crate desse tipo no slot nao faz nada.
+func _drop_crate_weapon(dropped_kind: int) -> void:
 	if not WeaponStats.is_crate_weapon(dropped_kind):
 		return
 	var dropped_state := weapon_slots.remove_kind(dropped_kind)
 	if dropped_state.is_empty():
 		return
-	current_weapon = Weapon.KNIFE
+	if current_weapon == dropped_kind:
+		current_weapon = Weapon.KNIFE
 	_update_weapon_models()
 	crate_weapon_dropped.emit(dropped_kind, int(dropped_state.get("mag", 0)), int(dropped_state.get("reserve", 0)), int(dropped_state.get("durability", 0)))
 
@@ -958,7 +994,8 @@ func _handle_interaction_input() -> void:
 		ground_weapon.call("interact_with", self)
 		return
 	var ray_start := head.global_position
-	var ray_end := ray_start - global_transform.basis.z * DOOR_INTERACT_REACH
+	var ray_direction := interact_ray_direction(_look_from(ray_start), -global_transform.basis.z)
+	var ray_end := ray_start + ray_direction * DOOR_INTERACT_REACH
 	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [self])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	var collider: Node = hit.get("collider")
@@ -970,6 +1007,32 @@ func _handle_interaction_input() -> void:
 				collider.interact()
 			return
 		collider = collider.get_parent()
+
+
+## Para onde o raio de interagir (porta) aponta: o OLHAR do jogador, com queda
+## para a frente do corpo quando nao ha mira (analogico parado, bot, avatar sem
+## pacote). Funcao pura para testar sem mundo de fisica.
+##
+## Antes o raio saia direto pela frente do corpo. Em primeira pessoa quem gira o
+## corpo no SERVIDOR e a `aim_direction` do pacote, e ela sai do CANO ate o
+## retículo: encostado na porta o cano esta a um palmo do alvo, entao o angulo
+## dele nao e o da camera. Dava o desencontro classico — a cruz na porta, o raio
+## do servidor passando ao lado, e apertar interagir nao abria nada.
+## Uso: var dir := PlayerCharacter.interact_ray_direction(aim_direction, -basis.z)
+## Olhar a partir de `origin`: do ponto do retículo quando ele veio no pacote,
+## senao a direcao de mira (que sai do cano). Uso: interno do raio de interagir.
+func _look_from(origin: Vector3) -> Vector3:
+	if aim_world_point.is_finite():
+		var to_point := aim_world_point - origin
+		if to_point.length_squared() > 0.0001:
+			return to_point
+	return aim_direction
+
+
+static func interact_ray_direction(aim: Vector3, body_forward: Vector3) -> Vector3:
+	if aim.length_squared() > 0.0001:
+		return aim.normalized()
+	return body_forward.normalized() if body_forward.length_squared() > 0.0001 else Vector3.FORWARD
 
 
 ## Arma no chao mais proxima dentro do raio de interacao (crates airdrop e
@@ -1089,6 +1152,36 @@ func _apply_steering_pose(steering: float) -> void:
 		left_arm.rotation.z = SEATED_ARM_INWARD + swing
 	if right_arm != null:
 		right_arm.rotation.z = -SEATED_ARM_INWARD + swing
+
+
+## Proxy do passageiro no cliente: a POSICAO vem do banco do carro, e so o
+## OLHAR vem do snapshot dele.
+##
+## Antes o passageiro seguia o proprio snapshot, interpolado com atraso proprio,
+## enquanto o carro seguia o dele com outro atraso — 120 ms no carro
+## (DrivableCar.PROXY_INTERP_DELAY) contra ~200 ms no jogador
+## (SnapshotInterpBuffer: 2 intervalos de 100 ms). Os dois nunca batem, entao o
+## passageiro era desenhado ~80 ms no passado em relacao ao carro: a 20 m/s isso
+## e 1,6 m atras do banco, e piora com a velocidade. Era o "passageiro solto do
+## carro" do multiplayer. O motorista nunca mostrou o problema porque ele ja era
+## grudado no banco (_sync_to_vehicle) antes de chegar na interpolacao.
+##
+## Grudar no banco tambem torna o passageiro imune a qualquer diferenca futura
+## entre os dois atrasos: ele passa a ser parte do carro, como no servidor.
+## Uso: interno de _physics_process, no ramo do proxy que vai de carona.
+func _ride_as_proxy() -> void:
+	# O olhar continua vindo da rede: e o servidor que decide para onde o
+	# atirador aponta (ou a previsao local, quando o passageiro sou eu).
+	snapshot_buffer.sample(float(Time.get_ticks_msec()))
+	if is_local_controller and first_person:
+		rotation.y = camera_yaw
+	else:
+		rotation.y = snapshot_buffer.rotation
+	var seat_xf: Variant = riding_car.call("gunner_seat_transform")
+	if seat_xf is Transform3D:
+		global_position = (seat_xf as Transform3D).origin
+	velocity = Vector3.ZERO
+	_apply_seated_pose(false)
 
 
 ## Mantem o boneco preso ao assento enquanto dirige. Copia o transform inteiro
@@ -1405,7 +1498,9 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 		# Soldado do esquadrao e suporte, nao baixa: nada machuca ele.
 		return
 	if is_eliminated or is_downed:
-		# Caido fica fora do combate ate ser reanimado (ou virar a rodada).
+		# Caido fica fora do combate ate ser reanimado.
+		return
+	if NetworkSession.pvp_mode and _pvp_damage_blocked(source):
 		return
 	if is_instance_valid(source) and source != self:
 		last_attacker = source
@@ -1427,25 +1522,46 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 			respawn()
 
 
-## Morte no mata-mata: sai do combate, perde as armas compradas (volta com
-## pistola) e avisa o main, que credita o abate e agenda o respawn.
+## Verdadeiro quando o dano do `source` nao vale no mata-mata: companheiro de
+## time ou vitima ainda invulneravel do respawn. A regra pura mora em TdmMatch;
+## aqui so se descobre o time de quem atirou.
+func _pvp_damage_blocked(source: Node) -> bool:
+	var attacker_team := -1
+	if is_instance_valid(source) and source != self and source.get("pvp_team") != null:
+		attacker_team = int(source.get("pvp_team"))
+	return TdmMatch.blocks_damage(attacker_team, pvp_team, spawn_protection_left)
+
+
+## Morte no mata-mata: sai do combate e avisa o main, que pontua o time e deixa
+## o respawn acontecer sozinho. A arma ESCOLHIDA no loadout nao se perde: ela
+## volta com o jogador na proxima vida (nao ha economia a reiniciar).
 ## Uso: chamado pelo take_damage quando NetworkSession.pvp_mode.
 func _pvp_die() -> void:
 	var killer: Node = last_attacker if is_instance_valid(last_attacker) else null
 	last_attacker = null
+	# Larga a arma ANTES de sumir do mundo: o drop nasce na posicao do morto, e
+	# depois disso o corpo ja esta invisivel e fora de colisao.
+	drop_all_crate_weapons()
 	pvp_deaths += 1
-	pvp_respawn_left = PvpMatch.RESPAWN_SECONDS
+	pvp_respawn_left = TdmMatch.RESPAWN_SECONDS
+	spawn_protection_left = 0.0
 	is_eliminated = true
 	visible = false
 	collision_layer = 0
 	collision_mask = 0
 	velocity = Vector3.ZERO
 	health = 0
-	reset_pvp_loadout()
 	pvp_died.emit(killer)
 
 
-## Volta a pistola e faca, sem armas de crate (economia nova a cada vida).
+## Guarda a arma escolhida no menu de loadout (0 = so a pistola). Quem aplica
+## e o respawn; equipar na hora e decisao do diretor (so na base).
+## Uso: player.choose_pvp_loadout(WeaponStats.Kind.AK47)
+func choose_pvp_loadout(kind: int) -> void:
+	pvp_loadout_kind = kind if WeaponStats.is_crate_weapon(kind) else 0
+
+
+## Volta ao kit da vida nova: pistola cheia, faca e a arma escolhida no loadout.
 ## Uso: player.reset_pvp_loadout()
 func reset_pvp_loadout() -> void:
 	for kind in weapon_slots.kinds.duplicate():
@@ -1454,10 +1570,21 @@ func reset_pvp_loadout() -> void:
 	pistol_ammo = PVP_START_PISTOL_MAG
 	reserve_ammo = PVP_START_PISTOL_RESERVE
 	_update_weapon_models()
+	if pvp_loadout_kind != 0:
+		equip_crate_weapon(pvp_loadout_kind)
 
 
-## Respawna em PVP no ponto escolhido pelo main (longe dos vivos), com a janela
-## de compra reaberta. Uso: player.pvp_respawn_at(posicao)
+## Define o time do mata-mata e pinta o uniforme com a cor dele (so duas cores
+## no mapa, uma por time). Uso: player.set_pvp_team(1)
+func set_pvp_team(team: int) -> void:
+	if team == pvp_team:
+		return
+	pvp_team = team
+	_apply_player_color()
+
+
+## Respawna em PVP no ponto escolhido pelo diretor, com a arma do loadout e a
+## invulnerabilidade de base ligada. Uso: player.pvp_respawn_at(posicao)
 func pvp_respawn_at(respawn_position: Vector3) -> void:
 	global_position = respawn_position
 	velocity = Vector3.ZERO
@@ -1471,14 +1598,14 @@ func pvp_respawn_at(respawn_position: Vector3) -> void:
 	stamina = max_stamina
 	hit_reaction_time = 0.0
 	pvp_respawn_left = 0.0
-	pvp_buy_left = PvpMatch.BUY_SECONDS
+	spawn_protection_left = TdmMatch.SPAWN_PROTECTION_SECONDS
 	reset_pvp_loadout()
 
 
-## Avanca os relogios do PVP (compra e respawn). Roda onde o jogador e
-## simulado (servidor/offline). Uso: player.tick_pvp(delta)
+## Avanca os relogios do PVP (respawn e invulnerabilidade). Roda onde o jogador
+## e simulado (servidor/offline). Uso: player.tick_pvp(delta)
 func tick_pvp(delta: float) -> void:
-	pvp_buy_left = maxf(pvp_buy_left - delta, 0.0)
+	spawn_protection_left = maxf(spawn_protection_left - delta, 0.0)
 	if is_eliminated:
 		pvp_respawn_left = maxf(pvp_respawn_left - delta, 0.0)
 
@@ -1600,8 +1727,10 @@ func can_see_position(target_position: Vector3) -> bool:
 
 func get_lives_text() -> String:
 	if NetworkSession.pvp_mode:
-		# Vidas nao existem no mata-mata: a linha vira dinheiro e placar.
-		return "PVP: $%d | %d/%d" % [pvp_money, pvp_kills, pvp_deaths]
+		# Vidas nao existem no mata-mata: a linha vira time, placar e o aviso de
+		# invulnerabilidade (que some no primeiro tiro).
+		var shield := " | PROTEGIDO %ds" % int(ceil(spawn_protection_left)) if spawn_protection_left > 0.0 else ""
+		return "Time %s | %d/%d%s" % [TdmMatch.name_for_team(pvp_team), pvp_kills, pvp_deaths, shield]
 	if is_downed:
 		return "CAIDO | segure Interagir perto para reanimar"
 	if is_eliminated or lives <= 0:
@@ -1723,6 +1852,8 @@ func _poll_input() -> void:
 	move_input = _aim_relative_move(Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down"))
 	aim_direction = _local_aim_direction()
 	aim_input = _horizontal_from_direction(aim_direction)
+	var local_point: Variant = _local_aim_target()
+	aim_world_point = local_point if local_point is Vector3 else Vector3.INF
 	jump_pressed = Input.is_action_just_pressed(input_action_prefix + "jump")
 	sprint_pressed = Input.is_action_pressed(input_action_prefix + "sprint")
 	attack_pressed = Input.is_action_just_pressed(input_action_prefix + "attack")
@@ -1860,7 +1991,7 @@ func _local_aim_input() -> Vector2:
 func _local_aim_direction() -> Vector3:
 	var muzzle := _muzzle_origin()
 	var point: Variant = _local_aim_target()
-	if point is Vector3:
+	if point is Vector3 and aim_point_is_usable(global_position, point as Vector3):
 		var to_point: Vector3 = (point as Vector3) - muzzle
 		if to_point.length_squared() > 0.0001:
 			return to_point.normalized()
@@ -1869,6 +2000,19 @@ func _local_aim_direction() -> Vector3:
 	if not aim_input.is_zero_approx():
 		return Vector3(aim_input.x, 0.0, aim_input.y).normalized()
 	return -global_transform.basis.z
+
+
+## O ponto de mira so vale quando esta longe o bastante do jogador NO PLANO: de
+## perto demais, a direcao horizontal do cano ate ele e so ruido.
+##
+## Regressao do rodopio: ao sair da primeira pessoa o cursor e solto no centro
+## da tela, e a camera isometrica faz `looking_at(jogador)` — o centro da tela e
+## o proprio jogador. O corpo passava a perseguir um alvo praticamente embaixo
+## dos pes; como o cano gira junto com o corpo, a direcao virava a cada frame e
+## o boneco rodopiava sem parar. Funcao pura para testar sem camera.
+## Uso: if PlayerCharacter.aim_point_is_usable(global_position, ponto): ...
+static func aim_point_is_usable(origin: Vector3, point: Vector3) -> bool:
+	return Vector2(point.x - origin.x, point.z - origin.z).length() >= MIN_AIM_PLANAR_DISTANCE
 
 
 ## Ponto do mundo que a mira aponta (retículo no FPS, cursor na 3a pessoa), ou
@@ -2068,6 +2212,10 @@ func _apply_player_color() -> void:
 	# Soldado do esquadrao SWAT usa uniforme escuro proprio, igual nos dois
 	# lados (o cliente nao ve o resto da configuracao do bot do servidor).
 	uniform_material.albedo_color = SWAT_UNIFORM_COLOR if is_swat_bot else colors[posmod(active_index, colors.size())]
+	if not is_swat_bot and pvp_team >= 0:
+		# Mata-mata: a cor e do TIME, nao da vaga. Com uma cor por jogador nao
+		# dava para saber quem era inimigo no meio do tiroteio.
+		uniform_material.albedo_color = TdmMatch.color_for_team(pvp_team)
 	uniform_material.roughness = 0.8
 	$Model/Torso.material_override = uniform_material
 	$Model/LeftArm/Mesh.material_override = uniform_material

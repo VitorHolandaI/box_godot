@@ -51,8 +51,8 @@ release estavel ate ser promovido para `main`.
 Para construir e iniciar o container isolado:
 
 ```bash
-docker compose up --build -d
-docker compose logs -f game-server
+docker compose --profile survival up -d --build
+docker compose logs -f survival
 ```
 
 Na VPS, publique `27015/udp` e `27016/udp` no firewall do sistema e no firewall
@@ -72,12 +72,12 @@ porta TCP: o transporte do jogo e UDP. Para usar outra porta alta, defina o
 mesmo valor ao subir o container e ao iniciar clientes por linha de comando:
 
 ```bash
-GAME_SERVER_PORT=32000 docker compose up --build -d
+SURVIVAL_PORT=32000 docker compose --profile survival up -d --build
 ./box-godot-linux.x86_64 -- --server-port=32000
 ```
 
 Ao usar uma porta customizada, publique tambem a porta seguinte para descoberta
-(`GAME_SERVER_DISCOVERY_PORT=32001` no exemplo acima).
+(`SURVIVAL_DISCOVERY_PORT=32001` no exemplo acima).
 
 O menu usa `27015` por padrao. Em cada computador, escolha `Multiplayer`,
 selecione a sala online e entre com um jogador. Este prototipo ainda nao
@@ -94,7 +94,7 @@ Depois, na VPS:
 
 ```bash
 cd /srv/box-godot
-docker compose up --build -d
+docker compose --profile survival up -d --build
 ```
 
 Para testar a cidade procedural experimental na VPS, use a branch
@@ -109,12 +109,12 @@ docker compose up --build -d
 
 O compose inicia a cidade procedural por padrao e cria uma seed a partir do ID
 do container. Para forcar uma seed especifica, defina
-`GAME_SERVER_WORLD_SEED=18273`. O cliente deve ser aberto normalmente: escolha
+`SURVIVAL_WORLD_SEED=18273`. O cliente deve ser aberto normalmente: escolha
 `Conectar ao servidor` e informe somente o IP ou dominio e a porta. O servidor
 envia a seed e o modo procedural durante a conexao.
 
 Para iniciar o modo sobrevivencia no servidor dedicado, use:
 
 ```bash
-GAME_SERVER_GAME_MODE=--survival docker compose up --build -d
+docker compose --profile survival up -d --build
 ```
