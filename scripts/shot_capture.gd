@@ -116,17 +116,17 @@ const RECIPES := {
 		"wait_for": "airdrop_plane_near",
 		"settle": 0.05,
 	},
-	"pvp-freezetime": {
+	"pvp-loadout": {
 		"hud": true,
 		"players": 1,
 		"pose_health": true,
-		"wait_for": "pvp_buy_open",
+		"wait_for": "pvp_live",
 		"moment_timeout": 220.0,
 		"actions_after_moment": true,
-		"actions": [{"name": "buy_menu", "delay": 0.4}],
+		"actions": [{"name": "loadout_menu", "delay": 0.4}],
 		"settle": 0.8,
 	},
-	"pvp-rodada": {
+	"pvp-mata-mata": {
 		"hud": true,
 		"players": 1,
 		"pose_health": true,
@@ -134,11 +134,11 @@ const RECIPES := {
 		"moment_timeout": 220.0,
 		"settle": 8.0,
 	},
-	"pvp-fim-de-rodada": {
+	"pvp-fim-de-partida": {
 		"hud": true,
 		"players": 1,
 		"pose_health": true,
-		"wait_for": "pvp_round_end",
+		"wait_for": "pvp_match_end",
 		"moment_timeout": 280.0,
 		"settle": 0.5,
 	},
@@ -525,8 +525,8 @@ func _run_action(main: Node, player: Node3D, entry: Dictionary) -> void:
 			await _press_player_action(player, "swat")
 		"airdrop":
 			_request_airdrop(main, player)
-		"buy_menu":
-			_open_buy_menu(main)
+		"loadout_menu":
+			_open_loadout_menu(main)
 		_:
 			push_warning("shot_capture: acao desconhecida '%s'" % action)
 
@@ -541,12 +541,12 @@ func _throw_grenade_volley(player: Node3D, count: int, spacing: float) -> void:
 		await _wait_seconds(spacing)
 
 
-## O BuyMenu reage a evento de input (nao a polling de acao), entao
+## O LoadoutMenu reage a evento de input (nao a polling de acao), entao
 ## Input.action_press nao abre o painel; aqui ele e aberto direto, so na captura.
-func _open_buy_menu(main: Node) -> void:
-	var menus := _children_with_script(main, "buy_menu.gd")
+func _open_loadout_menu(main: Node) -> void:
+	var menus := _children_with_script(main, "loadout_menu.gd")
 	if menus.is_empty():
-		push_warning("shot_capture: nao achei o BuyMenu para abrir o painel")
+		push_warning("shot_capture: nao achei o LoadoutMenu para abrir o painel")
 		return
 	var panel: Variant = menus[0].get("_panel")
 	if panel is CanvasItem:
@@ -601,15 +601,12 @@ func _moment_reached(main: Node, moment: String, elapsed: float) -> bool:
 			return false
 		"grenade_explosion":
 			return not _find_with_script(main, "bloater_burst_effect.gd").is_empty()
-		"pvp_buy_open":
-			return bool(main.get("pvp_buy_open"))
 		"pvp_live":
-			# O cliente recebe o texto do HUD do servidor: "COMPRA ..." na compra,
-			# "FIM ..." no fim; qualquer outra coisa e rodada valendo.
-			var live_text := String(main.get("pvp_state_text"))
-			return not live_text.is_empty() and not live_text.begins_with("COMPRA") and not live_text.begins_with("FIM")
-		"pvp_round_end":
-			return String(main.get("pvp_state_text")).begins_with("FIM DA RODADA")
+			# O cliente recebe o texto do HUD do servidor: "MATA-MATA ..." com a
+			# partida rolando, "FIM ..." quando acaba.
+			return String(main.get("pvp_state_text")).begins_with("MATA-MATA")
+		"pvp_match_end":
+			return String(main.get("pvp_state_text")).begins_with("FIM")
 		"airdrop_dropped":
 			var planes := _children_with_script(main, "airdrop_plane.gd")
 			if planes.is_empty():

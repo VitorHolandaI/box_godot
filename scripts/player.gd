@@ -102,13 +102,18 @@ var is_local_controller := true
 ## municao nem durabilidade (suporte temporario; ver SwatSquadBot.configure).
 var is_swat_bot := false
 const SWAT_UNIFORM_COLOR := Color(0.07, 0.08, 0.1)
-## Mata-mata: dinheiro, placar e janela de compra (autoridade no servidor).
-var pvp_money := 0
+## Mata-mata: time, placar pessoal e relogios (autoridade no servidor).
+## -1 = fora da partida (survival, SWAT, cliente antes do primeiro snapshot).
+var pvp_team := -1
 var pvp_kills := 0
 var pvp_deaths := 0
-## Segundos restantes de compra e de respawn (0 = liberado / vivo).
-var pvp_buy_left := 0.0
+## Segundos restantes de respawn (0 = vivo) e de invulnerabilidade de base.
 var pvp_respawn_left := 0.0
+var spawn_protection_left := 0.0
+## Arma escolhida no menu de loadout; volta com o jogador a cada respawn. 0 = so
+## a pistola padrao. Substituiu a compra: no mata-mata a arma e escolha, nao
+## economia (ver TdmMatch).
+var pvp_loadout_kind := 0
 ## Ultimo a machucar este jogador: e quem leva o credito do abate.
 var last_attacker: Node = null
 const PVP_START_PISTOL_MAG := 12
@@ -515,10 +520,10 @@ func get_network_state() -> Dictionary:
 		"downed": is_downed,
 		"revive_progress": revive_progress,
 		"equipment": equipment.to_counts(),
-		"pvp_money": pvp_money,
+		"pvp_team": pvp_team,
 		"pvp_kills": pvp_kills,
 		"pvp_deaths": pvp_deaths,
-		"pvp_buy_left": pvp_buy_left,
+		"spawn_protection_left": spawn_protection_left,
 	}
 
 
@@ -618,10 +623,12 @@ func _apply_network_extras(state: Dictionary) -> void:
 	if equipment_counts is PackedByteArray:
 		equipment.apply_counts(equipment_counts)
 	if NetworkSession.pvp_mode:
-		pvp_money = maxi(pvp_money, int(state.get("pvp_money", pvp_money)))
+		# O time chega pelo snapshot: e ele que pinta o uniforme no cliente, que
+		# nao ve o register_player do servidor.
+		set_pvp_team(int(state.get("pvp_team", pvp_team)))
 		pvp_kills = maxi(pvp_kills, int(state.get("pvp_kills", pvp_kills)))
 		pvp_deaths = maxi(pvp_deaths, int(state.get("pvp_deaths", pvp_deaths)))
-		pvp_buy_left = float(state.get("pvp_buy_left", pvp_buy_left))
+		spawn_protection_left = float(state.get("spawn_protection_left", spawn_protection_left))
 	var next_eliminated := bool(state.get("eliminated", is_eliminated))
 	if next_eliminated == is_eliminated:
 		return
@@ -645,6 +652,10 @@ func _handle_weapon_input() -> void:
 	if bool(WeaponStats.stats_for(current_weapon).get("is_auto", false)):
 		wants_to_attack = _is_attack_held()
 	if wants_to_attack and attack_cooldown <= 0.0:
+		if spawn_protection_left > 0.0:
+			# Atirar abre mao da invulnerabilidade: sem isso da para sair da base
+			# imortal e limpar o time inimigo de graca.
+			spawn_protection_left = TdmMatch.protection_after_attack(spawn_protection_left)
 		match current_weapon:
 			Weapon.KNIFE:
 				_attack_with_knife()
@@ -1405,7 +1416,9 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 		# Soldado do esquadrao e suporte, nao baixa: nada machuca ele.
 		return
 	if is_eliminated or is_downed:
-		# Caido fica fora do combate ate ser reanimado (ou virar a rodada).
+		# Caido fica fora do combate ate ser reanimado.
+		return
+	if NetworkSession.pvp_mode and _pvp_damage_blocked(source):
 		return
 	if is_instance_valid(source) and source != self:
 		last_attacker = source
@@ -1427,25 +1440,43 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 			respawn()
 
 
-## Morte no mata-mata: sai do combate, perde as armas compradas (volta com
-## pistola) e avisa o main, que credita o abate e agenda o respawn.
+## Verdadeiro quando o dano do `source` nao vale no mata-mata: companheiro de
+## time ou vitima ainda invulneravel do respawn. A regra pura mora em TdmMatch;
+## aqui so se descobre o time de quem atirou.
+func _pvp_damage_blocked(source: Node) -> bool:
+	var attacker_team := -1
+	if is_instance_valid(source) and source != self and source.get("pvp_team") != null:
+		attacker_team = int(source.get("pvp_team"))
+	return TdmMatch.blocks_damage(attacker_team, pvp_team, spawn_protection_left)
+
+
+## Morte no mata-mata: sai do combate e avisa o main, que pontua o time e deixa
+## o respawn acontecer sozinho. A arma ESCOLHIDA no loadout nao se perde: ela
+## volta com o jogador na proxima vida (nao ha economia a reiniciar).
 ## Uso: chamado pelo take_damage quando NetworkSession.pvp_mode.
 func _pvp_die() -> void:
 	var killer: Node = last_attacker if is_instance_valid(last_attacker) else null
 	last_attacker = null
 	pvp_deaths += 1
-	pvp_respawn_left = PvpMatch.RESPAWN_SECONDS
+	pvp_respawn_left = TdmMatch.RESPAWN_SECONDS
+	spawn_protection_left = 0.0
 	is_eliminated = true
 	visible = false
 	collision_layer = 0
 	collision_mask = 0
 	velocity = Vector3.ZERO
 	health = 0
-	reset_pvp_loadout()
 	pvp_died.emit(killer)
 
 
-## Volta a pistola e faca, sem armas de crate (economia nova a cada vida).
+## Guarda a arma escolhida no menu de loadout (0 = so a pistola). Quem aplica
+## e o respawn; equipar na hora e decisao do diretor (so na base).
+## Uso: player.choose_pvp_loadout(WeaponStats.Kind.AK47)
+func choose_pvp_loadout(kind: int) -> void:
+	pvp_loadout_kind = kind if WeaponStats.is_crate_weapon(kind) else 0
+
+
+## Volta ao kit da vida nova: pistola cheia, faca e a arma escolhida no loadout.
 ## Uso: player.reset_pvp_loadout()
 func reset_pvp_loadout() -> void:
 	for kind in weapon_slots.kinds.duplicate():
@@ -1454,10 +1485,21 @@ func reset_pvp_loadout() -> void:
 	pistol_ammo = PVP_START_PISTOL_MAG
 	reserve_ammo = PVP_START_PISTOL_RESERVE
 	_update_weapon_models()
+	if pvp_loadout_kind != 0:
+		equip_crate_weapon(pvp_loadout_kind)
 
 
-## Respawna em PVP no ponto escolhido pelo main (longe dos vivos), com a janela
-## de compra reaberta. Uso: player.pvp_respawn_at(posicao)
+## Define o time do mata-mata e pinta o uniforme com a cor dele (so duas cores
+## no mapa, uma por time). Uso: player.set_pvp_team(1)
+func set_pvp_team(team: int) -> void:
+	if team == pvp_team:
+		return
+	pvp_team = team
+	_apply_player_color()
+
+
+## Respawna em PVP no ponto escolhido pelo diretor, com a arma do loadout e a
+## invulnerabilidade de base ligada. Uso: player.pvp_respawn_at(posicao)
 func pvp_respawn_at(respawn_position: Vector3) -> void:
 	global_position = respawn_position
 	velocity = Vector3.ZERO
@@ -1471,14 +1513,14 @@ func pvp_respawn_at(respawn_position: Vector3) -> void:
 	stamina = max_stamina
 	hit_reaction_time = 0.0
 	pvp_respawn_left = 0.0
-	pvp_buy_left = PvpMatch.BUY_SECONDS
+	spawn_protection_left = TdmMatch.SPAWN_PROTECTION_SECONDS
 	reset_pvp_loadout()
 
 
-## Avanca os relogios do PVP (compra e respawn). Roda onde o jogador e
-## simulado (servidor/offline). Uso: player.tick_pvp(delta)
+## Avanca os relogios do PVP (respawn e invulnerabilidade). Roda onde o jogador
+## e simulado (servidor/offline). Uso: player.tick_pvp(delta)
 func tick_pvp(delta: float) -> void:
-	pvp_buy_left = maxf(pvp_buy_left - delta, 0.0)
+	spawn_protection_left = maxf(spawn_protection_left - delta, 0.0)
 	if is_eliminated:
 		pvp_respawn_left = maxf(pvp_respawn_left - delta, 0.0)
 
@@ -1600,8 +1642,10 @@ func can_see_position(target_position: Vector3) -> bool:
 
 func get_lives_text() -> String:
 	if NetworkSession.pvp_mode:
-		# Vidas nao existem no mata-mata: a linha vira dinheiro e placar.
-		return "PVP: $%d | %d/%d" % [pvp_money, pvp_kills, pvp_deaths]
+		# Vidas nao existem no mata-mata: a linha vira time, placar e o aviso de
+		# invulnerabilidade (que some no primeiro tiro).
+		var shield := " | PROTEGIDO %ds" % int(ceil(spawn_protection_left)) if spawn_protection_left > 0.0 else ""
+		return "Time %s | %d/%d%s" % [TdmMatch.name_for_team(pvp_team), pvp_kills, pvp_deaths, shield]
 	if is_downed:
 		return "CAIDO | segure Interagir perto para reanimar"
 	if is_eliminated or lives <= 0:
@@ -2068,6 +2112,10 @@ func _apply_player_color() -> void:
 	# Soldado do esquadrao SWAT usa uniforme escuro proprio, igual nos dois
 	# lados (o cliente nao ve o resto da configuracao do bot do servidor).
 	uniform_material.albedo_color = SWAT_UNIFORM_COLOR if is_swat_bot else colors[posmod(active_index, colors.size())]
+	if not is_swat_bot and pvp_team >= 0:
+		# Mata-mata: a cor e do TIME, nao da vaga. Com uma cor por jogador nao
+		# dava para saber quem era inimigo no meio do tiroteio.
+		uniform_material.albedo_color = TdmMatch.color_for_team(pvp_team)
 	uniform_material.roughness = 0.8
 	$Model/Torso.material_override = uniform_material
 	$Model/LeftArm/Mesh.material_override = uniform_material
