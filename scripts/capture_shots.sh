@@ -19,7 +19,7 @@ IMAGE_DIR_ZUMBIS="$PROJECT_DIR/docs/imagens/zumbis"
 CAPTURE_TIMEOUT="${CAPTURE_TIMEOUT:-240}"
 OPTIMIZE_WIDTH="${OPTIMIZE_WIDTH:-1600}"
 OPTIMIZE_QUALITY="${OPTIMIZE_QUALITY:-82}"
-RECIPES=(hero-horda horda-onda-alta cidade-ampla sonar tela-dividida aereo-na-horda granada-na-horda swat-aliado airdrop airdrop-aviao pvp-freezetime pvp-rodada pvp-fim-de-rodada)
+RECIPES=(hero-horda horda-onda-alta cidade-ampla sonar tela-dividida aereo-na-horda granada-na-horda swat-aliado airdrop airdrop-aviao pvp-loadout pvp-mata-mata pvp-fim-de-partida)
 GIF_DIR="$IMAGE_DIR_ZUMBIS"
 # Uma receita por variante de zumbi (21 no enum de zombie_mutator.gd): elas so
 # rodam com --gif ou --shot=zumbi-NN, nunca no lote normal (sao lentas).

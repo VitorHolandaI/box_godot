@@ -239,18 +239,24 @@ func collect_pvp_inputs(local_players: Array[Node], tree: SceneTree, delta: floa
 	return states
 
 
-## Jogador inimigo vivo mais perto (o proprio bot e os caidos ficam de fora).
+## Jogador inimigo vivo mais perto (o proprio bot, os caidos e — no mata-mata —
+## os COMPANHEIROS DE TIME ficam de fora). Sem o filtro de time o bot atirava no
+## proprio time: ele so media distancia, e num mata-mata isso e o companheiro do
+## lado (ver TdmMatch, que ainda pune o placar por fogo amigo).
 ## Uso: var alvo := _nearest_enemy_player(bot, tree)
 func _nearest_enemy_player(player: Node3D, tree: SceneTree) -> Node3D:
 	if tree == null:
 		return null
 	var nearest: Node3D = null
 	var nearest_distance := 1e9
+	var own_team := int(player.get("pvp_team")) if player.get("pvp_team") != null else -1
 	for node in tree.get_nodes_in_group("player"):
 		var candidate := node as Node3D
 		if candidate == null or candidate == player or not is_instance_valid(candidate):
 			continue
 		if bool(candidate.get("is_eliminated")) or bool(candidate.get("is_swat_bot")):
+			continue
+		if own_team >= 0 and int(candidate.get("pvp_team")) == own_team:
 			continue
 		var distance := candidate.global_position.distance_to(player.global_position)
 		if distance < nearest_distance:

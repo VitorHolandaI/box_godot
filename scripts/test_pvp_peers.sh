@@ -65,12 +65,12 @@ for index in $(seq 1 "$peer_count"); do
 done
 
 # Da tempo para a partida andar (compra de 15 s + combate) e os bots do
-# servidor trocarem tiros: sem isso o servidor e morto antes de pvp_round/
+# servidor trocarem tiros: sem isso o servidor e morto antes de pvp_match_started/
 # pvp_kill existirem.
 printf '%s\n' "Aguardando a partida PVP andar..."
 pvp_deadline=$((SECONDS + 120))
 while (( SECONDS < pvp_deadline )); do
-	if grep -qE '"event":"pvp_kill"' "$work_dir/server.log" && grep -qE '"event":"pvp_round"' "$work_dir/server.log"; then
+	if grep -qE '"event":"pvp_kill"' "$work_dir/server.log" && grep -qE '"event":"pvp_match_started"' "$work_dir/server.log"; then
 		break
 	fi
 	sleep 3
@@ -94,8 +94,8 @@ else
 	failures=$((failures + 1))
 fi
 
-if grep -qE '"event":"pvp_round"' "$work_dir/server.log"; then
-	printf 'PASS: a partida PVP comecou (pvp_round)\n'
+if grep -qE '"event":"pvp_match_started"' "$work_dir/server.log"; then
+	printf 'PASS: a partida de mata-mata comecou (pvp_match_started)\n'
 else
 	printf 'FALHA: o servidor nao iniciou rodada de PVP\n'
 	failures=$((failures + 1))

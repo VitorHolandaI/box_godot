@@ -60,14 +60,16 @@ git clone <URL-do-repositorio> /srv/box-godot
 cd /srv/box-godot
 sudo ufw allow 27015/udp
 sudo ufw deny 27015/tcp
-docker compose up --build -d
+docker compose --profile survival up -d --build   # ou --profile tdm / classic
 docker compose ps
-docker compose logs -f game-server
+docker compose logs -f survival
 ```
 
 No firewall do provedor da VPS, libere `27015/udp` e mantenha `27015/tcp`
-bloqueada. Se outra porta for necessaria, defina `GAME_SERVER_PORT` no compose,
-no firewall e no comando dos clientes com o mesmo valor.
+bloqueada. Cada modo tem a sua porta (27015 sobrevivencia, 27017 mata-mata,
+27019 classico); se outra porta for necessaria, defina `SURVIVAL_PORT` /
+`TDM_PORT` / `CLASSIC_PORT` no compose, no firewall e no comando dos clientes
+com o mesmo valor. Ver [modos-e-containers.md](modos-e-containers.md).
 
 O branch do MVP procedural deve ser criado somente apos a release 0.1 estar
 testada e marcada. Ele sera separado para nao misturar a experimentacao de
