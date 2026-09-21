@@ -815,9 +815,17 @@ func _connect_crate_weapon_signals(player: Node) -> void:
 	player.crate_weapon_broken.connect(_on_crate_weapon_broken.bind(player))
 
 
-## Drop da arma da mao: no servidor/offline spawna a pickup no chao; clientes
-## recebem o no pelo sync por nome no snapshot. O player vem por ultimo
-## porque Callable.bind() anexa o argumento atado no FIM da lista.
+## Quanto tempo a arma largada fica no chao no mata-mata. O padrao da pickup e
+## 600 s, o tempo INTEIRO de uma partida: com respawn a cada 5 s e 50 abates, o
+## mapa viraria um tapete de armas e a lista do chao (replicada inteira a cada
+## mudanca) cresceria a partida toda. 45 s da para correr ate o corpo e pegar.
+const PVP_DROP_LIFETIME_SECONDS := 45.0
+
+
+## Drop da arma da mao (tecla de largar ou morte no mata-mata): no
+## servidor/offline spawna a pickup no chao; clientes recebem o no pelo sync por
+## nome no snapshot. O player vem por ultimo porque Callable.bind() anexa o
+## argumento atado no FIM da lista.
 ## Uso: conectado ao sinal crate_weapon_dropped do jogador.
 func _on_crate_weapon_dropped(kind: int, mag: int, reserve: int, durability: int, player: Node) -> void:
 	if NetworkSession.is_client():
@@ -826,7 +834,9 @@ func _on_crate_weapon_dropped(kind: int, mag: int, reserve: int, durability: int
 	forward.y = 0.0
 	var drop_position: Vector3 = player.global_position + forward.normalized() * 1.2 if not forward.is_zero_approx() else player.global_position
 	drop_position.y = player.global_position.y
-	_add_ground_weapon(kind, mag, reserve, durability, drop_position)
+	var pickup := _add_ground_weapon(kind, mag, reserve, durability, drop_position)
+	if NetworkSession.pvp_mode:
+		pickup.lifetime_seconds = PVP_DROP_LIFETIME_SECONDS
 
 
 ## Cria arma no chao com nome estavel e marca o sync. Antes o drop manual nao
