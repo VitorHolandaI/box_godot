@@ -801,13 +801,27 @@ func _spawn_break_debris() -> void:
 
 
 func _drop_current_crate_weapon() -> void:
-	var dropped_kind := current_weapon
+	_drop_crate_weapon(current_weapon)
+
+
+## Larga TODA arma de crate do slot, nao so a que esta na mao. Usado na morte do
+## mata-mata: o abate vira despojo, com a municao e o desgaste que a arma tinha.
+## Uso: player.drop_all_crate_weapons()
+func drop_all_crate_weapons() -> void:
+	for kind in weapon_slots.kinds.duplicate():
+		_drop_crate_weapon(int(kind))
+
+
+## Tira a arma do slot e avisa quem cria a pickup no chao (o main). Sem arma de
+## crate desse tipo no slot nao faz nada.
+func _drop_crate_weapon(dropped_kind: int) -> void:
 	if not WeaponStats.is_crate_weapon(dropped_kind):
 		return
 	var dropped_state := weapon_slots.remove_kind(dropped_kind)
 	if dropped_state.is_empty():
 		return
-	current_weapon = Weapon.KNIFE
+	if current_weapon == dropped_kind:
+		current_weapon = Weapon.KNIFE
 	_update_weapon_models()
 	crate_weapon_dropped.emit(dropped_kind, int(dropped_state.get("mag", 0)), int(dropped_state.get("reserve", 0)), int(dropped_state.get("durability", 0)))
 
@@ -1457,6 +1471,9 @@ func _pvp_damage_blocked(source: Node) -> bool:
 func _pvp_die() -> void:
 	var killer: Node = last_attacker if is_instance_valid(last_attacker) else null
 	last_attacker = null
+	# Larga a arma ANTES de sumir do mundo: o drop nasce na posicao do morto, e
+	# depois disso o corpo ja esta invisivel e fora de colisao.
+	drop_all_crate_weapons()
 	pvp_deaths += 1
 	pvp_respawn_left = TdmMatch.RESPAWN_SECONDS
 	spawn_protection_left = 0.0

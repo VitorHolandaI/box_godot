@@ -20,11 +20,20 @@ acabado de entrar).
 | Invulnerabilidade | **4 s** ao renascer; o **primeiro tiro cancela** |
 | Fogo amigo | nao machuca, e matar companheiro **tira 1** do placar do time |
 | Arma | **escolha livre** (tecla **B**), de graca, todo o arsenal |
+| Durabilidade | **vale**: a arma desgasta, degrada e quebra na mao |
+| Ao morrer | **larga a arma no chao** com a municao e o desgaste dela (fica 45 s) |
 | Bases | as duas safehouses, em **cantos opostos** do mapa (~165 m) |
 
 A troca de arma vale **na hora** quando voce esta dentro da propria base (ou
 ainda protegido do respawn); fora dela ela entra **na proxima vida** — trocar de
 fuzil no meio do tiroteio seria arma infinita de graca.
+
+Escolher a arma e de graca, mas ela **nao e eterna**: a durabilidade continua
+valendo como no survival. Conforme desgasta, a arma degrada (spread dobrado,
+chance de falha) e acaba quebrando na mao, caindo para a faca. Quem morre
+**larga a arma no chao** com a municao e o desgaste que ela tinha, e ela fica
+45 s la — o abate vira despojo e vale correr ate o corpo. No respawn voce volta
+com a arma escolhida **nova**.
 
 A sala aparece como **Mata-mata PVP** e o HUD nao mostra nada de zumbi (sem
 contador de horda, sem sonar).
