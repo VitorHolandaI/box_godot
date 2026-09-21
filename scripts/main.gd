@@ -119,18 +119,17 @@ var player_snapshot_sequence := 0
 ## (ver SwatSquadBot) e replicado pelo snapshot de jogadores. A conducao inteira
 ## vive em SwatSquadDirector; aqui ficam so os RPCs.
 var swat := SwatSquadDirector.new(self)
-## Mata-mata (--pvp): bots, rodadas, economia e rota entre as bases vivem em
-## PvpServerDirector. Aqui ficam so os RPCs e o estado replicado abaixo.
+## Mata-mata (--pvp): times, bots, respawn e rota entre as bases vivem em
+## PvpServerDirector; as regras em TdmMatch. Aqui ficam so os RPCs e o estado
+## replicado abaixo.
 var pvp := PvpServerDirector.new(self)
-## Estado replicado do mata-mata para o cliente (linha de HUD e dica de compra).
+## Estado replicado do mata-mata para o cliente (linha de HUD com placar).
 var pvp_state_text := ""
-var pvp_buy_open := false
-var pvp_buy_seconds_left := 0.0
 var pvp_state_elapsed := 0.0
-## Ultimo motivo de recusa de compra (mostrado no menu de compra do cliente).
-var last_purchase_rejection := ""
-## Menu de compra do cliente (tecla B), criado quando o jogador local existe.
-var buy_menu: BuyMenu = null
+## Ultima resposta do servidor a escolha de arma no mata-mata ("" = equipou).
+var last_loadout_message := ""
+## Menu de arma do cliente (tecla B), criado quando o jogador local existe.
+var loadout_menu: LoadoutMenu = null
 var loot_rng := RandomNumberGenerator.new()
 ## Jogadores na sala no frame anterior: a sala reinicia na TRANSICAO para vazia.
 var _previous_player_count := 0
@@ -456,7 +455,7 @@ func _tick_classic_spawns(delta: float) -> void:
 ## input, consome fila de spawn) ou o do servidor (manda os snapshots).
 func _physics_process(delta: float) -> void:
 	perf_probe.record_physics_step()
-	_open_buy_menu_when_ready()
+	_open_loadout_menu_when_ready()
 	if not NetworkSession.is_client():
 		# Servidor e offline simulam o esquadrao; o cliente so aplica snapshot.
 		swat.update(delta)
@@ -473,16 +472,16 @@ func _physics_process(delta: float) -> void:
 		_tick_server_network(delta)
 
 
-## Menu de compra do mata-mata: so no cliente e so depois que o jogador local
+## Menu de arma do mata-mata: so no cliente e so depois que o jogador local
 ## existe (ele e criado a partir do roster, que chega depois da cena).
-func _open_buy_menu_when_ready() -> void:
+func _open_loadout_menu_when_ready() -> void:
 	if not (NetworkSession.is_client() and NetworkSession.pvp_mode):
 		return
-	if buy_menu != null or local_players.is_empty():
+	if loadout_menu != null or local_players.is_empty():
 		return
-	buy_menu = BuyMenu.new()
-	add_child(buy_menu)
-	buy_menu.setup(local_players[0], Callable(self, "request_purchase_local"), Callable(self, "pvp_status_text"))
+	loadout_menu = LoadoutMenu.new()
+	add_child(loadout_menu)
+	loadout_menu.setup(local_players[0], Callable(self, "choose_loadout_local"), Callable(self, "pvp_status_text"))
 
 
 ## Cliente: IA do bot de teste, medidor de atraso, envio de input e a fila de
@@ -1112,11 +1111,6 @@ func _submit_inputs(states: Array) -> void:
 		var player = network_players.get(_player_key(sender_id, slot))
 		if player == null:
 			continue
-		if pvp.is_buy_phase():
-			# Freezetime: ninguem anda enquanto escolhe arma (comprar vai por RPC
-			# proprio, entao continua funcionando).
-			player.apply_network_input(PvpMatch.frozen_input(state))
-			continue
 		player.apply_network_input(state)
 
 
@@ -1548,10 +1542,10 @@ func get_survival_hud_text() -> String:
 	return survival_wave_controller.get_hud_text() if NetworkSession.survival_mode else ""
 
 
-## Ponte de rede do mata-mata. A simulacao inteira (bots, rodadas, compra,
-## rota entre as bases) vive em PvpServerDirector; aqui ficam so os RPCs, que
+## Ponte de rede do mata-mata. A simulacao inteira (times, bots, respawn, rota
+## entre as bases) vive em PvpServerDirector; aqui ficam so os RPCs, que
 ## precisam de um no na arvore para o Godot rotear, e o estado replicado que o
-## menu de compra e a captura de telas leem por nome deste script.
+## menu de arma e a captura de telas leem por nome deste script.
 ## Uso: godot --headless --path . -- --server --pvp --pvp-bots=4
 func broadcast_pvp_bots(count: int) -> void:
 	for peer_id in multiplayer.get_peers():
@@ -1565,39 +1559,37 @@ func _spawn_pvp_bots_rpc(count: int) -> void:
 	pvp.create_client_bots(count)
 
 
-func broadcast_pvp_state(text: String, in_buy: bool, buy_seconds_left: float) -> void:
+func broadcast_pvp_state(text: String) -> void:
 	for peer_id in NetworkSession.loaded_peers:
-		_pvp_state.rpc_id(int(peer_id), text, in_buy, buy_seconds_left)
+		_pvp_state.rpc_id(int(peer_id), text)
 
 
 @rpc("authority", "call_remote", "reliable")
-func _pvp_state(text: String, in_buy: bool, buy_seconds_left: float) -> void:
+func _pvp_state(text: String) -> void:
 	if not NetworkSession.is_client():
 		return
 	pvp_state_text = text
-	pvp_buy_open = in_buy
-	pvp_buy_seconds_left = buy_seconds_left
 
 
-## Compra pedida pelo jogador local (menu de compra). No cliente vai por RPC;
+## Arma escolhida pelo jogador local (menu de loadout). No cliente vai por RPC;
 ## offline resolve direto, que e o mesmo caminho do servidor.
-## Uso: conectado ao BuyMenu.
-func request_purchase_local(kind: int) -> void:
+## Uso: conectado ao LoadoutMenu.
+func choose_loadout_local(kind: int) -> void:
 	if NetworkSession.is_client():
-		_request_purchase.rpc_id(NetworkSession.SERVER_ID, kind, 0)
+		_request_loadout.rpc_id(NetworkSession.SERVER_ID, kind, 0)
 		return
 	if NetworkSession.is_offline() and not local_players.is_empty():
-		last_purchase_rejection = pvp.request_purchase(local_players[0], kind)
+		last_loadout_message = pvp.choose_loadout(local_players[0], kind)
 
 
-## Ultima recusa de compra (o menu mostra essa linha). Limpa na proxima compra.
+## Ultima resposta do servidor a escolha de arma (o menu mostra essa linha).
 ## Uso: var texto := main.pvp_status_text()
 func pvp_status_text() -> String:
-	return last_purchase_rejection
+	return last_loadout_message
 
 
 @rpc("any_peer", "call_remote", "reliable")
-func _request_purchase(kind: int, slot: int) -> void:
+func _request_loadout(kind: int, slot: int) -> void:
 	if not NetworkSession.is_server():
 		return
 	var sender_id := multiplayer.get_remote_sender_id()
@@ -1607,14 +1599,14 @@ func _request_purchase(kind: int, slot: int) -> void:
 	var player = network_players.get(_player_key(sender_id, slot))
 	if player == null:
 		return
-	_pvp_purchase_result.rpc_id(sender_id, kind, pvp.request_purchase(player, kind))
+	_pvp_loadout_result.rpc_id(sender_id, kind, pvp.choose_loadout(player, kind))
 
 
 @rpc("authority", "call_remote", "reliable")
-func _pvp_purchase_result(kind: int, rejection: String) -> void:
-	last_purchase_rejection = rejection
+func _pvp_loadout_result(kind: int, rejection: String) -> void:
+	last_loadout_message = rejection
 	if not rejection.is_empty():
-		print(JSON.stringify({"event": "pvp_buy_refused", "kind": kind, "reason": rejection}))
+		print(JSON.stringify({"event": "pvp_loadout_adiado", "kind": kind, "reason": rejection}))
 
 
 ## Transicao de onda: o barato roda na hora (vidas, estado do HUD) e o que

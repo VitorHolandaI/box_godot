@@ -536,45 +536,46 @@ static func stats_for(kind: int) -> Dictionary:
 	return STATS_BY_KIND.get(kind, {})
 
 
-## Precos do modo PVP (mata-mata estilo CS). Fonte unica para o menu de compra
-## e para a validacao no servidor; arma fora daqui nao pode ser comprada.
-## Uso: var preco := WeaponStats.price_for(WeaponStats.Kind.UZI)
-const PRICES_BY_KIND: Dictionary = {
-	Kind.UZI: 1400,
-	Kind.SHOTGUN: 1200,
-	Kind.MAGNUM: 700,
-	Kind.DOUBLE_BARREL: 900,
-	Kind.SAWED_OFF: 1100,
-	Kind.CARBINE: 2000,
-	Kind.AUTO_SHOTGUN: 2200,
-	Kind.AK47: 2700,
-	Kind.M4: 2900,
-	Kind.AUG: 3300,
-	Kind.BERETTA: 500,
-	Kind.SNIPER: 4500,
-	Kind.CROSSBOW: 3600,
-	Kind.BAZOOKA: 6000,
-	Kind.GRENADE_LAUNCHER: 4000,
-	Kind.CHAINSAW: 3000,
-	Kind.FLAMETHROWER: 3500,
-	Kind.LASER_RIFLE: 5200,
-	Kind.PLASMA_SMG: 4800,
-	Kind.RAILGUN: 7000,
-}
+## Ordem do arsenal no menu de loadout do mata-mata, do leve para o pesado.
+## O mata-mata NAO tem economia (ver TdmMatch): o jogador escolhe a arma que
+## quiser de graca, entao esta lista e so a ordem de exibicao — antes ela era a
+## tabela de precos, e a ordem era o preco.
+## Uso: for kind in WeaponStats.loadout_kinds(): ...
+const LOADOUT_ORDER: Array[int] = [
+	Kind.BERETTA,
+	Kind.MAGNUM,
+	Kind.DOUBLE_BARREL,
+	Kind.SAWED_OFF,
+	Kind.SHOTGUN,
+	Kind.UZI,
+	Kind.CARBINE,
+	Kind.AUTO_SHOTGUN,
+	Kind.AK47,
+	Kind.M4,
+	Kind.CHAINSAW,
+	Kind.AUG,
+	Kind.FLAMETHROWER,
+	Kind.CROSSBOW,
+	Kind.GRENADE_LAUNCHER,
+	Kind.SNIPER,
+	Kind.PLASMA_SMG,
+	Kind.LASER_RIFLE,
+	Kind.BAZOOKA,
+	Kind.RAILGUN,
+]
 
 
-## Preco da arma (0 quando nao e compravel). Uso: var preco := WeaponStats.price_for(kind)
-static func price_for(kind: int) -> int:
-	return int(PRICES_BY_KIND.get(kind, 0))
-
-
-## Armas compraveis, na ordem do catalogo (menor preco primeiro).
-## Uso: for kind in WeaponStats.purchasable_kinds(): ...
-static func purchasable_kinds() -> Array[int]:
+## Todo o arsenal de crate, na ordem de exibicao. Arma nova que ainda nao esteja
+## em LOADOUT_ORDER entra no fim em vez de sumir do menu.
+## Uso: for kind in WeaponStats.loadout_kinds(): ...
+static func loadout_kinds() -> Array[int]:
 	var kinds: Array[int] = []
-	for kind in PRICES_BY_KIND:
-		kinds.append(int(kind))
-	kinds.sort_custom(func(first: int, second: int) -> bool: return price_for(first) < price_for(second))
+	for kind in LOADOUT_ORDER:
+		if STATS_BY_KIND.has(kind):
+			kinds.append(int(kind))
+	for kind in STATS_BY_KIND:
+		if not kinds.has(int(kind)):
+			kinds.append(int(kind))
 	return kinds
 
 
