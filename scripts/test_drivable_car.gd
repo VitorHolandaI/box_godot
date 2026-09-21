@@ -25,6 +25,7 @@ func run(test_root: Node) -> void:
 	await _test_car_lab_has_bot_driving(test_root)
 	_test_client_proxy_follows_snapshot(test_root)
 	_test_client_proxy_ignores_bad_snapshot(test_root)
+	_test_passenger_proxy_rides_the_seat(test_root)
 
 
 ## A vida cai com take_damage; em 0 o carro fica destruido e nao aceita motorista.
@@ -310,6 +311,54 @@ func _test_client_proxy_follows_snapshot(test_root: Node) -> void:
 		_fail(test_root, "Proxy do carro deveria manter o modelo visual montado; Visual vazio.")
 		return
 	print("PASS: Proxy do cliente segue o snapshot e mantem o visual.")
+
+
+## Regressao do "passageiro solto do carro": no cliente o proxy do passageiro
+## seguia o SNAPSHOT DELE, interpolado com atraso proprio, enquanto o carro
+## seguia o snapshot DELE com outro atraso (120 ms no carro contra 200 ms no
+## jogador). Os dois atrasos nao batem, entao em velocidade o passageiro ficava
+## metros atras do carro — quanto mais rapido, maior a sobra. O motorista nunca
+## mostrou isso porque ele ja era grudado no banco antes de interpolar.
+## Uso: registrado em run()
+func _test_passenger_proxy_rides_the_seat(test_root: Node) -> void:
+	print("Testando passageiro grudado no banco no cliente...")
+	var car: DrivableCar = CAR_SCENE.instantiate()
+	test_root.add_child(car)
+	car.set("network_proxy", true)
+	car.global_position = Vector3.ZERO
+	var passenger := PLAYER_SCENE.instantiate() as CharacterBody3D
+	passenger.reads_local_input = false
+	passenger.is_local_controller = false
+	# Proxy: e o cliente que nao simula este jogador.
+	passenger.simulation_enabled = false
+	test_root.add_child(passenger)
+	car.call("enter_gunner", passenger)
+	if not bool(passenger.call("is_riding")):
+		_fail(test_root, "O jogador deveria entrar como passageiro do carro.")
+		passenger.free()
+		car.free()
+		return
+	# O carro anda 30 m; o snapshot do passageiro fica para tras de proposito,
+	# como acontece de verdade quando os dois atrasos de interpolacao diferem.
+	car.global_position = Vector3(30.0, 0.0, 0.0)
+	passenger.call("apply_network_state", {
+		"position": Vector3(24.0, 0.0, 0.0),
+		"rotation": 0.0,
+		"health": 100,
+	})
+	passenger.call("_physics_process", 0.016)
+	var seat: Vector3 = car.call("gunner_seat_position")
+	# A posicao e lida ANTES do free: montar a mensagem de falha depois do free
+	# acessa um no liberado, e a falha vira um erro de script ilegivel em vez do
+	# motivo (foi o que aconteceu ao validar este teste contra o codigo antigo).
+	var landed: Vector3 = passenger.global_position
+	var gap := landed.distance_to(seat)
+	passenger.free()
+	car.free()
+	if gap > 0.05:
+		_fail(test_root, "Passageiro deveria ficar no banco (%s); ficou a %.2f m dele, em %s." % [seat, gap, landed])
+		return
+	print("PASS: Passageiro do cliente fica no banco mesmo com o snapshot dele atrasado.")
 
 
 ## Snapshot corrompido (NaN/infinito ou basis degenerada) nao pode sumir com o
