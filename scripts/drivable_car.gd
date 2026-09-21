@@ -85,6 +85,10 @@ var _proxy_samples: Array = []
 ## (agora - atraso). Esconde o passo de 10 Hz ao custo de ~120 ms de latencia.
 const PROXY_INTERP_DELAY := 0.12
 const PROXY_MAX_SAMPLES := 24
+## Posicao local de spawn do proxy; base do diagnostico de desvio do snapshot.
+var _proxy_spawn_position := Vector3.ZERO
+## Ja logou o primeiro desvio? Evita repetir a linha a cada snapshot.
+var _proxy_drift_logged := false
 
 ## Volante visual proprio: o aro gira com o esterço por cima do volante estatico
 ## do modelo (o GLB e malha unica e nao da pra girar so a peca do volante).
@@ -122,6 +126,7 @@ func _ready() -> void:
 	network_proxy = NetworkSession.is_client()
 	if network_proxy:
 		freeze = true
+		_proxy_spawn_position = global_position
 
 
 ## A mola default do VehicleWheel3D e fraca demais para o peso do carro: o
@@ -293,17 +298,49 @@ func get_network_state() -> Dictionary:
 func apply_network_state(state: Dictionary) -> void:
 	var position: Variant = state.get("position")
 	var basis: Variant = state.get("basis")
-	if position is Vector3 and basis is Basis:
-		_target_transform = Transform3D(basis as Basis, position as Vector3)
+	if position is Vector3 and basis is Basis and _is_usable_transform(position as Vector3, basis as Basis):
+		var server_position := position as Vector3
+		_target_transform = Transform3D(basis as Basis, server_position)
 		_proxy_samples.append({"t": _now_seconds(), "xf": _target_transform})
 		while _proxy_samples.size() > PROXY_MAX_SAMPLES:
 			_proxy_samples.pop_front()
+		_log_proxy_drift_once(server_position)
 	health = int(state.get("health", health))
 	fuel = float(state.get("fuel", fuel))
 	steering = float(state.get("steering", steering))
 	_spin_steering_wheel()
 	if bool(state.get("destroyed", false)) and not is_destroyed:
 		_destroy_car()
+
+
+## Snapshot usavel: NaN/infinito ou basis degenerada poriam o carro fora do
+## mundo (o proxy some). Snapshot ruim e ignorado; vale o ultimo transform bom.
+## Uso: interno de apply_network_state
+func _is_usable_transform(position: Vector3, basis: Basis) -> bool:
+	if not (is_finite(position.x) and is_finite(position.y) and is_finite(position.z)):
+		return false
+	var determinant := basis.determinant()
+	return is_finite(determinant) and absf(determinant) > 0.0001
+
+
+## Diagnostico de "o carro sumiu no online": o proxy nasce na posicao
+## deterministica local e passa a seguir o servidor. Se o servidor mandar o carro
+## longe do spawn (empurrado/derrubado do lado de la), loga o desvio uma vez.
+## Uso: interno de apply_network_state
+func _log_proxy_drift_once(server_position: Vector3) -> void:
+	if _proxy_drift_logged:
+		return
+	_proxy_drift_logged = true
+	var drift := server_position.distance_to(_proxy_spawn_position)
+	if drift < 2.0:
+		return
+	print(JSON.stringify({
+		"event": "car_proxy_drift",
+		"car": String(name),
+		"spawn": [_proxy_spawn_position.x, _proxy_spawn_position.y, _proxy_spawn_position.z],
+		"server": [server_position.x, server_position.y, server_position.z],
+		"drift": snappedf(drift, 0.1),
+	}))
 
 
 ## Tira o ocupante e devolve o carro ao freio de estacionamento.

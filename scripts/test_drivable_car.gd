@@ -24,6 +24,7 @@ func run(test_root: Node) -> void:
 	await _test_bot_drives_and_advances_waypoint(test_root)
 	await _test_car_lab_has_bot_driving(test_root)
 	_test_client_proxy_follows_snapshot(test_root)
+	_test_client_proxy_ignores_bad_snapshot(test_root)
 
 
 ## A vida cai com take_damage; em 0 o carro fica destruido e nao aceita motorista.
@@ -83,7 +84,9 @@ func _ensure_local_actions() -> void:
 func _test_driving_input_mapping(test_root: Node) -> void:
 	print("Testando o mapeamento das teclas de direcao...")
 	var player = PLAYER_SCENE.instantiate()
-	player.set("reads_local_input", false)
+	# `get_vehicle_input` so le o Input local com `reads_local_input` (o remoto usa
+	# o `vehicle_input` que chegou pela rede): o teste pressiona teclas locais.
+	player.set("reads_local_input", true)
 	test_root.add_child(player)
 	var forward := _press_axis(player, "up")
 	var back := _press_axis(player, "down")
@@ -307,6 +310,27 @@ func _test_client_proxy_follows_snapshot(test_root: Node) -> void:
 		_fail(test_root, "Proxy do carro deveria manter o modelo visual montado; Visual vazio.")
 		return
 	print("PASS: Proxy do cliente segue o snapshot e mantem o visual.")
+
+
+## Snapshot corrompido (NaN/infinito ou basis degenerada) nao pode sumir com o
+## proxy: vale o ultimo transform bom. Uso: registrado em run()
+func _test_client_proxy_ignores_bad_snapshot(test_root: Node) -> void:
+	print("Testando que o proxy ignora snapshot corrompido...")
+	var car: DrivableCar = CAR_SCENE.instantiate()
+	test_root.add_child(car)
+	car.set("network_proxy", true)
+	car.call("apply_network_state", {"position": Vector3(10.0, 0.0, 0.0), "basis": Basis.IDENTITY})
+	car.call("_physics_process", 0.1)
+	var good: Vector3 = car.global_position
+	car.call("apply_network_state", {"position": Vector3(NAN, NAN, NAN), "basis": Basis.IDENTITY})
+	car.call("apply_network_state", {"position": Vector3(9999.0, 0.0, 0.0), "basis": Basis(Vector3.ZERO, Vector3.ZERO, Vector3.ZERO)})
+	car.call("_physics_process", 0.1)
+	var after: Vector3 = car.global_position
+	car.free()
+	if after.distance_to(good) > 1.0:
+		_fail(test_root, "Snapshot corrompido deveria ser ignorado; antes=%s depois=%s." % [good, after])
+		return
+	print("PASS: Proxy ignora snapshot corrompido e mantem o ultimo bom.")
 
 
 func _fail(test_root: Node, message: String) -> void:
