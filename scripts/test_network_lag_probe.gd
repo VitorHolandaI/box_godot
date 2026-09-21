@@ -27,15 +27,15 @@ func _test_snapshot_intervals(test_root: Node) -> void:
 	print("Testando intervalos entre snapshots completos...")
 	var probe = LAG_PROBE_SCRIPT.new()
 	probe.duration_seconds = 1.0
-	# Snapshot 0 chega em dois pacotes; o 1 chega 100 ms depois; o 2 atrasa 400 ms.
+	# Snapshot 0 chega em dois pacotes; o 1 chega 50 ms depois; o 2 atrasa 200 ms.
 	probe.record_zombie_packet(0, 0, 2, 4, 1_000_000)
 	probe.record_zombie_packet(0, 1, 2, 3, 1_010_000)
-	probe.record_zombie_packet(1, 0, 1, 7, 1_110_000)
-	probe.record_zombie_packet(1, 0, 1, 7, 1_120_000)
-	probe.record_zombie_packet(2, 0, 1, 7, 1_510_000)
+	probe.record_zombie_packet(1, 0, 1, 7, 1_060_000)
+	probe.record_zombie_packet(1, 0, 1, 7, 1_070_000)
+	probe.record_zombie_packet(2, 0, 1, 7, 1_260_000)
 	var finished: bool = probe.tick(1.0, 80.0)
 	var report: Dictionary = probe.build_report()
-	var intervals_ok := is_equal_approx(float(report["snapshot_interval_ms_max"]), 400.0) and int(report["late_snapshots"]) == 1
+	var intervals_ok := is_equal_approx(float(report["snapshot_interval_ms_max"]), 200.0) and int(report["late_snapshots"]) == 1
 	if not finished or not intervals_ok or int(report["zombies_last"]) != 7 or not is_equal_approx(float(report["rtt_ms_avg"]), 80.0):
 		_fail(test_root, "Relatorio da sonda inesperado: %s." % report)
 		return
