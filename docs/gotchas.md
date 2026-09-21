@@ -77,7 +77,7 @@ gotcha novo, adicione aqui.
 
 ### 9. Interpolacao do carro: buffer por tempo, nao perseguir o alvo
 - **Sintoma:** mini-teleportes no carro do cliente.
-- **Causa:** aplicar `interpolate_with` direto no alvo a 10 Hz anda em degraus.
+- **Causa:** aplicar `interpolate_with` direto no alvo a 20 Hz anda em degraus.
 - **Regra:** guardar um buffer de transforms e interpolar por tempo de render
   com atraso (`PROXY_INTERP_DELAY = 0.12`), como o `SnapshotInterpBuffer` dos
   jogadores. Mesma ideia para qualquer proxy de rede.
