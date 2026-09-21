@@ -275,12 +275,12 @@ func _physics_process(delta: float) -> void:
 		return
 	if is_riding():
 		# Passageiro: preso ao assento traseiro, mas ainda mira e atira (sem
-		# andar). No cliente o proxy segue o snapshot (posicao + mira que o
-		# servidor calculou); na autoridade o assento e sincronizado depois do
-		# input para o corpo seguir a mira.
+		# andar). No cliente o proxy GRUDA no banco do carro (nao no snapshot
+		# dele); na autoridade o assento e sincronizado depois do input para o
+		# corpo seguir a mira.
 		_advance_action_clocks(delta)
 		if not simulation_enabled:
-			_interpolate_proxy(delta)
+			_ride_as_proxy()
 			return
 		_handle_vehicle_exit()
 		_collect_tick_input(delta)
@@ -1152,6 +1152,36 @@ func _apply_steering_pose(steering: float) -> void:
 		left_arm.rotation.z = SEATED_ARM_INWARD + swing
 	if right_arm != null:
 		right_arm.rotation.z = -SEATED_ARM_INWARD + swing
+
+
+## Proxy do passageiro no cliente: a POSICAO vem do banco do carro, e so o
+## OLHAR vem do snapshot dele.
+##
+## Antes o passageiro seguia o proprio snapshot, interpolado com atraso proprio,
+## enquanto o carro seguia o dele com outro atraso — 120 ms no carro
+## (DrivableCar.PROXY_INTERP_DELAY) contra ~200 ms no jogador
+## (SnapshotInterpBuffer: 2 intervalos de 100 ms). Os dois nunca batem, entao o
+## passageiro era desenhado ~80 ms no passado em relacao ao carro: a 20 m/s isso
+## e 1,6 m atras do banco, e piora com a velocidade. Era o "passageiro solto do
+## carro" do multiplayer. O motorista nunca mostrou o problema porque ele ja era
+## grudado no banco (_sync_to_vehicle) antes de chegar na interpolacao.
+##
+## Grudar no banco tambem torna o passageiro imune a qualquer diferenca futura
+## entre os dois atrasos: ele passa a ser parte do carro, como no servidor.
+## Uso: interno de _physics_process, no ramo do proxy que vai de carona.
+func _ride_as_proxy() -> void:
+	# O olhar continua vindo da rede: e o servidor que decide para onde o
+	# atirador aponta (ou a previsao local, quando o passageiro sou eu).
+	snapshot_buffer.sample(float(Time.get_ticks_msec()))
+	if is_local_controller and first_person:
+		rotation.y = camera_yaw
+	else:
+		rotation.y = snapshot_buffer.rotation
+	var seat_xf: Variant = riding_car.call("gunner_seat_transform")
+	if seat_xf is Transform3D:
+		global_position = (seat_xf as Transform3D).origin
+	velocity = Vector3.ZERO
+	_apply_seated_pose(false)
 
 
 ## Mantem o boneco preso ao assento enquanto dirige. Copia o transform inteiro
