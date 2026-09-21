@@ -94,7 +94,8 @@ tempo. Ver [modos e containers](docs/modos-e-containers.md).
 - **Mata-mata por times (TDM)**: duas bases em cantos opostos, 2 times de uma
   cor cada, placar contínuo até 50 abates (teto de 10 min), respawn em 5 s com
   4 s de invulnerabilidade e **arma à escolha, de graça**. Sem fogo amigo.
-  Munição abundante e arma sem durabilidade. Bots de teste opcionais.
+  Munição abundante, mas a arma desgasta e quebra — e quem morre **larga a arma
+  no chão** para quem passar. Bots de teste opcionais.
 - **Clássico**: zumbis sem a progressão de ondas do survival.
 
 ## Controles
