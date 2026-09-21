@@ -54,6 +54,10 @@ const STEERING_ARM_SWING := 0.6
 ## Porta pode ser usada antes de encostar nela; ainda exige o raycast estar na
 ## frente do boneco, para nao abrir porta atraves de parede.
 const DOOR_INTERACT_REACH := 3.5
+## Distancia HORIZONTAL minima entre o jogador e o ponto de mira para a mira
+## valer (ver aim_point_is_usable). 1,2 m fica fora do corpo do boneco e do
+## alcance da faca, entao nao atrapalha mirar em quem esta colado.
+const MIN_AIM_PLANAR_DISTANCE := 1.2
 ## Segurando interagir ao lado do caido, reanimacao completa em ~3s.
 const REVIVE_DURATION := 3.0
 ## Duracao da animacao de recarga (cosmetica: a municao entra na hora; o valor
@@ -167,6 +171,12 @@ var aim_input := Vector2.ZERO
 ## Foxhole); sem mouse/analogico: horizontal do aim_input. E o que os tiros usam.
 ## ZERO = ainda nao mirada; os disparos caem para a frente do corpo.
 var aim_direction := Vector3.ZERO
+## Ponto do mundo que o retículo/cursor aponta, como veio no pacote de input
+## (Vector3.INF = nao ha). O raio de interagir sai da CABECA ate ele: a
+## `aim_direction` sozinha sai do CANO, e encostado numa porta o cano esta a um
+## palmo do alvo — o angulo dele erra alguns graus, o bastante para o raio
+## passar ao lado da porta. Uso: ver interact_ray_direction.
+var aim_world_point := Vector3.INF
 ## Mira pelo cursor (isometrica) e primeira pessoa. `camera_yaw` e o yaw livre
 ## do modo FPS (o corpo segue ele); `view_pitch` inclina so a camera.
 const AIM_SENSITIVITY := 0.0022
@@ -459,6 +469,7 @@ func apply_network_input(state: Dictionary) -> void:
 	# converge do cano DELE ate o ponto. "aim_dir" fica para bots/versoes antigas.
 	var requested_point: Variant = state.get("aim_point", null)
 	var requested_dir: Variant = state.get("aim_dir", null)
+	aim_world_point = requested_point if requested_point is Vector3 else Vector3.INF
 	if requested_point is Vector3:
 		var to_point: Vector3 = (requested_point as Vector3) - _muzzle_origin()
 		aim_direction = to_point.normalized() if to_point.length_squared() > 0.0001 else -global_transform.basis.z
@@ -983,7 +994,8 @@ func _handle_interaction_input() -> void:
 		ground_weapon.call("interact_with", self)
 		return
 	var ray_start := head.global_position
-	var ray_end := ray_start - global_transform.basis.z * DOOR_INTERACT_REACH
+	var ray_direction := interact_ray_direction(_look_from(ray_start), -global_transform.basis.z)
+	var ray_end := ray_start + ray_direction * DOOR_INTERACT_REACH
 	var query := PhysicsRayQueryParameters3D.create(ray_start, ray_end, 1, [self])
 	var hit := get_world_3d().direct_space_state.intersect_ray(query)
 	var collider: Node = hit.get("collider")
@@ -995,6 +1007,32 @@ func _handle_interaction_input() -> void:
 				collider.interact()
 			return
 		collider = collider.get_parent()
+
+
+## Para onde o raio de interagir (porta) aponta: o OLHAR do jogador, com queda
+## para a frente do corpo quando nao ha mira (analogico parado, bot, avatar sem
+## pacote). Funcao pura para testar sem mundo de fisica.
+##
+## Antes o raio saia direto pela frente do corpo. Em primeira pessoa quem gira o
+## corpo no SERVIDOR e a `aim_direction` do pacote, e ela sai do CANO ate o
+## retículo: encostado na porta o cano esta a um palmo do alvo, entao o angulo
+## dele nao e o da camera. Dava o desencontro classico — a cruz na porta, o raio
+## do servidor passando ao lado, e apertar interagir nao abria nada.
+## Uso: var dir := PlayerCharacter.interact_ray_direction(aim_direction, -basis.z)
+## Olhar a partir de `origin`: do ponto do retículo quando ele veio no pacote,
+## senao a direcao de mira (que sai do cano). Uso: interno do raio de interagir.
+func _look_from(origin: Vector3) -> Vector3:
+	if aim_world_point.is_finite():
+		var to_point := aim_world_point - origin
+		if to_point.length_squared() > 0.0001:
+			return to_point
+	return aim_direction
+
+
+static func interact_ray_direction(aim: Vector3, body_forward: Vector3) -> Vector3:
+	if aim.length_squared() > 0.0001:
+		return aim.normalized()
+	return body_forward.normalized() if body_forward.length_squared() > 0.0001 else Vector3.FORWARD
 
 
 ## Arma no chao mais proxima dentro do raio de interacao (crates airdrop e
@@ -1784,6 +1822,8 @@ func _poll_input() -> void:
 	move_input = _aim_relative_move(Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down"))
 	aim_direction = _local_aim_direction()
 	aim_input = _horizontal_from_direction(aim_direction)
+	var local_point: Variant = _local_aim_target()
+	aim_world_point = local_point if local_point is Vector3 else Vector3.INF
 	jump_pressed = Input.is_action_just_pressed(input_action_prefix + "jump")
 	sprint_pressed = Input.is_action_pressed(input_action_prefix + "sprint")
 	attack_pressed = Input.is_action_just_pressed(input_action_prefix + "attack")
@@ -1921,7 +1961,7 @@ func _local_aim_input() -> Vector2:
 func _local_aim_direction() -> Vector3:
 	var muzzle := _muzzle_origin()
 	var point: Variant = _local_aim_target()
-	if point is Vector3:
+	if point is Vector3 and aim_point_is_usable(global_position, point as Vector3):
 		var to_point: Vector3 = (point as Vector3) - muzzle
 		if to_point.length_squared() > 0.0001:
 			return to_point.normalized()
@@ -1930,6 +1970,19 @@ func _local_aim_direction() -> Vector3:
 	if not aim_input.is_zero_approx():
 		return Vector3(aim_input.x, 0.0, aim_input.y).normalized()
 	return -global_transform.basis.z
+
+
+## O ponto de mira so vale quando esta longe o bastante do jogador NO PLANO: de
+## perto demais, a direcao horizontal do cano ate ele e so ruido.
+##
+## Regressao do rodopio: ao sair da primeira pessoa o cursor e solto no centro
+## da tela, e a camera isometrica faz `looking_at(jogador)` — o centro da tela e
+## o proprio jogador. O corpo passava a perseguir um alvo praticamente embaixo
+## dos pes; como o cano gira junto com o corpo, a direcao virava a cada frame e
+## o boneco rodopiava sem parar. Funcao pura para testar sem camera.
+## Uso: if PlayerCharacter.aim_point_is_usable(global_position, ponto): ...
+static func aim_point_is_usable(origin: Vector3, point: Vector3) -> bool:
+	return Vector2(point.x - origin.x, point.z - origin.z).length() >= MIN_AIM_PLANAR_DISTANCE
 
 
 ## Ponto do mundo que a mira aponta (retículo no FPS, cursor na 3a pessoa), ou
