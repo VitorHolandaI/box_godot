@@ -9,6 +9,7 @@ extends RefCounted
 
 const FRAME_MS := 16.0
 const SNAPSHOT_MS := 100.0
+const TWENTY_HZ_SNAPSHOT_MS := 50.0
 ## O servidor anda 0,5 m entre snapshots (2,2 m/s com o passo de 10 Hz).
 const STEP_METERS := 0.5
 
@@ -21,6 +22,7 @@ func run(test_root: Node) -> void:
 	_test_jitter_grows_delay_within_bounds(test_root)
 	_test_rotation_takes_shortest_path(test_root)
 	_test_sample_history_is_bounded(test_root)
+	_test_twenty_hz_uses_two_interval_delay(test_root)
 	_test_fast_snapshots_do_not_freeze(test_root)
 
 
@@ -70,6 +72,8 @@ func _test_interpolates_between_held_samples(test_root: Node) -> void:
 	buffer.push(SNAPSHOT_MS, Vector3(STEP_METERS, 0.0, 0.0), 0.0, Vector3.ZERO, 0.0)
 	buffer.push(SNAPSHOT_MS * 2.0, Vector3(STEP_METERS * 2.0, 0.0, 0.0), 0.0, Vector3(STEP_METERS, 0.0, 0.0), 0.0)
 	buffer.push(SNAPSHOT_MS * 3.0, Vector3(STEP_METERS * 3.0, 0.0, 0.0), 0.0, Vector3(STEP_METERS * 2.0, 0.0, 0.0), 0.0)
+	# Este caso testa so a escolha do par de amostras, nao a estimativa adaptativa.
+	buffer.delay_ms = SNAPSHOT_MS * 2.0
 	# Render time = 150 ms (350 - 200): entre 0,5 m (100 ms) e 1,0 m (200 ms).
 	buffer.sample(SNAPSHOT_MS * 3.5)
 	var middle := buffer.position.x
@@ -156,6 +160,21 @@ func _test_sample_history_is_bounded(test_root: Node) -> void:
 		return
 	print("PASS: Historico de amostras limitado (%d)." % buffer.sample_count())
 
+## A 20 Hz, dois intervalos sao 100 ms. O piso antigo de 150 ms escondia metade
+## do ganho do snapshot mais rapido mesmo em uma rede sem jitter.
+func _test_twenty_hz_uses_two_interval_delay(test_root: Node) -> void:
+	print("Testando atraso de dois intervalos com snapshots a 20 Hz...")
+	var buffer := SnapshotInterpBuffer.new()
+	buffer.reset(0.0, Vector3.ZERO, 0.0)
+	for index in 20:
+		var now_ms := TWENTY_HZ_SNAPSHOT_MS * float(index + 1)
+		buffer.push(now_ms, Vector3(float(index), 0.0, 0.0), 0.0, Vector3.ZERO, 0.0)
+	var expected_delay_ms := TWENTY_HZ_SNAPSHOT_MS * SnapshotInterpBuffer.DELAY_INTERVALS
+	if buffer.delay_ms > expected_delay_ms + 15.0:
+		_fail(test_root, "Snapshots a 20 Hz deveriam ficar perto de %s ms; veio %s ms." % [expected_delay_ms, buffer.delay_ms])
+		return
+	print("PASS: Snapshots a 20 Hz usam %s ms de atraso." % buffer.delay_ms)
+
 
 ## Servidor mais rapido (15-30 Hz) nao pode reintroduzir o congelamento: o
 ## atraso tem que caber no historico guardado, senao o render time cai antes da
@@ -187,9 +206,6 @@ func _test_fast_snapshots_do_not_freeze(test_root: Node) -> void:
 		return
 	if frozen_frames > 2:
 		_fail(test_root, "Com snapshots de 33 ms o proxy congelou em %d frames; atraso=%s ms intervalo=%s ms." % [frozen_frames, buffer.delay_ms, buffer.interval_ms()])
-		return
-	if buffer.delay_ms >= SnapshotInterpBuffer.MIN_DELAY_MS:
-		_fail(test_root, "Com snapshots de 20 ms o atraso deveria ficar abaixo do piso fixo (%s ms) para caber no historico; veio %s ms." % [SnapshotInterpBuffer.MIN_DELAY_MS, buffer.delay_ms])
 		return
 	print("PASS: Snapshots rapidos interpolam sem congelar (atraso %s ms)." % buffer.delay_ms)
 
