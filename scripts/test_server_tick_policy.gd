@@ -23,8 +23,8 @@ func _test_dedicated_tick_settings(test_root: Node) -> void:
 	var steps := Engine.max_physics_steps_per_frame
 	Engine.physics_ticks_per_second = previous_ticks
 	Engine.max_physics_steps_per_frame = previous_steps
-	if ticks != 30 or steps != 2:
-		_fail(test_root, "Servidor dedicado deveria rodar fisica a 30 Hz com no maximo 2 passos por frame; veio ticks=%d passos=%d." % [ticks, steps])
+	if ticks != 60 or steps != 2:
+		_fail(test_root, "Servidor dedicado deveria rodar fisica a 60 Hz com no maximo 2 passos por frame; veio ticks=%d passos=%d." % [ticks, steps])
 		return
 	print("PASS: Tick de fisica do servidor dedicado validado.")
 
