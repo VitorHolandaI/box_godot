@@ -27,15 +27,19 @@ func _test_snapshot_intervals(test_root: Node) -> void:
 	print("Testando intervalos entre snapshots completos...")
 	var probe = LAG_PROBE_SCRIPT.new()
 	probe.duration_seconds = 1.0
-	# Snapshot 0 chega em dois pacotes; o 1 chega 50 ms depois; o 2 atrasa 200 ms.
+	# Snapshot 0 chega em dois pacotes; o 1 chega no intervalo esperado; o 2
+	# atrasa quatro intervalos e deve ser a unica amostra tardia.
+	var expected_interval_usec := roundi(LAG_PROBE_SCRIPT.EXPECTED_SNAPSHOT_INTERVAL_MS * 1000.0)
+	var first_complete_usec := 1_010_000
 	probe.record_zombie_packet(0, 0, 2, 4, 1_000_000)
-	probe.record_zombie_packet(0, 1, 2, 3, 1_010_000)
-	probe.record_zombie_packet(1, 0, 1, 7, 1_060_000)
-	probe.record_zombie_packet(1, 0, 1, 7, 1_070_000)
-	probe.record_zombie_packet(2, 0, 1, 7, 1_260_000)
+	probe.record_zombie_packet(0, 1, 2, 3, first_complete_usec)
+	probe.record_zombie_packet(1, 0, 1, 7, first_complete_usec + expected_interval_usec)
+	probe.record_zombie_packet(1, 0, 1, 7, first_complete_usec + expected_interval_usec * 2)
+	probe.record_zombie_packet(2, 0, 1, 7, first_complete_usec + expected_interval_usec * 5)
 	var finished: bool = probe.tick(1.0, 80.0)
 	var report: Dictionary = probe.build_report()
-	var intervals_ok := is_equal_approx(float(report["snapshot_interval_ms_max"]), 200.0) and int(report["late_snapshots"]) == 1
+	var expected_max_ms := snappedf(float(expected_interval_usec * 4) / 1000.0, 0.1)
+	var intervals_ok := is_equal_approx(float(report["snapshot_interval_ms_max"]), expected_max_ms) and int(report["late_snapshots"]) == 1
 	if not finished or not intervals_ok or int(report["zombies_last"]) != 7 or not is_equal_approx(float(report["rtt_ms_avg"]), 80.0):
 		_fail(test_root, "Relatorio da sonda inesperado: %s." % report)
 		return
