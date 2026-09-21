@@ -182,6 +182,7 @@ func _ready() -> void:
 		failure_count += 1
 	_test_hit_reaction_flinch()
 	_test_zombie_mutilation_variants()
+	_test_variant_materials_are_shared()
 	_test_ragdoll_mutilation_variants()
 	_test_player_three_lives_and_elimination()
 	_test_player_vision_cone()
@@ -447,6 +448,22 @@ func _test_zombie_mutilation_variants() -> void:
 		zombie.queue_free()
 
 	print("PASS: Todas as 9 variantes anatomicas validadas.")
+
+
+## Materiais de runtime do mutator sao compartilhados por (cor, roughness,
+## emissao): um material novo por zumbi e liberado junto com a malha e o Godot
+## loga "Parameter material is null" (godotengine/godot#85817).
+## Uso: registrado em _ready()
+func _test_variant_materials_are_shared() -> void:
+	print("Testando que os materiais de variante sao compartilhados...")
+	var first := ZombieMutator._quick_mat(Color(0.3, 0.3, 0.3), 0.9)
+	var same := ZombieMutator._quick_mat(Color(0.3, 0.3, 0.3), 0.9)
+	var other := ZombieMutator._quick_mat(Color(0.31, 0.3, 0.3), 0.9)
+	if first == null or first != same or first == other:
+		push_error("FALHA: _quick_mat deveria reaproveitar o material por cor; first=%s same=%s other=%s." % [first, same, other])
+		_mark_failure()
+		return
+	print("PASS: Materiais de variante sao compartilhados por cor.")
 
 
 func _test_ragdoll_mutilation_variants() -> void:

@@ -459,10 +459,7 @@ static func _setup_titan(zombie: CharacterBody3D, _model: Node3D) -> void:
 			var eye := head.get_node_or_null(eye_name) as GeometryInstance3D
 			if eye == null:
 				continue
-			var glow := _quick_mat(Color(1.0, 0.35, 0.05), 0.3)
-			glow.emission_enabled = true
-			glow.emission = Color(1.0, 0.35, 0.05)
-			glow.emission_energy_multiplier = 3.0
+			var glow := _quick_mat(Color(1.0, 0.35, 0.05), 0.3, Color(1.0, 0.35, 0.05), 3.0)
 			eye.material_override = glow
 	var label := zombie.get_node_or_null("HealthLabel") as Label3D
 	if label != null:
@@ -510,11 +507,8 @@ static func _setup_healer(zombie: CharacterBody3D) -> void:
 	var head := zombie.get_node_or_null("Model/Head") as Node3D
 	if head == null:
 		return
-	for piece in [_add_box(head, Vector3(0.08, 0.3, 0.08), Vector3(0.0, 0.55, 0.0), Color(0.4, 1.0, 0.5)), _add_box(head, Vector3(0.24, 0.08, 0.08), Vector3(0.0, 0.58, 0.0), Color(0.4, 1.0, 0.5))]:
-		var glow := (piece.mesh as BoxMesh).material as StandardMaterial3D
-		glow.emission_enabled = true
-		glow.emission = Color(0.3, 1.0, 0.4)
-		glow.emission_energy_multiplier = 2.0
+	_add_box(head, Vector3(0.08, 0.3, 0.08), Vector3(0.0, 0.55, 0.0), Color(0.4, 1.0, 0.5), Color(0.3, 1.0, 0.4))
+	_add_box(head, Vector3(0.24, 0.08, 0.08), Vector3(0.0, 0.58, 0.0), Color(0.4, 1.0, 0.5), Color(0.3, 1.0, 0.4))
 
 
 ## Espreitador: pele escura, agachado e bracos compridos.
@@ -619,10 +613,10 @@ static func _apply_head_bob(head: Node3D, is_walking: bool, walk_time: float, de
 	head.position.y = lerpf(head.position.y, HEAD_REST_Y + bob, minf(delta * 12.0, 1.0))
 
 
-static func _add_box(parent: Node3D, box_size: Vector3, pos: Vector3, color: Color) -> MeshInstance3D:
+static func _add_box(parent: Node3D, box_size: Vector3, pos: Vector3, color: Color, emission: Color = Color(0.0, 0.0, 0.0, 0.0)) -> MeshInstance3D:
 	var mesh := BoxMesh.new()
 	mesh.size = box_size
-	mesh.material = _quick_mat(color, 0.85)
+	mesh.material = _quick_mat(color, 0.85, emission)
 	var inst := MeshInstance3D.new()
 	inst.mesh = mesh
 	inst.position = pos
@@ -633,10 +627,27 @@ static func _add_box(parent: Node3D, box_size: Vector3, pos: Vector3, color: Col
 	return inst
 
 
-static func _quick_mat(color: Color, roughness: float) -> StandardMaterial3D:
+## Material de runtime compartilhado por (cor, roughness, emissao). Criar um
+## material novo por zumbi e usa-lo como override faz o Godot logar
+## "Parameter material is null" quando a malha e liberada segurando o RID de um
+## material que morre junto (godotengine/godot#85817). Compartilhar resolve o
+## spam e ainda corta a alocacao por zumbi (mesmo padrao do ZombieDissolveVisual).
+## Uso: mesh.material_override = ZombieMutator._quick_mat(Color.RED, 0.9)
+static var _quick_materials: Dictionary = {}
+
+static func _quick_mat(color: Color, roughness: float, emission: Color = Color(0.0, 0.0, 0.0, 0.0), emission_energy: float = 2.0) -> StandardMaterial3D:
+	var key := "%s|%.2f|%s|%.1f" % [color.to_html(true), roughness, emission.to_html(true), emission_energy]
+	var cached: Variant = _quick_materials.get(key)
+	if cached != null:
+		return cached as StandardMaterial3D
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = roughness
+	if emission.a > 0.0:
+		mat.emission_enabled = true
+		mat.emission = emission
+		mat.emission_energy_multiplier = emission_energy
+	_quick_materials[key] = mat
 	return mat
 
 
