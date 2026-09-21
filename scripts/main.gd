@@ -25,7 +25,8 @@ const GLOBAL_ACTIVE_ZOMBIE_TARGET := 600
 const MAX_CORPSES := 20
 const SPAWN_INTERVAL := 1.0
 const INPUT_INTERVAL := 1.0 / 30.0
-const SNAPSHOT_INTERVAL := 1.0 / 10.0
+## 20 Hz reduz a latencia de interpolacao sem aumentar a fisica dedicada (30 Hz).
+const SNAPSHOT_INTERVAL := 1.0 / 20.0
 ## Suprimentos/armas no chao sao lentos: 2 Hz basta e mantem o pacote fino.
 const GROUND_STATE_INTERVAL := 0.5
 # Payload binario por RPC abaixo do MTU do ENet (~1400 bytes com cabecalhos).
@@ -504,7 +505,7 @@ func _tick_client_network(delta: float) -> void:
 	FramePerfProbe.end("spawn_drain", drain_start)
 
 
-## Servidor: estado do chao e progresso da onda a 2 Hz, snapshots a 10 Hz.
+## Servidor: estado do chao e progresso da onda a 2 Hz, snapshots a 20 Hz.
 func _tick_server_network(delta: float) -> void:
 	ground_state_elapsed += delta
 	if ground_state_elapsed >= GROUND_STATE_INTERVAL:
@@ -514,7 +515,9 @@ func _tick_server_network(delta: float) -> void:
 	snapshot_elapsed += delta
 	if snapshot_elapsed < SNAPSHOT_INTERVAL:
 		return
-	snapshot_elapsed = 0.0
+	# A fisica dedicada roda a 30 Hz. Preservar a sobra alterna 33/67 ms e fecha
+	# 50 ms em media; zerar aqui degradaria uma meta de 20 Hz para 15 Hz.
+	snapshot_elapsed = fmod(snapshot_elapsed, SNAPSHOT_INTERVAL)
 	# So para quem ja carregou; antes um jogador carregando a cidade
 	# congelava os snapshots de todos os outros ate terminar.
 	if NetworkSession.loaded_peers.is_empty():
