@@ -313,8 +313,11 @@ func _test_pistol_fixed_trajectory() -> void:
 	print("Testando trajetoria fixa da pistola sem teleguiamento...")
 	var player := PLAYER_SCENE.instantiate() as CharacterBody3D
 	player.reads_local_input = false
-	player.aim_input = Vector2.RIGHT
 	add_child(player)
+	# A mira entra pelo CAMINHO REAL (pacote de input -> aim_direction): cravar
+	# `aim_input` na mao nao aponta mais nada, porque o tiro passou a sair pela
+	# `aim_direction`, e o teste media a direcao padrao em vez da mira.
+	player.apply_network_input({"aim": Vector2.RIGHT})
 	var off_axis_target := ZOMBIE_SCENE.instantiate() as CharacterBody3D
 	off_axis_target.position = Vector3(8.0, 1.0, -9.0)
 	add_child(off_axis_target)
