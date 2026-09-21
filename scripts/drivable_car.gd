@@ -193,6 +193,19 @@ func _make_windows_transparent(root: Node) -> void:
 			mesh_instance.set_surface_override_material(surface, glass)
 
 
+## Solta os materiais de override duplicados (_make_body_two_sided e
+## _make_windows_transparent) antes de sair da arvore: se a malha for liberada
+## segurando o RID de um material que morre junto, o Godot loga
+## "Parameter material is null" (godotengine/godot#85817).
+func _exit_tree() -> void:
+	for node in find_children("*", "MeshInstance3D", true, false):
+		var mesh_instance := node as MeshInstance3D
+		if mesh_instance == null:
+			continue
+		for surface in mesh_instance.get_surface_override_material_count():
+			mesh_instance.set_surface_override_material(surface, null)
+
+
 func is_occupied() -> bool:
 	return driver != null and is_instance_valid(driver)
 
