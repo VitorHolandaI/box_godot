@@ -1,6 +1,7 @@
 extends RefCounted
 
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
+const PLAYER_SCRIPT := preload("res://scripts/player.gd")
 const ZOMBIE_SCENE := preload("res://scenes/zombie.tscn")
 const SPLIT_SCREEN_MANAGER_SCRIPT := preload("res://scripts/split_screen_manager.gd")
 const MODULAR_BUILDING_BUILDER_SCRIPT := preload("res://scripts/modular_building_builder.gd")
@@ -33,6 +34,8 @@ func run(test_root: Node) -> void:
 	_test_minimap_reveals_zombies_on_sonar(test_root)
 	_test_camera_keeps_fixed_yaw(test_root)
 	_test_first_person_camera_follows_head(test_root)
+	_test_interact_ray_follows_the_look(test_root)
+	_test_aim_point_on_top_of_the_player_is_ignored(test_root)
 	_test_enterable_building_spawn_marker(test_root)
 	_test_no_street_zombie_starts(test_root)
 	_test_spawn_locations_stay_in_forest(test_root)
@@ -431,7 +434,13 @@ func _test_first_person_camera_follows_head(test_root: Node) -> void:
 	var aim_3d: Vector3 = player.call("_local_aim_direction")
 	var aim_3d_ok := absf(aim_3d.length() - 1.0) < 0.001 and aim_3d.y > 0.3 and aim_3d.z < -0.5
 	player.set("view_pitch", 0.0)
+	# W tem de sair na frente do OLHAR: com a camera virada 90 graus, o "para a
+	# frente" do teclado vira -X no mundo. O yaw precisa ser reposto aqui porque
+	# a checagem da mira 3D acima zerou o camera_yaw — sem isso este trecho
+	# media o caso trivial (yaw 0) e ainda cobrava o resultado do yaw girado.
+	player.set("camera_yaw", PI * 0.5)
 	var forward_move: Vector2 = player.call("_aim_relative_move", Vector2(0.0, -1.0))
+	player.set("camera_yaw", 0.0)
 	var aim_ok := forward.distance_to(Vector2(0.0, -1.0)) < 0.01 and right.distance_to(Vector2(-1.0, 0.0)) < 0.01
 	var move_ok := forward_move.distance_to(Vector2(-1.0, 0.0)) < 0.01
 	player.call("set_first_person", false)
@@ -442,6 +451,64 @@ func _test_first_person_camera_follows_head(test_root: Node) -> void:
 		_fail(test_root, "FPS: camera=%s mira=%s mira3d=%s movimento=%s cabeca_voltou=%s; esperado camera na cabeca, mira pelo yaw e W na frente do olhar." % [camera_ok, aim_ok, aim_3d_ok, move_ok, head_restored])
 		return
 	print("PASS: Primeira pessoa com camera na cabeca, mira pelo yaw, W relativo ao olhar e cabeca escondida.")
+
+
+## Regressao: o raio de interacao (porta) saia pela frente do CORPO, nao pelo
+## olhar. Em primeira pessoa o corpo do servidor e girado pela `aim_direction`
+## que vem no pacote, e essa direcao sai do CANO ate o retículo — encostado na
+## porta o cano fica a um palmo do alvo e o angulo dele nao e o da camera. Dava
+## o desencontro que o jogador sentia: a cruz na porta, o raio do servidor
+## passando ao lado, e apertar E nao abria nada.
+func _test_interact_ray_follows_the_look(test_root: Node) -> void:
+	print("Testando raio de interagir seguindo o olhar...")
+	var body_forward := Vector3(0.0, 0.0, -1.0)
+	# Olhando para a direita: o raio tem de ir para a direita, nao para -Z.
+	var look := Vector3(1.0, 0.0, 0.0)
+	var ray: Vector3 = PLAYER_SCRIPT.interact_ray_direction(look, body_forward)
+	if ray.distance_to(look) > 0.01:
+		_fail(test_root, "O raio deveria seguir o olhar %s; veio %s." % [look, ray])
+		return
+	# Olhar inclinado (macaneta) continua valendo, normalizado.
+	var tilted := Vector3(0.0, -0.6, -1.0)
+	ray = PLAYER_SCRIPT.interact_ray_direction(tilted, body_forward)
+	if absf(ray.length() - 1.0) > 0.001 or ray.y >= 0.0:
+		_fail(test_root, "Olhar inclinado deveria virar direcao unitaria para baixo; veio %s." % ray)
+		return
+	# Sem olhar (analogico parado, bot) cai na frente do corpo.
+	ray = PLAYER_SCRIPT.interact_ray_direction(Vector3.ZERO, body_forward)
+	if ray.distance_to(body_forward) > 0.01:
+		_fail(test_root, "Sem olhar o raio deveria cair na frente do corpo %s; veio %s." % [body_forward, ray])
+		return
+	print("PASS: Raio de interagir sai pelo olhar, com queda para a frente do corpo.")
+
+
+## Regressao: ao sair da primeira pessoa o cursor e solto no CENTRO da tela, e a
+## camera isometrica faz `looking_at(jogador)` — ou seja, o centro da tela e o
+## proprio jogador. A mira pelo cursor virava um vetor horizontal de quase zero
+## a partir do cano, cuja DIRECAO e so ruido: o corpo perseguia esse alvo, o
+## cano girava junto e realimentava. Resultado: o boneco rodopiando sem parar.
+func _test_aim_point_on_top_of_the_player_is_ignored(test_root: Node) -> void:
+	print("Testando mira ignorada quando o cursor cai no proprio jogador...")
+	var player_position := Vector3(10.0, 1.0, -4.0)
+	# Cursor no centro = ponto no chao embaixo do jogador.
+	var under_foot := player_position + Vector3(0.05, -1.0, -0.05)
+	if PLAYER_SCRIPT.aim_point_is_usable(player_position, under_foot):
+		_fail(test_root, "Ponto em cima do jogador (%s) nao pode valer como mira." % under_foot)
+		return
+	# Alvo de verdade, mesmo perto, continua valendo.
+	var real_target := player_position + Vector3(3.0, 0.0, 0.0)
+	if not PLAYER_SCRIPT.aim_point_is_usable(player_position, real_target):
+		_fail(test_root, "Alvo a 3 m (%s) deveria valer como mira." % real_target)
+		return
+	# A altura nao conta: o que embaralha a direcao e a distancia HORIZONTAL.
+	var above_head := player_position + Vector3(0.0, 8.0, 0.0)
+	if PLAYER_SCRIPT.aim_point_is_usable(player_position, above_head):
+		_fail(test_root, "Ponto so acima da cabeca (%s) nao da direcao horizontal." % above_head)
+		return
+	if PLAYER_SCRIPT.MIN_AIM_PLANAR_DISTANCE <= 0.0:
+		_fail(test_root, "A distancia minima de mira precisa ser maior que 0; veio %f." % PLAYER_SCRIPT.MIN_AIM_PLANAR_DISTANCE)
+		return
+	print("PASS: Cursor em cima do jogador nao vira mira (minimo %.1f m)." % PLAYER_SCRIPT.MIN_AIM_PLANAR_DISTANCE)
 
 
 func _test_enterable_building_spawn_marker(test_root: Node) -> void:
