@@ -1386,6 +1386,14 @@ func _collect_fade_meshes() -> void:
 	_dissolve_visual = DISSOLVE_VISUAL_SCRIPT.new(model)
 
 
+## Devolve os materiais de dissolve compartilhados antes de sair da arvore: as
+## copias por zumbi seriam liberadas junto com a malha e o Godot logaria
+## "Parameter material is null" (godotengine/godot#85817).
+func _exit_tree() -> void:
+	if _dissolve_visual != null:
+		_dissolve_visual.release()
+
+
 func _spawn_ragdoll() -> void:
 	var scene := get_tree().current_scene
 	if scene.has_method("spawn_zombie_ragdoll"):

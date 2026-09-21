@@ -23,6 +23,7 @@ func run(test_root: Node) -> void:
 	_test_fuel_burn_and_refuel(test_root)
 	await _test_bot_drives_and_advances_waypoint(test_root)
 	await _test_car_lab_has_bot_driving(test_root)
+	_test_client_proxy_follows_snapshot(test_root)
 
 
 ## A vida cai com take_damage; em 0 o carro fica destruido e nao aceita motorista.
@@ -271,6 +272,41 @@ func _test_car_lab_has_bot_driving(test_root: Node) -> void:
 		_fail(test_root, "Lab do carro deveria ter o carro ocupado pelo bot; ocupado=%s dirige=%s." % [ocupado, dirige])
 		return
 	print("PASS: Lab do carro monta o carro com o bot dirigindo.")
+
+
+## No cliente o carro e proxy: congela a fisica e segue o transform do snapshot
+## (interpolado). Regressao de "o carro sumiu no online": o proxy tem que sair do
+## spawn e chegar na posicao enviada pelo servidor, mantendo o modelo visual.
+## Uso: registrado em run()
+func _test_client_proxy_follows_snapshot(test_root: Node) -> void:
+	print("Testando o proxy do cliente seguindo o snapshot...")
+	var car: DrivableCar = CAR_SCENE.instantiate()
+	test_root.add_child(car)
+	car.set("network_proxy", true)
+	var target := Vector3(40.0, 0.0, -12.0)
+	car.call("apply_network_state", {
+		"position": target,
+		"basis": Basis.IDENTITY,
+		"health": 500,
+		"fuel": 100.0,
+		"destroyed": false,
+	})
+	car.call("apply_network_state", {
+		"position": target + Vector3(0.0, 0.0, 2.0),
+		"basis": Basis.IDENTITY,
+	})
+	car.call("_physics_process", 0.1)
+	var moved: Vector3 = car.global_position
+	var visual := car.get_node_or_null("Visual")
+	var tem_visual: bool = visual != null and visual.get_child_count() > 0
+	car.free()
+	if moved.distance_to(target) > 4.0:
+		_fail(test_root, "Proxy deveria seguir o snapshot (alvo %s); posicao=%s." % [target, moved])
+		return
+	if not tem_visual:
+		_fail(test_root, "Proxy do carro deveria manter o modelo visual montado; Visual vazio.")
+		return
+	print("PASS: Proxy do cliente segue o snapshot e mantem o visual.")
 
 
 func _fail(test_root: Node, message: String) -> void:
