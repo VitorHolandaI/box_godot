@@ -10,6 +10,8 @@ extends RefCounted
 const FRAME_MS := 16.0
 const SNAPSHOT_MS := 100.0
 const TWENTY_HZ_SNAPSHOT_MS := 50.0
+const THIRTY_HZ_SNAPSHOT_MS := 1000.0 / 30.0
+const SIXTY_HZ_SNAPSHOT_MS := 1000.0 / 60.0
 ## O servidor anda 0,5 m entre snapshots (2,2 m/s com o passo de 10 Hz).
 const STEP_METERS := 0.5
 
@@ -23,6 +25,8 @@ func run(test_root: Node) -> void:
 	_test_rotation_takes_shortest_path(test_root)
 	_test_sample_history_is_bounded(test_root)
 	_test_twenty_hz_uses_two_interval_delay(test_root)
+	_test_thirty_hz_uses_two_interval_delay(test_root)
+	_test_sixty_hz_uses_two_interval_delay(test_root)
 	_test_fast_snapshots_do_not_freeze(test_root)
 
 
@@ -37,7 +41,9 @@ func _test_continuity_across_snapshots(test_root: Node) -> void:
 	var previous := Vector3.ZERO
 	var frozen_frames := 0
 	var max_step := 0.0
-	var warmup_ms := buffer.delay_ms + SNAPSHOT_MS
+	# Com o estimador inicializado para o servidor atual (60 Hz), um servidor
+	# antigo de 10 Hz precisa de algumas chegadas para elevar o atraso adaptativo.
+	var warmup_ms := maxf(buffer.delay_ms + SNAPSHOT_MS, SNAPSHOT_MS * 4.0)
 	for frame in 60:
 		var now_ms := float(frame) * FRAME_MS
 		while now_ms >= next_push_ms:
@@ -174,6 +180,38 @@ func _test_twenty_hz_uses_two_interval_delay(test_root: Node) -> void:
 		_fail(test_root, "Snapshots a 20 Hz deveriam ficar perto de %s ms; veio %s ms." % [expected_delay_ms, buffer.delay_ms])
 		return
 	print("PASS: Snapshots a 20 Hz usam %s ms de atraso." % buffer.delay_ms)
+
+
+## A 30 Hz, dois intervalos sao ~66,7 ms. O piso precisa deixar o atraso cair
+## ate esse valor para que a taxa maior reduza a latencia percebida.
+func _test_thirty_hz_uses_two_interval_delay(test_root: Node) -> void:
+	print("Testando atraso de dois intervalos com snapshots a 30 Hz...")
+	var buffer := SnapshotInterpBuffer.new()
+	buffer.reset(0.0, Vector3.ZERO, 0.0)
+	for index in 30:
+		var now_ms := THIRTY_HZ_SNAPSHOT_MS * float(index + 1)
+		buffer.push(now_ms, Vector3(float(index), 0.0, 0.0), 0.0, Vector3.ZERO, 0.0)
+	var expected_delay_ms := THIRTY_HZ_SNAPSHOT_MS * SnapshotInterpBuffer.DELAY_INTERVALS
+	if buffer.delay_ms > expected_delay_ms + 3.0:
+		_fail(test_root, "Snapshots a 30 Hz deveriam ficar perto de %s ms; veio %s ms." % [expected_delay_ms, buffer.delay_ms])
+		return
+	print("PASS: Snapshots a 30 Hz usam %s ms de atraso." % buffer.delay_ms)
+
+
+## A 60 Hz, dois intervalos sao ~33,3 ms. Se o piso ficar acima disso, dobrar
+## a taxa de servidor nao reduz a latencia percebida do proxy.
+func _test_sixty_hz_uses_two_interval_delay(test_root: Node) -> void:
+	print("Testando atraso de dois intervalos com snapshots a 60 Hz...")
+	var buffer := SnapshotInterpBuffer.new()
+	buffer.reset(0.0, Vector3.ZERO, 0.0)
+	for index in 60:
+		var now_ms := SIXTY_HZ_SNAPSHOT_MS * float(index + 1)
+		buffer.push(now_ms, Vector3(float(index), 0.0, 0.0), 0.0, Vector3.ZERO, 0.0)
+	var expected_delay_ms := SIXTY_HZ_SNAPSHOT_MS * SnapshotInterpBuffer.DELAY_INTERVALS
+	if buffer.delay_ms > expected_delay_ms + 2.0:
+		_fail(test_root, "Snapshots a 60 Hz deveriam ficar perto de %s ms; veio %s ms." % [expected_delay_ms, buffer.delay_ms])
+		return
+	print("PASS: Snapshots a 60 Hz usam %s ms de atraso." % buffer.delay_ms)
 
 
 ## Servidor mais rapido (15-30 Hz) nao pode reintroduzir o congelamento: o

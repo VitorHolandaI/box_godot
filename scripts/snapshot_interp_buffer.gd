@@ -2,8 +2,8 @@ class_name SnapshotInterpBuffer
 extends RefCounted
 
 ## Interpolacao dos snapshots de rede no client (zumbi e jogador), com margem
-## para jitter. O atraso e adaptativo: a 10 Hz ficava em 200 ms; a 20 Hz fica
-## em 100 ms. Com pacote atrasado cresce ate MAX_DELAY_MS.
+## para jitter. O atraso e adaptativo: a 10 Hz ficava em 200 ms; a 60 Hz fica
+## em ~33 ms. Com pacote atrasado cresce ate MAX_DELAY_MS.
 ##
 ## A regra que importa e: o tempo de render (agora - atraso) tem que cair ENTRE
 ## duas amostras guardadas. Por isso o buffer guarda varias amostras e procura o
@@ -19,11 +19,12 @@ extends RefCounted
 ##   buffer.sample(Time.get_ticks_msec())
 ##   global_position = buffer.position
 
-const DEFAULT_INTERVAL_MS := 50.0
+const DEFAULT_INTERVAL_MS := 1000.0 / 60.0
 ## Dois intervalos: aguenta um pacote atrasado ou perdido sem congelar.
 const DELAY_INTERVALS := 2.0
-## Abaixo de 75 ms o jitter comum deixa o proxy sem um par de amostras.
-const MIN_DELAY_MS := 75.0
+## Abaixo de dois ticks a 60 Hz o jitter comum deixa o proxy sem um par de
+## amostras.
+const MIN_DELAY_MS := 1000.0 / 30.0
 const MAX_DELAY_MS := 450.0
 ## Peso do intervalo novo na media (jitter medido, nao so o ultimo pacote).
 const INTERVAL_WEIGHT := 0.25

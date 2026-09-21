@@ -3,12 +3,12 @@ extends RefCounted
 
 ## Mede, do lado do cliente, o atraso percebido de um servidor remoto: RTT do
 ## ENet e o espacamento entre snapshots completos de zumbis. O servidor envia
-## snapshots a cada 50 ms; intervalos maiores indicam que o tick de fisica do
+## snapshots a cada ~17 ms; intervalos maiores indicam que o tick de fisica do
 ## servidor esta estourando o orcamento (lag de simulacao, nao de rede).
 ## Uso:
 ##   godot --headless --path . -- --bot-player=203.0.113.10 --lag-probe=30
 
-const EXPECTED_SNAPSHOT_INTERVAL_MS := 50.0
+const EXPECTED_SNAPSHOT_INTERVAL_MS := 1000.0 / 60.0
 const WARMUP_SECONDS := 3.0
 
 var duration_seconds := 0.0
