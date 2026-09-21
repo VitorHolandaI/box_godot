@@ -1,21 +1,25 @@
 #!/usr/bin/env bash
 # Menu do servidor local (docker compose): escolhe NA HORA qual modo subir, se
-# precisa rebuildar, e ainda parar/logs/status. O compose tem um servico so
-# (`game-server`); o modo vai por variavel de ambiente, entao trocar de modo
-# recria o container.
+# precisa rebuildar, e ainda parar/logs/status.
+#
+# Cada modo e um SERVICO proprio no compose (survival | tdm | classic), com
+# porta e container proprios, seleciondo por profile. Antes havia um servico so
+# e o modo ia por variavel de ambiente: trocar de modo recriava o mesmo
+# container, entao nunca dava para ter dois modos no ar ao mesmo tempo.
 #
 # Uso:
 #   scripts/server_menu.sh                    # menu interativo
-#   scripts/server_menu.sh pvp up             # mata-mata: rebuild + sobe
+#   scripts/server_menu.sh tdm up             # mata-mata: rebuild + sobe
 #   scripts/server_menu.sh survival start     # sobrevivencia: sobe sem rebuild
-#   scripts/server_menu.sh pvp restart        # recria o container
-#   scripts/server_menu.sh stop               # derruba
-#   scripts/server_menu.sh logs               # segue o log
+#   scripts/server_menu.sh tdm restart        # recria o container
+#   scripts/server_menu.sh tdm stop           # derruba SO o mata-mata
+#   scripts/server_menu.sh stop               # derruba tudo
+#   scripts/server_menu.sh logs               # segue o log de tudo que esta no ar
 #   scripts/server_menu.sh status             # o que esta no ar
-#   PVP_BOTS=4 scripts/server_menu.sh pvp up  # mata-mata com 4 bots (teste)
+#   PVP_BOTS=4 scripts/server_menu.sh tdm up  # mata-mata com 4 bots (teste)
 #   CAR_BOT=1 scripts/server_menu.sh survival up  # com bot dirigindo o carro (teste)
-#   PORT=32000 scripts/server_menu.sh pvp up  # outra porta (2o servidor)
-#   DRY_RUN=1 scripts/server_menu.sh pvp up   # so mostra o comando
+#   PORT=32000 scripts/server_menu.sh tdm up  # outra porta (2o servidor)
+#   DRY_RUN=1 scripts/server_menu.sh tdm up   # so mostra o comando
 #   scripts/server_menu.sh self-test          # testa o script (sem docker)
 set -euo pipefail
 
@@ -23,18 +27,21 @@ project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$project_dir"
 
 godot_server_bin="dist/box-godot-linux.x86_64"
-## PVP sem bots por padrao (jogo de verdade). PVP_BOTS=N pede bots de teste.
+## Mata-mata sem bots por padrao (jogo de verdade). PVP_BOTS=N pede bots de teste.
 default_pvp_bots="${PVP_BOTS:-0}"
 ## Bot dirigindo o carro no servidor local (so para testar a rede do veiculo).
 ## DESLIGADO por padrao: no play normal ninguem ocupa o carro. CAR_BOT=N liga em
 ## ate N carros.
 default_car_bot="${CAR_BOT:-0}"
+## Porta padrao de cada modo, igual ao compose.yaml (uma por modo, para os tres
+## poderem ficar no ar juntos).
+declare -A default_ports=([survival]=27015 [tdm]=27017 [classic]=27019)
 
 usage() {
 	cat <<'TXT'
 Uso: scripts/server_menu.sh [modo] [acao]
 
-  modo: survival | pvp            (o que subir)
+  modo: survival | tdm | classic  (o que subir; 'pvp' e apelido de 'tdm')
   acao: up (rebuild+sobe) | start (sobe) | restart | stop | logs | status
         self-test (checa o script sem docker)
 
@@ -53,11 +60,14 @@ require_docker() {
 	docker compose version >/dev/null 2>&1 || die "plugin 'docker compose' indisponivel (esperado 'docker compose version' funcionando)"
 }
 
-require_mode() {
+# Nome do servico/profile no compose. 'pvp' continua valendo como apelido de
+# 'tdm' porque a flag do jogo e --pvp e os scripts antigos usam esse nome.
+canonical_mode() {
 	local mode="$1"
 	case "$mode" in
-		survival | pvp) ;;
-		*) die "modo desconhecido: '$mode' (esperado 'survival' ou 'pvp')" ;;
+		survival | classic) echo "$mode" ;;
+		tdm | pvp) echo "tdm" ;;
+		*) die "modo desconhecido: '$mode' (esperado 'survival', 'tdm' ou 'classic')" ;;
 	esac
 }
 
@@ -69,37 +79,39 @@ require_action() {
 	esac
 }
 
-# Exporta as variaveis que o compose le para o modo pedido. A sobrevivencia
-# zera os bots de PVP de proposito: assim o que esta no ar fica explicito no
-# `docker compose config`, sem depender do default do compose.
+# Exporta as variaveis que o compose le para o modo pedido. Cada modo tem as
+# suas (SURVIVAL_*, TDM_*, CLASSIC_*), entao subir um nao mexe no outro.
 export_mode_env() {
 	local mode="$1"
+	[[ "$default_car_bot" =~ ^[0-9]+$ ]] || die "CAR_BOT invalido: '$default_car_bot' (esperado inteiro >= 0)"
 	case "$mode" in
 		survival)
-			export GAME_SERVER_GAME_MODE="--survival"
-			export GAME_SERVER_PVP_BOTS="--pvp-bots=0"
+			export SURVIVAL_CAR_BOT="$default_car_bot"
+			export SURVIVAL_NAME="${SERVER_NAME:-}"
+			[[ -n "${PORT:-}" ]] && export SURVIVAL_PORT="$PORT"
 			;;
-		pvp)
+		tdm)
 			[[ "$default_pvp_bots" =~ ^[0-9]+$ ]] || die "PVP_BOTS invalido: '$default_pvp_bots' (esperado inteiro >= 0)"
-			export GAME_SERVER_GAME_MODE="--pvp"
-			export GAME_SERVER_PVP_BOTS="--pvp-bots=$default_pvp_bots"
+			export TDM_BOTS="$default_pvp_bots"
+			export TDM_NAME="${SERVER_NAME:-}"
+			[[ -n "${PORT:-}" ]] && export TDM_PORT="$PORT"
+			;;
+		classic)
+			export CLASSIC_NAME="${SERVER_NAME:-}"
+			[[ -n "${PORT:-}" ]] && export CLASSIC_PORT="$PORT"
 			;;
 	esac
-	[[ "$default_car_bot" =~ ^[0-9]+$ ]] || die "CAR_BOT invalido: '$default_car_bot' (esperado inteiro >= 0)"
-	export GAME_SERVER_CAR_BOT="--car-bot=$default_car_bot"
 	if [[ -n "${PORT:-}" ]]; then
 		[[ "$PORT" =~ ^[0-9]+$ ]] || die "PORT invalido: '$PORT' (esperado inteiro)"
-		export GAME_SERVER_PORT="$PORT"
 	fi
-	export GAME_SERVER_NAME="${SERVER_NAME:-}"
 }
 
-# Prefixo com as variaveis de modo, para o dry-run mostrar exatamente o comando
+# Prefixo com as variaveis do modo, para o dry-run mostrar exatamente o comando
 # que subiria (e para o log deixar claro o que foi escolhido).
 mode_env_prefix() {
 	local prefix=""
 	local name
-	for name in GAME_SERVER_GAME_MODE GAME_SERVER_PVP_BOTS GAME_SERVER_CAR_BOT GAME_SERVER_PORT GAME_SERVER_NAME; do
+	for name in SURVIVAL_PORT SURVIVAL_CAR_BOT SURVIVAL_NAME TDM_PORT TDM_BOTS TDM_NAME CLASSIC_PORT CLASSIC_NAME; do
 		if [[ -n "${!name:-}" ]]; then
 			prefix+="$name=${!name} "
 		fi
@@ -116,15 +128,16 @@ compose() {
 	docker compose "$@"
 }
 
-port_in_use() {
-	echo "${GAME_SERVER_PORT:-27015}"
+port_of() {
+	local mode="$1"
+	echo "${PORT:-${default_ports[$mode]}}"
 }
 
 action_up() {
 	local mode="$1"
 	require_docker
 	export_mode_env "$mode"
-	compose up -d --build game-server
+	compose --profile "$mode" up -d --build "$mode"
 	announce "$mode"
 }
 
@@ -132,7 +145,7 @@ action_start() {
 	local mode="$1"
 	require_docker
 	export_mode_env "$mode"
-	compose up -d game-server
+	compose --profile "$mode" up -d "$mode"
 	announce "$mode"
 }
 
@@ -140,24 +153,37 @@ action_restart() {
 	local mode="$1"
 	require_docker
 	export_mode_env "$mode"
-	compose up -d --force-recreate game-server
+	compose --profile "$mode" up -d --force-recreate "$mode"
 	announce "$mode"
 }
 
+## Sem modo derruba TUDO; com modo derruba so aquele container (os outros modos
+## seguem no ar, que e o ponto de ter um container por modo).
 action_stop() {
+	local mode="${1:-}"
 	require_docker
-	compose down
-	echo "servidor parado"
+	if [[ -z "$mode" ]]; then
+		compose --profile survival --profile tdm --profile classic down
+		echo "todos os modos parados"
+		return 0
+	fi
+	compose --profile "$mode" stop "$mode"
+	echo "modo '$mode' parado"
 }
 
 action_logs() {
+	local mode="${1:-}"
 	require_docker
-	compose logs -f --tail=80 game-server
+	if [[ -z "$mode" ]]; then
+		compose --profile survival --profile tdm --profile classic logs -f --tail=80
+		return 0
+	fi
+	compose --profile "$mode" logs -f --tail=80 "$mode"
 }
 
 action_status() {
 	require_docker
-	compose ps
+	compose --profile survival --profile tdm --profile classic ps
 }
 
 run_without_mode() {
@@ -169,22 +195,29 @@ run_without_mode() {
 	esac
 }
 
+mode_label() {
+	local mode="$1"
+	case "$mode" in
+		survival) echo "sobrevivencia (zumbis, hordas)" ;;
+		classic) echo "classico (zumbis, sem progressao de onda)" ;;
+		tdm)
+			if [[ "$default_pvp_bots" == "0" ]]; then
+				echo "mata-mata por times (sem bots)"
+			else
+				echo "mata-mata por times (${default_pvp_bots} bots)"
+			fi
+			;;
+	esac
+}
+
 announce() {
 	local mode="$1"
 	local port
-	port="$(port_in_use)"
-	local label="sobrevivencia (zumbis, hordas)"
-	if [[ "$mode" == "pvp" ]]; then
-		if [[ "$default_pvp_bots" == "0" ]]; then
-			label="mata-mata PVP (sem bots, best-of-3)"
-		else
-			label="mata-mata PVP (${default_pvp_bots} bots, best-of-3)"
-		fi
-	fi
+	port="$(port_of "$mode")"
 	echo
-	echo "no ar: $label | porta $port"
+	echo "no ar: $(mode_label "$mode") | porta $port | container box-godot-$mode"
 	echo "conectar: $godot_server_bin -- --join=127.0.0.1 --server-port=$port"
-	echo "log:      scripts/server_menu.sh logs"
+	echo "log:      scripts/server_menu.sh $mode logs"
 }
 
 # self-test: valida a escolha de modo/acao, o comando gerado e a recusa de
@@ -205,29 +238,46 @@ self_test() {
 		echo "PASS: $what"
 	}
 
-	output="$(DRY_RUN=1 "$0" pvp up)"
-	check_contains "$output" "--pvp-bots=0" "pvp up sobe SEM bots por padrao"
-	check_contains "$output" "--build" "pvp up rebuilda a imagem"
-	check_contains "$output" "server-port=27015" "cliente na porta padrao"
+	output="$(DRY_RUN=1 "$0" tdm up)"
+	check_contains "$output" "--profile tdm" "tdm up escolhe o profile do mata-mata"
+	check_contains "$output" "TDM_BOTS=0" "tdm up sobe SEM bots por padrao"
+	check_contains "$output" "--build" "tdm up rebuilda a imagem"
+	check_contains "$output" "server-port=27017" "mata-mata na porta propria"
 
-	output="$(DRY_RUN=1 PVP_BOTS=4 "$0" pvp start)"
-	check_contains "$output" "--pvp-bots=4" "PVP_BOTS=4 pede bots de teste"
+	output="$(DRY_RUN=1 "$0" pvp up)"
+	check_contains "$output" "--profile tdm" "'pvp' continua valendo como apelido de 'tdm'"
+
+	output="$(DRY_RUN=1 PVP_BOTS=4 "$0" tdm start)"
+	check_contains "$output" "TDM_BOTS=4" "PVP_BOTS=4 pede bots de teste"
 	if [[ "$output" == *"--build"* ]]; then
-		echo "FALHA: pvp start nao pode rebuildar"
+		echo "FALHA: tdm start nao pode rebuildar"
 		failures=$((failures + 1))
 	else
-		echo "PASS: pvp start nao rebuilda"
+		echo "PASS: tdm start nao rebuilda"
 	fi
 
 	output="$(DRY_RUN=1 "$0" survival up)"
-	check_contains "$output" "--survival" "survival up usa o modo sobrevivencia"
-	check_contains "$output" "--pvp-bots=0" "survival zera os bots de PVP"
+	check_contains "$output" "--profile survival" "survival up escolhe o profile da sobrevivencia"
+	check_contains "$output" "server-port=27015" "sobrevivencia na porta propria"
+	if [[ "$output" == *"TDM_"* ]]; then
+		echo "FALHA: subir a sobrevivencia nao pode mexer nas variaveis do mata-mata"
+		failures=$((failures + 1))
+	else
+		echo "PASS: um modo nao mexe nas variaveis do outro"
+	fi
+
+	output="$(DRY_RUN=1 "$0" classic up)"
+	check_contains "$output" "--profile classic" "classic up escolhe o profile do classico"
+	check_contains "$output" "server-port=27019" "classico na porta propria"
 
 	output="$(DRY_RUN=1 PORT=32000 "$0" survival start)"
 	check_contains "$output" "server-port=32000" "PORT alternativo respeitado"
 
+	output="$(DRY_RUN=1 "$0" tdm stop)"
+	check_contains "$output" "stop tdm" "parar um modo so derruba aquele container"
+
 	output="$(DRY_RUN=1 "$0" status)"
-	check_contains "$output" "docker compose ps" "status funciona sem escolher modo"
+	check_contains "$output" "ps" "status funciona sem escolher modo"
 
 	if "$0" zumbi up >/dev/null 2>&1; then
 		echo "FALHA: modo invalido deveria sair com erro"
@@ -235,7 +285,7 @@ self_test() {
 	else
 		echo "PASS: modo invalido recusado"
 	fi
-	if "$0" pvp voar >/dev/null 2>&1; then
+	if "$0" tdm voar >/dev/null 2>&1; then
 		echo "FALHA: acao invalida deveria sair com erro"
 		failures=$((failures + 1))
 	else
@@ -252,19 +302,16 @@ self_test() {
 interactive_menu() {
 	while true; do
 		echo
-		echo "=== servidor local (box_godot) ==="
-		echo "1) sobrevivencia  - rebuild + subir"
-		if [[ "$default_pvp_bots" == "0" ]]; then
-			echo "2) mata-mata PVP  - rebuild + subir (sem bots)"
-		else
-			echo "2) mata-mata PVP  - rebuild + subir (${default_pvp_bots} bots)"
-		fi
-		echo "3) sobrevivencia  - subir sem rebuild"
-		echo "4) mata-mata PVP  - subir sem rebuild"
-		echo "5) parar servidor"
-		echo "6) ver log (segue, Ctrl+C sai)"
-		echo "7) status"
-		echo "8) sair"
+		echo "=== servidor local (box_godot) — um container por modo ==="
+		echo "1) sobrevivencia  - rebuild + subir   (porta ${default_ports[survival]})"
+		echo "2) mata-mata TDM  - rebuild + subir   (porta ${default_ports[tdm]}, $(mode_label tdm))"
+		echo "3) classico       - rebuild + subir   (porta ${default_ports[classic]})"
+		echo "4) sobrevivencia  - subir sem rebuild"
+		echo "5) mata-mata TDM  - subir sem rebuild"
+		echo "6) parar TUDO"
+		echo "7) ver log (segue, Ctrl+C sai)"
+		echo "8) status"
+		echo "9) sair"
 		local choice=""
 		if ! read -rp "escolha: " choice; then
 			echo
@@ -272,15 +319,16 @@ interactive_menu() {
 		fi
 		case "$choice" in
 			1) action_up survival ;;
-			2) action_up pvp ;;
-			3) action_start survival ;;
-			4) action_start pvp ;;
-			5) action_stop ;;
-			6) action_logs ;;
-			7) action_status ;;
-			8) return 0 ;;
+			2) action_up tdm ;;
+			3) action_up classic ;;
+			4) action_start survival ;;
+			5) action_start tdm ;;
+			6) action_stop ;;
+			7) action_logs ;;
+			8) action_status ;;
+			9) return 0 ;;
 			"") ;;
-			*) echo "opcao invalida: '$choice' (esperado 1 a 8)" ;;
+			*) echo "opcao invalida: '$choice' (esperado 1 a 9)" ;;
 		esac
 	done
 }
@@ -300,23 +348,22 @@ main() {
 		self_test
 		return 0
 	fi
-	# Acoes que nao dependem de modo: parar/ver log/status valem sem escolher
-	# sobrevivencia ou PVP (o compose tem um servico so).
+	# Acoes que nao dependem de modo: parar/ver log/status valem sem escolher.
 	case "$mode" in
 		stop | logs | status)
 			run_without_mode "$mode"
 			return 0
 			;;
 	esac
-	require_mode "$mode"
+	mode="$(canonical_mode "$mode")"
 	action="${action:-up}"
 	require_action "$action"
 	case "$action" in
 		up) action_up "$mode" ;;
 		start) action_start "$mode" ;;
 		restart) action_restart "$mode" ;;
-		stop) action_stop ;;
-		logs) action_logs ;;
+		stop) action_stop "$mode" ;;
+		logs) action_logs "$mode" ;;
 		status) action_status ;;
 		self-test) self_test ;;
 	esac
