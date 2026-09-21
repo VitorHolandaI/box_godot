@@ -68,6 +68,15 @@ func is_using_own_materials() -> bool:
 	return _using_own_materials
 
 
+## Devolve as malhas aos materiais compartilhados antes de o zumbi ser destruido.
+## As copias proprias (por zumbi) morreriam junto com a malha e o Godot logaria
+## "Parameter material is null" (godotengine/godot#85817).
+## Uso: chamado no _exit_tree do zumbi.
+func release() -> void:
+	_assign_shared_materials()
+	_own_by_color.clear()
+
+
 ## Nuvem de po que sobe e deriva com o vento a partir do corpo.
 ## Uso: ZombieDissolveVisual.emit_dust(self, shirt_color)
 static func emit_dust(zombie: Node3D, color: Color) -> void:
