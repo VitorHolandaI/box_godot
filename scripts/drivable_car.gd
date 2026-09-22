@@ -53,6 +53,13 @@ signal car_destroyed
 @export var max_fuel := 100.0
 ## Consumo por segundo com o acelerador acionado.
 @export var fuel_burn_per_second := 1.4
+## Tanque que nunca esvazia. Usado pelos carros de base do mata-mata: la o carro
+## e equipamento fixo do time, e ficar a pe porque a gasolina acabou no meio da
+## partida nao e decisao de jogo, e so espera.
+@export var unlimited_fuel := false
+## Lataria que nao toma dano. Mesmo motivo: o carro do time nao pode ser
+## destruido de vez no primeiro minuto e sumir da partida ate o fim dela.
+@export var indestructible := false
 ## Queda brusca de velocidade (m/s) num unico tick de fisica = batida. Frear
 ## perde ~0,1 m/s por tick; bater em parede derruba metros de uma vez.
 const CRASH_SPEED_LOSS := 2.0
@@ -230,7 +237,7 @@ func enter(occupant) -> bool:
 ## Leva dano de balas, explosoes e do que tiver `take_damage`. Em 0 a lataria
 ## escurece e o carro para de vez. Uso: Bullet.hitscan_damage(...)
 func take_damage(amount: int, _attack_direction: Vector3 = Vector3.ZERO, _damage_kind: String = "bullet", _attacker: Node = null, _hit_position: Vector3 = Vector3.INF) -> void:
-	if amount <= 0 or is_destroyed:
+	if amount <= 0 or is_destroyed or indestructible:
 		return
 	# A lataria de metal absorve parte do golpe (armadura), mas nunca fica imune.
 	var applied := maxi(int(round(float(amount) * damage_armor)), 1)
@@ -249,9 +256,22 @@ func _destroy_car() -> void:
 	car_destroyed.emit()
 
 
+## Pinta a lataria na cor do time (carros de base do mata-mata). Puxa o matiz
+## para a cor sem chapar o material, para o jipe continuar parecendo um jipe.
+## Uso: car.paint_team_color(TdmMatch.color_for_team(0))
+func paint_team_color(color: Color) -> void:
+	_recolor_body(func(source: Color) -> Color: return source.lerp(color, 0.75))
+
+
 ## Escurece a lataria para marcar o carro destruido, mantendo o matiz de cada
 ## material. Uso: interno de _destroy_car
 func _tint_destroyed() -> void:
+	_recolor_body(func(source: Color) -> Color: return source.darkened(0.65))
+
+
+## Aplica uma transformacao de cor em cada material da lataria, por override de
+## superficie (o material original e compartilhado entre os carros).
+func _recolor_body(transform_color: Callable) -> void:
 	for node in find_children("*", "MeshInstance3D", true, false):
 		var mesh_instance := node as MeshInstance3D
 		if mesh_instance == null or mesh_instance.mesh == null:
@@ -261,13 +281,15 @@ func _tint_destroyed() -> void:
 			if source == null:
 				continue
 			var tinted := source.duplicate() as StandardMaterial3D
-			tinted.albedo_color = source.albedo_color.darkened(0.65)
+			tinted.albedo_color = transform_color.call(source.albedo_color)
 			mesh_instance.set_surface_override_material(surface, tinted)
 
 
 ## Linha do HUD do carro (vida e gasolina). Uso: player.get_vehicle_hud_text()
 func get_car_hud_text() -> String:
 	var fuel_pct := int(round(fuel / maxf(max_fuel, 0.001) * 100.0))
+	if unlimited_fuel and indestructible:
+		return "Carro do time: blindado | Gas: --"
 	if is_destroyed:
 		return "Carro: DESTRUIDO | Gas: %d%%" % fuel_pct
 	return "Carro: %d/%d | Gas: %d%%" % [health, max_health, fuel_pct]
@@ -464,7 +486,7 @@ func _physics_process(delta: float) -> void:
 	steering = move_toward(steering, target_steer, steer_speed * delta)
 	_spin_steering_wheel()
 	# Sem gasolina o motor morre igual ao freio: o carro fica so na inercia.
-	if bool(entrada.get("brake", false)) or is_zero_approx(throttle) or fuel <= 0.0:
+	if engine_is_cut(bool(entrada.get("brake", false)), throttle, fuel, unlimited_fuel):
 		brake = PARKING_BRAKE
 		engine_force = 0.0
 		return
@@ -472,7 +494,8 @@ func _physics_process(delta: float) -> void:
 	# engine_force positivo empurra o VehicleBody3D para +Z local, mas o bico do
 	# carro esta em -Z (convencao do Godot): sem o sinal negativo o W andava de re.
 	engine_force = 0.0 if speed_kmh() >= max_speed_kmh else -throttle * max_engine_force
-	fuel = maxf(fuel - fuel_burn_per_second * delta, 0.0)
+	if not unlimited_fuel:
+		fuel = maxf(fuel - fuel_burn_per_second * delta, 0.0)
 
 
 ## Proxy do cliente: interpola o transform por tempo de render entre os dois
@@ -531,6 +554,16 @@ func _track_crash_damage(delta: float) -> void:
 	_previous_speed = speed
 
 
+## Motor cortado: freio acionado, acelerador solto ou tanque seco. O carro de
+## base do mata-mata nunca seca (unlimited_fuel), entao nunca para por gasolina
+## no meio da partida. Puro para ser testado sem fisica.
+## Uso: if DrivableCar.engine_is_cut(freando, acelerador, gasolina, infinita): ...
+static func engine_is_cut(braking: bool, throttle: float, fuel_left: float, unlimited: bool) -> bool:
+	if braking or is_zero_approx(throttle):
+		return true
+	return fuel_left <= 0.0 and not unlimited
+
+
 ## Dano de atropelamento em funcao da velocidade. Zero abaixo do corte; cresce
 ## ate RUN_OVER_MAX_DAMAGE. Puro para ser testado sem fisica.
 ## Uso: var dano := DrivableCar.run_over_damage(car.linear_velocity.length())
@@ -543,10 +576,18 @@ static func run_over_damage(speed: float) -> int:
 	return int(roundf(lerpf(RUN_OVER_MIN_SPEED, float(RUN_OVER_MAX_DAMAGE), factor)))
 
 
-## Aplica o atropelamento em um corpo, se ele for zumbi e a velocidade bastar.
-## Uso: car.apply_run_over(zumbi)
+## Aplica o atropelamento em um corpo (zumbi OU jogador), se a velocidade
+## bastar. Jogador entrou na conta porque o carro passava por cima de gente sem
+## nada acontecer. Quem esta DENTRO deste carro nunca e atropelado por ele, e o
+## dano vai como vindo do motorista: no mata-mata isso faz a regra de time valer
+## (TdmMatch.blocks_damage barra companheiro e protegido de respawn).
+## Uso: car.apply_run_over(alvo)
 func apply_run_over(body: Node) -> int:
-	if body == null or not is_instance_valid(body) or not body.is_in_group("zombies"):
+	if body == null or not is_instance_valid(body):
+		return 0
+	if not body.is_in_group("zombies") and not body.is_in_group("player"):
+		return 0
+	if is_riding_this_car(body):
 		return 0
 	var damage := run_over_damage(linear_velocity.length())
 	if damage <= 0 or not body.has_method("take_damage"):
@@ -557,6 +598,15 @@ func apply_run_over(body: Node) -> int:
 	if recoil > 0:
 		take_damage(recoil, -linear_velocity.normalized(), "run_over", driver)
 	return damage
+
+
+## O corpo esta a bordo deste carro (motorista ou passageiro)? O jipe e aberto,
+## entao o boneco sentado encosta na area de atropelamento do proprio carro.
+## Uso: if is_riding_this_car(body): return
+func is_riding_this_car(body: Node) -> bool:
+	if body == null or not is_instance_valid(body):
+		return false
+	return body == driver or body.get("riding_car") == self
 
 
 func _on_run_over_body(body: Node) -> void:
