@@ -402,6 +402,21 @@ static func _setup_collector(model: Node3D) -> void:
 static func _setup_crawler(zombie: CharacterBody3D, model: Node3D) -> void:
 	zombie.set("speed", 1.4)
 	zombie.set("max_health", 75)
+	_apply_crawler_pose(zombie, model)
+
+
+## Aplica a postura baixa sem alterar os stats iniciais da variante. Uso:
+## ZombieMutator.apply_crawler_locomotion(zombie)
+static func apply_crawler_locomotion(zombie: CharacterBody3D) -> void:
+	if zombie == null:
+		return
+	var crawler_model := zombie.get_node_or_null("Model") as Node3D
+	if crawler_model == null:
+		return
+	_apply_crawler_pose(zombie, crawler_model)
+
+
+static func _apply_crawler_pose(zombie: CharacterBody3D, model: Node3D) -> void:
 	model.position.y = -0.45
 	model.rotation.x = deg_to_rad(65.0)
 	var head := zombie.get_node_or_null("Model/Head") as Node3D
@@ -410,6 +425,11 @@ static func _setup_crawler(zombie: CharacterBody3D, model: Node3D) -> void:
 	var col_shape := zombie.get_node_or_null("CollisionShape") as CollisionShape3D
 	if col_shape != null:
 		col_shape.position = Vector3(0.0, -0.3, 0.0)
+		if col_shape.shape is CapsuleShape3D:
+			var standing_capsule := col_shape.shape as CapsuleShape3D
+			var crawler_capsule := standing_capsule.duplicate() as CapsuleShape3D
+			crawler_capsule.height = crawler_capsule.radius * 2.0
+			col_shape.shape = crawler_capsule
 	var health_lbl := zombie.get_node_or_null("HealthLabel") as Label3D
 	if health_lbl != null:
 		health_lbl.position.y = 0.95
