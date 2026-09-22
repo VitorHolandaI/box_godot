@@ -12,6 +12,10 @@ const MANUAL_OVERRIDE_GRACE := 2.0
 @onready var panel: AnimatableBody3D = $Panel
 @onready var detection_area: Area3D = $DetectionArea
 
+## Time dono da base (0/1); -1 = porta de qualquer um (a casa central da
+## sobrevivencia). No mata-mata a porta da base so responde ao proprio time:
+## antes o inimigo chegava perto e a base abria para ele.
+var owner_team := -1
 var open_requested := false
 var manual_override := false
 var manual_hold_elapsed := 0.0
@@ -90,10 +94,23 @@ func _has_nearby_living_actor() -> bool:
 	for body in detection_area.get_overlapping_bodies():
 		if not is_instance_valid(body) or body.is_queued_for_deletion():
 			continue
-		if body.is_in_group("player"):
-			if not bool(body.get("is_eliminated")) and int(body.get("health")) > 0:
-				return true
+		if not body.is_in_group("player"):
+			continue
+		if bool(body.get("is_eliminated")) or int(body.get("health")) <= 0:
+			continue
+		if opens_for_team(owner_team, int(body.get("pvp_team"))):
+			return true
 	return false
+
+
+## A porta responde a este jogador? Porta sem dono (-1) abre para qualquer um;
+## porta de base do mata-mata so para quem e do time dela. Pura para o teste nao
+## precisar de Area3D nem de cidade montada.
+## Uso: if SafehouseDoor.opens_for_team(porta.owner_team, jogador.pvp_team): ...
+static func opens_for_team(door_team: int, actor_team: int) -> bool:
+	if door_team < 0:
+		return true
+	return door_team == actor_team
 
 
 func _animate_panel(delta: float) -> void:
