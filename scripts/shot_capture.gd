@@ -154,6 +154,40 @@ const RECIPES := {
 		"zombies": {"count": 10, "pattern": "cross", "radius_min": 9.0, "radius_max": 20.0, "lane": 3.0},
 		"warmup": 1.7,
 	},
+	"carro-dirigindo": {
+		"hud": true,
+		"players": 1,
+		"camera": {"offset": Vector3(0.0, 8.0, 12.0), "fov": 68.0},
+		"camera_target": "car",
+		"camera_follow": "car",
+		"zombies": {"count": 0},
+		"warmup": 1.4,
+		"movie_seconds": 4.8,
+	},
+	"fps-combate": {
+		"hud": true,
+		"players": 1,
+		"player_pos": Vector3(24.0, 1.0, 24.0),
+		"first_person": true,
+		"zombies": {"count": 7, "pattern": "ring", "radius_min": 12.0, "radius_max": 18.0, "lane": 2.0, "start_angle_degrees": -90.0},
+		"pose_health": true,
+		"actions": ["pistol"],
+		"warmup": 1.2,
+		"movie_seconds": 4.8,
+		"movie_action": "attack",
+	},
+	"multiplayer-pvp": {
+		"hud": true,
+		"players": 1,
+		"camera": {"offset": Vector3(0.0, 7.0, 10.0), "fov": 64.0},
+		"aim_at": "pvp_fight",
+		"zombies": {"count": 0},
+		"pose_health": true,
+		"wait_for": "pvp_live",
+		"moment_timeout": 220.0,
+		"settle": 2.0,
+		"movie_seconds": 4.8,
+	},
 }
 
 
@@ -257,6 +291,7 @@ func _run() -> void:
 	if players.size() != expected_players:
 		_abort("receita '%s' espera %d jogador(es) local(is) e o jogo tem %d; passe --local-players=%d" % [shot, expected_players, players.size(), expected_players])
 	_place_players(main, players, recipe)
+	await _apply_view_mode(players, recipe)
 	_hide_performance_hud(main)
 	_apply_atmosphere(main, recipe)
 	_apply_camera(main, players, recipe)
@@ -272,11 +307,11 @@ func _run() -> void:
 		await _wait_for_moment(main, players[0] as Node3D, String(recipe["wait_for"]), keep_alive, float(recipe.get("moment_timeout", MOMENT_TIMEOUT)))
 		if actions_after:
 			await _apply_actions(main, players, recipe)
-		await _warmup_seconds(float(recipe.get("settle", 0.3)), players[0] as Node3D, keep_alive)
+		await _warmup_seconds(float(recipe.get("settle", 0.3)), players[0] as Node3D, keep_alive, main, recipe)
 		# Reenquadra por ultimo: o aviao e os bots se movem durante o settle.
 		_reframe_camera(main, recipe)
 	else:
-		await _warmup_seconds(float(recipe.get("warmup", 2.0)), players[0] as Node3D, keep_alive)
+		await _warmup_seconds(float(recipe.get("warmup", 2.0)), players[0] as Node3D, keep_alive, main, recipe)
 	await _wait_frames(RENDER_SETTLE_DRAWS)
 	var image := _grab_frame(main, bool(recipe.get("hud", true)))
 	if image == null:
@@ -292,7 +327,7 @@ func _run() -> void:
 	if movie_seconds > 0.0:
 		# O video (--write-movie) grava do inicio ao fim do processo: manter a
 		# cena viva aqui da ao ffmpeg (-sseof) o trecho do ataque para cortar.
-		await _warmup_seconds(movie_seconds, players[0] as Node3D, keep_alive)
+		await _warmup_seconds(movie_seconds, players[0] as Node3D, keep_alive, main, recipe)
 	print(JSON.stringify({
 		"event": "shot_saved",
 		"shot": shot,
@@ -376,6 +411,16 @@ func _place_players(main: Node, players: Array, recipe: Dictionary) -> void:
 			(player as CharacterBody3D).velocity = Vector3.ZERO
 
 
+func _apply_view_mode(players: Array, recipe: Dictionary) -> void:
+	if not bool(recipe.get("first_person", false)):
+		return
+	for player_variant: Variant in players:
+		var player := player_variant as Node3D
+		if player != null and player.has_method("set_first_person"):
+			player.call("set_first_person", true)
+	await _wait_frames(2)
+
+
 ## O overlay de debug (F3) nunca aparece em frame de divulgacao; o campo `hud`
 ## da receita decide apenas se a captura inclui o HUD/minimapa do jogo.
 func _hide_performance_hud(main: Node) -> void:
@@ -407,10 +452,22 @@ func _apply_camera(main: Node, players: Array, recipe: Dictionary) -> void:
 		push_warning("shot_capture: receita pede camera mas nao achei a camera do jogador 0")
 		return
 	var player: Node3D = players[0] as Node3D
+	var camera_target := _camera_target(player, recipe)
 	var offset: Vector3 = settings.get("offset", Vector3(0.0, 19.0, 17.1))
 	camera.set_process(false)
-	camera.global_transform = Transform3D(Basis.IDENTITY, player.global_position + offset).looking_at(player.global_position, Vector3.UP)
+	camera.global_transform = Transform3D(Basis.IDENTITY, camera_target.global_position + offset).looking_at(camera_target.global_position, Vector3.UP)
 	camera.fov = float(settings.get("fov", 72.0))
+
+
+func _camera_target(player: Node3D, recipe: Dictionary) -> Node3D:
+	if String(recipe.get("camera_target", "player")) != "car":
+		return player
+	for car_variant: Variant in get_tree().get_nodes_in_group("drivable_cars"):
+		var car := car_variant as Node3D
+		if car != null and is_instance_valid(car):
+			return car
+	push_warning("shot_capture: receita pede camera no carro, mas nenhum carro existe")
+	return player
 
 
 ## Reenquadra a camera no objeto da receita ("aim_at": "plane") logo antes do
@@ -525,6 +582,8 @@ func _run_action(main: Node, player: Node3D, entry: Dictionary) -> void:
 			await _press_player_action(player, "swat")
 		"airdrop":
 			_request_airdrop(main, player)
+		"pistol":
+			await _press_player_action(player, "pistol")
 		"loadout_menu":
 			_open_loadout_menu(main)
 		_:
@@ -648,14 +707,29 @@ func _children_with_script(main: Node, script_file: String) -> Array[Node]:
 ## Espera o aquecimento. Com `pose_health` o jogador e mantido de pe: o frame e
 ## posado e a horda nao pode matar o alvo antes da captura (aereo/swat/airdrop
 ## precisam de 4 a 8 s de cena).
-func _warmup_seconds(seconds: float, player: Node3D, keep_alive: bool) -> void:
+func _warmup_seconds(seconds: float, player: Node3D, keep_alive: bool, main: Node = null, recipe: Dictionary = {}) -> void:
 	var remaining := seconds
 	while remaining > 0.0:
 		var step := minf(0.25, remaining)
 		await _wait_seconds(step)
 		remaining -= step
+		_follow_camera(main, player, recipe)
 		if keep_alive and is_instance_valid(player):
 			var _healed := int(player.call("add_health", 10000))
+		if String(recipe.get("movie_action", "")) == "attack":
+			await _press_player_action(player, "attack")
+
+
+func _follow_camera(main: Node, player: Node3D, recipe: Dictionary) -> void:
+	if main == null or String(recipe.get("camera_follow", "")) != "car":
+		return
+	var camera := _camera_for_player(main, 0)
+	if camera == null:
+		return
+	var target := _camera_target(player, recipe)
+	var settings: Dictionary = recipe.get("camera", {})
+	var offset: Vector3 = settings.get("offset", Vector3(0.0, 8.0, 12.0))
+	camera.global_transform = Transform3D(Basis.IDENTITY, target.global_position + offset).looking_at(target.global_position, Vector3.UP)
 
 
 func _grant_item(player: Node3D, item: int, amount: int) -> void:
