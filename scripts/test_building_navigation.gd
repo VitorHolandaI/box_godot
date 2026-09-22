@@ -17,6 +17,10 @@ const STEP_DELTA := 1.0 / 60.0
 # Sala do apartamento, logo depois da passagem que sai do nucleo da escada.
 const APARTMENT_LIVING_POINT := Vector2(9.0, 4.0)
 
+## Serial dos zumbis de teste: nome unico por instancia, para o Godot nunca
+## renomear por colisao de irmao (ver _add_walker_zombie).
+var _walker_serial := 0
+
 
 func run(test_root: Node) -> void:
 	_test_stair_flights_alternate_and_skip_walls(test_root)
@@ -316,13 +320,21 @@ func _add_bait_player(test_root: Node, position: Vector3) -> CharacterBody3D:
 
 
 ## Zumbi classico (tipo 0) para que velocidade e silhueta sejam deterministicas.
+## Zumbi WALKER de teste. A variante vem de `forced_variant`, nao do hash do
+## nome.
+##
+## Antes o nome era escolhido justamente para o hash cair em WALKER, mas os tres
+## testes deste arquivo calculavam o MESMO nome. Quando o queue_free do zumbi
+## anterior ainda nao tinha sido processado, o Godot renomeava o novo por
+## colisao de irmao, o hash mudava junto e o zumbi nascia de outra variante — um
+## rastejante nao sobe escada. Era essa a falha intermitente do teste da escada
+## (media de 1 em 4 execucoes), que nunca reproduzia sozinha.
 func _add_walker_zombie(test_root: Node, position: Vector3) -> CharacterBody3D:
 	var zombie := ZOMBIE_SCENE.instantiate() as CharacterBody3D
-	var suffix := 0
-	# 11 variantes desde o brute/screamer: garante hash que modula em WALKER.
-	while absi(("NavWalker%d" % suffix).hash()) % ZombieMutator.TYPE_COUNT != 0:
-		suffix += 1
-	zombie.name = "NavWalker%d" % suffix
+	# Antes de entrar na arvore: o _ready le forced_variant para montar o corpo.
+	zombie.set("forced_variant", ZombieMutator.Type.WALKER)
+	_walker_serial += 1
+	zombie.name = "NavWalker%d" % _walker_serial
 	zombie.position = position
 	test_root.add_child(zombie)
 	return zombie
