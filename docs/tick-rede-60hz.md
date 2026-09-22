@@ -84,7 +84,7 @@ A comparacao de trafego vale entre 60 e 120 Hz (mesmos 210 zumbis): **dobra**.
 Em 60 Hz a fisica do servidor ficou entre 6,5 e 8,8 ms, sem frames acima de
 33 ms.
 
-### VPS real (203.0.113.10:27015), 60 Hz, 10 zumbis
+### VPS real (`<ip-da-vps>:27015`), 60 Hz, 10 zumbis
 
 ```json
 {"complete_snapshots":1763,"snapshot_interval_ms_avg":16.7,
@@ -133,7 +133,7 @@ docker compose logs --since 60s survival | grep perf_report | tail -2
 
 # sonda de rede contra um servidor remoto (RTT + espacamento real de snapshots)
 timeout 55 godot --headless --path . -- \
-  --bot-player=203.0.113.10 --server-port=27015 --lag-probe=30
+  --bot-player=<ip-da-vps> --server-port=27015 --lag-probe=30
 
 # carga com horda: container isolado, porta propria
 docker run --detach --name box-godot-survival-stress --cpus=1.0 --memory=512m \

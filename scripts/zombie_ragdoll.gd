@@ -14,6 +14,10 @@ var torso_body: RigidBody3D
 ## Escala do corpo do zumbi (brute, Tita...). Definida ANTES de entrar na arvore:
 ## as partes nascem no tamanho certo em _ready. Antes o gigante virava corpo pequeno.
 var body_scale := Vector3.ONE
+## Cores [pele, tronco, pernas] para um cadaver que NAO e de zumbi — o corpo do
+## jogador no mata-mata, pintado na cor do time. Vazio usa a paleta do zumbi
+## sorteada pelo appearance_hash. Definir ANTES do setup.
+var color_override: Array[Color] = []
 
 
 ## Corpo sai do solver assim que assenta (parado) e, no limite, apos 6s.
@@ -124,7 +128,7 @@ func setup(initial_velocity: Vector3, z_type: int = 0, appearance_hash: int = 0,
 
 
 func _apply_appearance_colors(appearance_hash: int) -> void:
-	var colors := ZombieMutator.appearance_colors(appearance_hash)
+	var colors: Array = color_override if color_override.size() == 3 else ZombieMutator.appearance_colors(appearance_hash)
 	_set_body_color(torso_body, colors[1])
 	_set_body_color(get_node_or_null("Head") as RigidBody3D, colors[0])
 	_set_body_color(get_node_or_null("LeftArm") as RigidBody3D, colors[0])

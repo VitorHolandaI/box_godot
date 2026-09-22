@@ -18,9 +18,10 @@ func run(test_root: Node) -> void:
 	await _test_exit_with_interact(test_root)
 	_test_driving_input_mapping(test_root)
 	_test_run_over_damage_is_speed_gated(test_root)
-	_test_apply_run_over_hits_only_zombie(test_root)
+	_test_apply_run_over_hits_actors_not_passengers(test_root)
 	_test_car_health_and_destruction(test_root)
 	_test_fuel_burn_and_refuel(test_root)
+	_test_team_car_never_dies_or_runs_dry(test_root)
 	await _test_bot_drives_and_advances_waypoint(test_root)
 	await _test_car_lab_has_bot_driving(test_root)
 	_test_client_proxy_follows_snapshot(test_root)
@@ -64,6 +65,40 @@ func _test_fuel_burn_and_refuel(test_root: Node) -> void:
 		_fail(test_root, "Gasolina deveria ir a 0%%, reabastecer 40 e respeitar o teto %.1f; hud=%s refilled=%.1f capped=%.1f." % [max_fuel, empty_hud, refilled, capped])
 		return
 	print("PASS: Gasolina esvazia, reabastece e respeita o teto do tanque.")
+
+
+## Carro de base do mata-mata: lataria blindada e tanque infinito. E equipamento
+## do time — perder o carro para sempre no primeiro minuto, ou ficar a pe porque
+## a gasolina acabou, tirava a base do jogo sem ninguem ter decidido isso.
+func _test_team_car_never_dies_or_runs_dry(test_root: Node) -> void:
+	print("Testando o carro de base do mata-mata (blindado, tanque infinito)...")
+	var car: Node = CAR_SCENE.instantiate()
+	car.set("unlimited_fuel", true)
+	car.set("indestructible", true)
+	test_root.add_child(car)
+	var full := int(car.get("health"))
+	car.call("take_damage", full * 10)
+	var health_after := int(car.get("health"))
+	var destroyed := bool(car.get("is_destroyed"))
+	var hud: String = car.call("get_car_hud_text")
+	car.free()
+	if health_after != full or destroyed:
+		_fail(test_root, "Carro de base nao pode tomar dano; vida %d de %d, destruido=%s." % [health_after, full, destroyed])
+		return
+	if not hud.contains("blindado"):
+		_fail(test_root, "O HUD do carro de base deveria dizer blindado; veio %s." % hud)
+		return
+	# Tanque seco nao corta o motor quando a gasolina e infinita (o carro comum corta).
+	if CAR_SCRIPT.engine_is_cut(false, 1.0, 0.0, true):
+		_fail(test_root, "Com tanque infinito o motor nao pode morrer com gasolina 0.")
+		return
+	if not CAR_SCRIPT.engine_is_cut(false, 1.0, 0.0, false):
+		_fail(test_root, "O carro comum ainda tem que morrer com o tanque seco.")
+		return
+	if not CAR_SCRIPT.engine_is_cut(true, 1.0, 50.0, true) or not CAR_SCRIPT.engine_is_cut(false, 0.0, 50.0, true):
+		_fail(test_root, "Freio e acelerador solto continuam cortando o motor, mesmo no carro de base.")
+		return
+	print("PASS: Carro de base ignora dano, avisa no HUD e nunca fica sem gasolina.")
 
 
 ## Os players de teste leem input e cobram as acoes `player_1_*` no InputMap.
@@ -207,27 +242,45 @@ func _test_run_over_damage_is_speed_gated(test_root: Node) -> void:
 	print("PASS: Atropelamento para a %.0f km/h e cresce ate %d." % [CAR_SCRIPT.RUN_OVER_MIN_SPEED, rapido])
 
 
-func _test_apply_run_over_hits_only_zombie(test_root: Node) -> void:
-	print("Testando atropelar um zumbi e ignorar outro corpo...")
+## Atropelar vale para zumbi E para jogador (antes o carro passava por cima de
+## gente sem nada acontecer), mas nunca para quem esta a bordo do proprio carro
+## nem para cenario.
+func _test_apply_run_over_hits_actors_not_passengers(test_root: Node) -> void:
+	print("Testando atropelar zumbi e jogador, poupando passageiro e cenario...")
 	var holder := Node3D.new()
 	test_root.add_child(holder)
 	var car: VehicleBody3D = CAR_SCENE.instantiate()
 	holder.add_child(car)
 	var zumbi: Node = RUN_OVER_TARGET_SCRIPT.new()
 	holder.add_child(zumbi)
+	var jogador: Node = RUN_OVER_TARGET_SCRIPT.new()
+	jogador.set("target_group", "player")
+	holder.add_child(jogador)
+	var passageiro: Node = RUN_OVER_TARGET_SCRIPT.new()
+	passageiro.set("target_group", "player")
+	passageiro.set("riding_car", car)
+	holder.add_child(passageiro)
 	var parede := StaticBody3D.new()
 	holder.add_child(parede)
 	car.linear_velocity = Vector3(0.0, 0.0, 20.0)
 	var dano_zumbi: int = car.call("apply_run_over", zumbi)
+	var dano_jogador: int = car.call("apply_run_over", jogador)
+	var dano_passageiro: int = car.call("apply_run_over", passageiro)
 	var dano_parede: int = car.call("apply_run_over", parede)
 	car.linear_velocity = Vector3.ZERO
 	var dano_parado: int = car.call("apply_run_over", zumbi)
 	var recebido := int(zumbi.damage_taken)
 	holder.free()
-	if dano_zumbi <= 0 or dano_parede != 0 or dano_parado != 0 or recebido != dano_zumbi:
-		_fail(test_root, "Atropelar deveria machucar so o zumbi em movimento; zumbi=%d parede=%d parado=%d recebido=%d." % [dano_zumbi, dano_parede, dano_parado, recebido])
+	if dano_zumbi <= 0 or dano_jogador <= 0:
+		_fail(test_root, "Atropelar deveria machucar zumbi e jogador em movimento; zumbi=%d jogador=%d." % [dano_zumbi, dano_jogador])
 		return
-	print("PASS: Atropelamento machuca o zumbi (%d) e ignora parede e carro parado." % dano_zumbi)
+	if dano_passageiro != 0:
+		_fail(test_root, "Quem esta a bordo do proprio carro nao pode ser atropelado por ele; levou %d." % dano_passageiro)
+		return
+	if dano_parede != 0 or dano_parado != 0 or recebido != dano_zumbi:
+		_fail(test_root, "Atropelar deveria ignorar cenario e carro parado; parede=%d parado=%d recebido=%d." % [dano_parede, dano_parado, recebido])
+		return
+	print("PASS: Atropelamento pega zumbi (%d) e jogador (%d), poupa passageiro, parede e carro parado." % [dano_zumbi, dano_jogador])
 
 
 ## O bot segue a rota circular: avanca o ponto ao alcancar e entrega

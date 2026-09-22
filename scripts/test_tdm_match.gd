@@ -9,6 +9,11 @@ const TDMMATCH_SCRIPT := preload("res://scripts/tdm_match.gd")
 const WEAPON_SLOTS_SCRIPT := preload("res://scripts/weapon_slots.gd")
 const PVP_DIRECTOR_SCRIPT := preload("res://scripts/pvp_server_director.gd")
 const PLAYER_SCENE: PackedScene = preload("res://scenes/player.tscn")
+const LOADOUT_MENU_SCRIPT := preload("res://scripts/loadout_menu.gd")
+const SPLIT_SCREEN_SCRIPT := preload("res://scripts/split_screen_manager.gd")
+const RAGDOLL_SCENE := preload("res://scenes/zombie_ragdoll.tscn")
+const DOOR_SYNC_SCRIPT := preload("res://scripts/safehouse_door_sync.gd")
+const SAFEHOUSE_DOOR_SCRIPT := preload("res://scripts/safehouse_door.gd")
 const A1 := "101:0"
 const A2 := "102:0"
 const B1 := "201:0"
@@ -34,6 +39,11 @@ func run(test_root: Node) -> void:
 	_test_route_leaves_the_base_before_the_next_corner(test_root)
 	_test_route_has_no_long_straight_leg(test_root)
 	_test_death_signal_connected_once(test_root)
+	_test_loadout_menu_frees_the_cursor(test_root)
+	_test_minimap_hides_the_enemy_team(test_root)
+	_test_player_corpse_wears_the_team_color(test_root)
+	_test_base_door_opens_only_for_its_team(test_root)
+	_test_every_door_travels_in_the_mask(test_root)
 
 
 func _match_with_four() -> TdmMatch:
@@ -495,6 +505,170 @@ class FakePvpHost:
 	var deaths := 0
 	func _on_pvp_died(_killer: Node, _victim: Node) -> void:
 		deaths += 1
+
+
+## Regressao do menu de arma em primeira pessoa: abrir o painel tem que marcar
+## GameConfig.menu_open e soltar o cursor, igual ao menu da partida. Sem isso o
+## mouse continuava preso (PlayerCharacter._apply_mouse_capture) e o jogador
+## ficava sem cursor para clicar na arma, com o mouse-look girando o boneco
+## enquanto ele tentava escolher (PlayerCharacter._input le esse mesmo flag).
+func _test_loadout_menu_frees_the_cursor(test_root: Node) -> void:
+	print("Testando o menu de arma soltando o cursor em primeira pessoa...")
+	var menu_open_before: bool = GameConfig.menu_open
+	var player := PLAYER_SCENE.instantiate() as PlayerCharacter
+	player.name = "PlayerEscolhendoArma"
+	player.reads_local_input = false
+	test_root.add_child(player)
+	var menu := LOADOUT_MENU_SCRIPT.new() as CanvasLayer
+	test_root.add_child(menu)
+	menu.call("setup", player, Callable(), Callable())
+	if bool(menu.call("is_panel_open")):
+		_fail(test_root, "O menu de arma deveria comecar fechado.")
+		_cleanup_menu(menu, player, menu_open_before)
+		return
+	menu.call("set_panel_open", true)
+	if not bool(menu.call("is_panel_open")):
+		_fail(test_root, "O painel deveria estar aberto depois de set_panel_open(true).")
+		_cleanup_menu(menu, player, menu_open_before)
+		return
+	if not GameConfig.menu_open:
+		_fail(test_root, "Com o menu de arma aberto GameConfig.menu_open tem que ser true, senao em primeira pessoa o cursor fica preso e o mouse-look gira o boneco.")
+		_cleanup_menu(menu, player, menu_open_before)
+		return
+	menu.call("set_panel_open", false)
+	if GameConfig.menu_open:
+		_fail(test_root, "Fechar o menu de arma tem que devolver GameConfig.menu_open para false, senao o jogador volta ao jogo sem mouse-look.")
+		_cleanup_menu(menu, player, menu_open_before)
+		return
+	_cleanup_menu(menu, player, menu_open_before)
+	print("PASS: Menu de arma solta e devolve o cursor ao abrir e fechar.")
+
+
+## Regressao: o minimapa mandava `all_players` sem filtro, entao no mata-mata
+## cada jogador via a posicao do time inimigo o tempo todo -- radar-hack de
+## fabrica num modo competitivo.
+func _test_minimap_hides_the_enemy_team(test_root: Node) -> void:
+	print("Testando minimapa escondendo o time inimigo...")
+	var mate := PLAYER_SCENE.instantiate() as PlayerCharacter
+	var viewer := PLAYER_SCENE.instantiate() as PlayerCharacter
+	var enemy := PLAYER_SCENE.instantiate() as PlayerCharacter
+	for node in [viewer, mate, enemy]:
+		node.reads_local_input = false
+		test_root.add_child(node)
+	viewer.pvp_team = 0
+	mate.pvp_team = 0
+	enemy.pvp_team = 1
+	var everyone: Array = [viewer, mate, enemy]
+	var shown: Array = SPLIT_SCREEN_SCRIPT.visible_players_for(viewer, everyone, true)
+	var freed := func() -> void:
+		viewer.queue_free()
+		mate.queue_free()
+		enemy.queue_free()
+	if shown.has(enemy):
+		_fail(test_root, "O minimapa do mata-mata nao pode mostrar jogador do time inimigo.")
+		freed.call()
+		return
+	if not shown.has(viewer) or not shown.has(mate):
+		_fail(test_root, "O minimapa deveria mostrar o proprio jogador e o companheiro de time; mostrou %d de 2." % shown.size())
+		freed.call()
+		return
+	# Fora do mata-mata (co-op) todo mundo continua no mapa.
+	var coop: Array = SPLIT_SCREEN_SCRIPT.visible_players_for(viewer, everyone, false)
+	if coop.size() != everyone.size():
+		_fail(test_root, "Fora do mata-mata o minimapa deveria mostrar os %d jogadores; mostrou %d." % [everyone.size(), coop.size()])
+		freed.call()
+		return
+	var colors: Array = SPLIT_SCREEN_SCRIPT.minimap_colors_for(viewer, true)
+	if colors.size() != 1 or Color(colors[0]) != TdmMatch.color_for_team(0):
+		_fail(test_root, "No mata-mata os pontos do minimapa deveriam sair todos na cor do time; veio %s." % [colors])
+		freed.call()
+		return
+	freed.call()
+	print("PASS: Minimapa do mata-mata mostra so o proprio time, na cor do time.")
+
+
+## O corpo do jogador morto reusa o ragdoll do zumbi, mas com a paleta do time:
+## sem o color_override o cadaver caia verde, com camisa marrom de zumbi.
+func _test_player_corpse_wears_the_team_color(test_root: Node) -> void:
+	print("Testando o cadaver do jogador na cor do time...")
+	var team_color := TdmMatch.color_for_team(1)
+	var ragdoll := RAGDOLL_SCENE.instantiate()
+	var palette: Array[Color] = [Color(0.76, 0.6, 0.47), team_color, Color(0.17, 0.18, 0.21)]
+	ragdoll.set("color_override", palette)
+	test_root.add_child(ragdoll)
+	ragdoll.call("setup", Vector3.ZERO)
+	var torso := ragdoll.get("torso_body") as RigidBody3D
+	if torso == null:
+		_fail(test_root, "O ragdoll deveria ter tronco.")
+		ragdoll.queue_free()
+		return
+	var mesh := torso.get_node_or_null("Mesh") as MeshInstance3D
+	var material := mesh.mesh.material as StandardMaterial3D if mesh != null and mesh.mesh != null else null
+	var painted: Color = material.albedo_color if material != null else Color.BLACK
+	ragdoll.queue_free()
+	if painted != team_color:
+		_fail(test_root, "O tronco do cadaver deveria sair na cor do time %s; veio %s." % [team_color, painted])
+		return
+	print("PASS: Cadaver do jogador usa a cor do time em vez da paleta de zumbi.")
+
+
+## A porta da base do mata-mata so responde ao proprio time: antes o inimigo
+## chegava perto e a base abria para ele.
+func _test_base_door_opens_only_for_its_team(test_root: Node) -> void:
+	print("Testando a porta da base abrindo so para o time dono...")
+	if not SAFEHOUSE_DOOR_SCRIPT.opens_for_team(0, 0):
+		_fail(test_root, "A porta do time 0 tem que abrir para o time 0.")
+		return
+	if SAFEHOUSE_DOOR_SCRIPT.opens_for_team(0, 1):
+		_fail(test_root, "A porta do time 0 NAO pode abrir para o time 1.")
+		return
+	# Casa da sobrevivencia (sem dono) abre para qualquer um, inclusive sem time.
+	if not SAFEHOUSE_DOOR_SCRIPT.opens_for_team(-1, 1) or not SAFEHOUSE_DOOR_SCRIPT.opens_for_team(-1, -1):
+		_fail(test_root, "Porta sem dono deveria abrir para qualquer jogador.")
+		return
+	print("PASS: Porta de base abre so para o time dela; a central abre para todos.")
+
+
+## Regressao: so a porta da casa CENTRAL viajava (um bool no snapshot), entao as
+## duas portas de base do mata-mata ficavam fechadas para sempre no cliente.
+func _test_every_door_travels_in_the_mask(test_root: Node) -> void:
+	print("Testando a mascara levando TODAS as portas...")
+	var doors: Array = [FakeDoor.new(), FakeDoor.new(), FakeDoor.new()]
+	(doors[0] as FakeDoor).open_state = true
+	(doors[2] as FakeDoor).open_state = true
+	var mask: int = DOOR_SYNC_SCRIPT.mask_from(doors)
+	if mask != 0b101:
+		_fail(test_root, "A mascara deveria ter os bits 0 e 2 ligados (5); veio %d." % mask)
+		return
+	var received: Array = [FakeDoor.new(), FakeDoor.new(), FakeDoor.new()]
+	DOOR_SYNC_SCRIPT.apply_mask(received, mask)
+	var applied: Array = []
+	for door in received:
+		applied.append(bool((door as FakeDoor).open_state))
+	for door in doors + received:
+		(door as Node).free()
+	if applied != [true, false, true]:
+		_fail(test_root, "O cliente deveria reproduzir [aberta, fechada, aberta]; veio %s." % [applied])
+		return
+	print("PASS: A mascara leva e devolve o estado das 3 portas, nao so o da central.")
+
+
+## Duble de porta: so o contrato que o SafehouseDoorSync usa, sem Area3D nem
+## cidade montada.
+class FakeDoor extends Node:
+	var open_state := false
+
+	func is_open_requested() -> bool:
+		return open_state
+
+	func apply_network_open_state(should_open: bool) -> void:
+		open_state = should_open
+
+
+func _cleanup_menu(menu: Node, player: Node, menu_open_before: bool) -> void:
+	GameConfig.menu_open = menu_open_before
+	menu.queue_free()
+	player.queue_free()
 
 
 func _fail(test_root: Node, message: String) -> void:
