@@ -22,11 +22,16 @@ const ATM_SIZE := Vector2(0.8, 0.62)
 ## Vitrine: vao livre da porta, altura do vidro, plano da fachada e a faixa.
 const DOOR_CLEAR_HALF := 1.4
 const GLASS_BOTTOM := 0.5
-const GLASS_TOP := 2.35
+## O boneco tem 2,34 m e sobe 0,06 m na laje da loja; vitrine e marquise ficavam
+## em 2,35 m e travavam a entrada (a cabeca prendia entre piso e marquise).
+## PLAYER_CLEARANCE e o pe-direito minimo livre na frente da fachada.
+const PLAYER_CLEARANCE := 2.6
+const GLASS_TOP := PLAYER_CLEARANCE
 const STOREFRONT_Z := -0.16
 const FASCIA_Y := 3.05
 const FASCIA_HEIGHT := 0.6
-const CANOPY_Y := 2.4
+## Marquise logo acima do vidro: fundo em PLAYER_CLEARANCE e topo abaixo da faixa.
+const CANOPY_Y := PLAYER_CLEARANCE + 0.05
 
 
 static func add_details(body: StaticBody3D, building) -> void:
