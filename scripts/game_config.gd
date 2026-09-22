@@ -29,6 +29,25 @@ var first_person_enabled := false
 var menu_open := false
 
 
+## Abre/fecha um menu de jogo cuidando do cursor junto: abrir solta o mouse,
+## fechar devolve o controle para a camera de cada jogador local (em primeira
+## pessoa ela prende o cursor de novo). Virou funcao unica porque o menu da
+## partida fazia esse par e o menu de arma do mata-mata nao fazia: em primeira
+## pessoa o painel abria sem cursor para clicar e o mouse-look continuava
+## girando o boneco (ver PlayerCharacter._input).
+## Uso: GameConfig.set_menu_open(get_tree(), true)
+func set_menu_open(tree: SceneTree, open: bool) -> void:
+	menu_open = open
+	if open:
+		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
+		return
+	if tree == null:
+		return
+	for node in tree.get_nodes_in_group("player"):
+		if node.get("is_local_controller") == true and node.has_method("_apply_mouse_capture"):
+			node.call("_apply_mouse_capture")
+
+
 func _ready() -> void:
 	Engine.max_fps = 60
 	_load_graphics_settings()
