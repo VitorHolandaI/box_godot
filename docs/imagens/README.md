@@ -23,6 +23,9 @@ imagem.
 | `pvp-fim-de-rodada.jpg` | fim de rodada por eliminacao (`Time A x Time B`) |
 | `pvp-rodada.jpg` | rodada valendo na base (sem acao no quadro) |
 | `sobrevivencia-cidade.jpg` | captura manual antiga, mantida so para comparacao |
+| `carro-dirigindo.gif` | carro dirigivel acompanhado durante a rota automatica do bot |
+| `fps-combate.gif` | combate em primeira pessoa, com HUD, arma e horda |
+| `multiplayer-pvp.gif` | cliente TDM mostrando jogadores remotos replicados pelo servidor |
 
 Todas (menos a ultima) sao geradas por `scripts/capture_shots.sh`: o jogo abre
 numa receita de `scripts/shot_capture.gd`, se posiciona e salva o PNG bruto em
@@ -51,4 +54,7 @@ magick screenshot.png -crop 1899x1116+0+30 +repage \
   -resize 1600x -strip -interlace Plane -quality 82 docs/imagens/modo-assunto.jpg
 ```
 
-GIF/WebP de gameplay e bem-vindo, mas mantenha abaixo de ~2 MB.
+GIF/WebP de gameplay e bem-vindo, mas mantenha abaixo de ~2 MB. As receitas
+`carro-dirigindo`, `fps-combate` e `multiplayer-pvp` gravam AVI com o Movie
+Maker do Godot e o `capture_shots.sh` converte o trecho final para GIF. O
+ultimo e orquestrado por `scripts/capture_multiplayer_gif.sh`.
