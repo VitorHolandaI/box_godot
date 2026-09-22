@@ -66,10 +66,11 @@ docker compose logs -f survival
 ```
 
 No firewall do provedor da VPS, libere `27015/udp` e mantenha `27015/tcp`
-bloqueada. Cada modo tem a sua porta (27015 sobrevivencia, 27017 mata-mata,
-27019 classico); se outra porta for necessaria, defina `SURVIVAL_PORT` /
-`TDM_PORT` / `CLASSIC_PORT` no compose, no firewall e no comando dos clientes
-com o mesmo valor. Ver [modos-e-containers.md](modos-e-containers.md).
+bloqueada. **Todos os modos usam a mesma porta** (27015, e 27016 para
+descoberta): e a unica aberta no firewall da VPS, entao um modo numa porta
+propria nao receberia conexao. Se outra porta for necessaria, defina
+`GAME_SERVER_PORT` no compose, no firewall e no comando dos clientes com o
+mesmo valor. Ver [modos-e-containers.md](modos-e-containers.md).
 
 O branch do MVP procedural deve ser criado somente apos a release 0.1 estar
 testada e marcada. Ele sera separado para nao misturar a experimentacao de

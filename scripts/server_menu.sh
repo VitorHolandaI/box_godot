@@ -5,7 +5,7 @@
 # Cada modo e um SERVICO proprio no compose (survival | tdm | classic), com
 # porta e container proprios, seleciondo por profile. Antes havia um servico so
 # e o modo ia por variavel de ambiente: trocar de modo recriava o mesmo
-# container, entao nunca dava para ter dois modos no ar ao mesmo tempo.
+# container e o modo no ar so aparecia lendo o `command` dele.
 #
 # Uso:
 #   scripts/server_menu.sh                    # menu interativo
@@ -33,9 +33,13 @@ default_pvp_bots="${PVP_BOTS:-0}"
 ## DESLIGADO por padrao: no play normal ninguem ocupa o carro. CAR_BOT=N liga em
 ## ate N carros.
 default_car_bot="${CAR_BOT:-0}"
-## Porta padrao de cada modo, igual ao compose.yaml (uma por modo, para os tres
-## poderem ficar no ar juntos).
-declare -A default_ports=([survival]=27015 [tdm]=27017 [classic]=27019)
+## Porta unica de todos os modos, igual ao compose.yaml. Na VPS so 27015/udp e
+## 27016/udp estao abertas no firewall: um modo numa porta propria nao recebia
+## conexao nenhuma. Como dividem a porta, os modos nao rodam juntos — subir um
+## derruba o outro, que e a escolha que este menu oferece.
+default_port=27015
+## Modos conhecidos, na ordem em que aparecem no menu.
+all_modes=(survival tdm classic)
 
 usage() {
 	cat <<'TXT'
@@ -88,21 +92,20 @@ export_mode_env() {
 		survival)
 			export SURVIVAL_CAR_BOT="$default_car_bot"
 			export SURVIVAL_NAME="${SERVER_NAME:-}"
-			[[ -n "${PORT:-}" ]] && export SURVIVAL_PORT="$PORT"
 			;;
 		tdm)
 			[[ "$default_pvp_bots" =~ ^[0-9]+$ ]] || die "PVP_BOTS invalido: '$default_pvp_bots' (esperado inteiro >= 0)"
 			export TDM_BOTS="$default_pvp_bots"
 			export TDM_NAME="${SERVER_NAME:-}"
-			[[ -n "${PORT:-}" ]] && export TDM_PORT="$PORT"
 			;;
 		classic)
 			export CLASSIC_NAME="${SERVER_NAME:-}"
-			[[ -n "${PORT:-}" ]] && export CLASSIC_PORT="$PORT"
 			;;
 	esac
 	if [[ -n "${PORT:-}" ]]; then
 		[[ "$PORT" =~ ^[0-9]+$ ]] || die "PORT invalido: '$PORT' (esperado inteiro)"
+		# Porta unica para todos os modos: abrir outra exige liberar na VPS.
+		export GAME_SERVER_PORT="$PORT"
 	fi
 }
 
@@ -111,7 +114,7 @@ export_mode_env() {
 mode_env_prefix() {
 	local prefix=""
 	local name
-	for name in SURVIVAL_PORT SURVIVAL_CAR_BOT SURVIVAL_NAME TDM_PORT TDM_BOTS TDM_NAME CLASSIC_PORT CLASSIC_NAME; do
+	for name in GAME_SERVER_PORT SURVIVAL_CAR_BOT SURVIVAL_NAME TDM_BOTS TDM_NAME CLASSIC_NAME; do
 		if [[ -n "${!name:-}" ]]; then
 			prefix+="$name=${!name} "
 		fi
@@ -129,14 +132,28 @@ compose() {
 }
 
 port_of() {
-	local mode="$1"
-	echo "${PORT:-${default_ports[$mode]}}"
+	echo "${PORT:-$default_port}"
+}
+
+
+## Derruba os OUTROS modos antes de subir um: todos usam a mesma porta, entao
+## sem isso o docker recusa com "port is already allocated" e o usuario fica sem
+## saber que era o modo anterior ainda no ar.
+stop_other_modes() {
+	local keep="$1"
+	local mode
+	for mode in "${all_modes[@]}"; do
+		if [[ "$mode" != "$keep" ]]; then
+			compose --profile "$mode" stop "$mode"
+		fi
+	done
 }
 
 action_up() {
 	local mode="$1"
 	require_docker
 	export_mode_env "$mode"
+	stop_other_modes "$mode"
 	compose --profile "$mode" up -d --build "$mode"
 	announce "$mode"
 }
@@ -145,6 +162,7 @@ action_start() {
 	local mode="$1"
 	require_docker
 	export_mode_env "$mode"
+	stop_other_modes "$mode"
 	compose --profile "$mode" up -d "$mode"
 	announce "$mode"
 }
@@ -153,6 +171,7 @@ action_restart() {
 	local mode="$1"
 	require_docker
 	export_mode_env "$mode"
+	stop_other_modes "$mode"
 	compose --profile "$mode" up -d --force-recreate "$mode"
 	announce "$mode"
 }
@@ -242,7 +261,8 @@ self_test() {
 	check_contains "$output" "--profile tdm" "tdm up escolhe o profile do mata-mata"
 	check_contains "$output" "TDM_BOTS=0" "tdm up sobe SEM bots por padrao"
 	check_contains "$output" "--build" "tdm up rebuilda a imagem"
-	check_contains "$output" "server-port=27017" "mata-mata na porta propria"
+	check_contains "$output" "server-port=27015" "mata-mata na porta aberta da VPS"
+	check_contains "$output" "stop survival" "subir o mata-mata derruba a sobrevivencia"
 
 	output="$(DRY_RUN=1 "$0" pvp up)"
 	check_contains "$output" "--profile tdm" "'pvp' continua valendo como apelido de 'tdm'"
@@ -258,8 +278,9 @@ self_test() {
 
 	output="$(DRY_RUN=1 "$0" survival up)"
 	check_contains "$output" "--profile survival" "survival up escolhe o profile da sobrevivencia"
-	check_contains "$output" "server-port=27015" "sobrevivencia na porta propria"
-	if [[ "$output" == *"TDM_"* ]]; then
+	check_contains "$output" "server-port=27015" "sobrevivencia na porta aberta da VPS"
+	check_contains "$output" "stop tdm" "subir a sobrevivencia derruba o mata-mata"
+	if [[ "$output" == *"TDM_BOTS"* ]]; then
 		echo "FALHA: subir a sobrevivencia nao pode mexer nas variaveis do mata-mata"
 		failures=$((failures + 1))
 	else
@@ -268,10 +289,11 @@ self_test() {
 
 	output="$(DRY_RUN=1 "$0" classic up)"
 	check_contains "$output" "--profile classic" "classic up escolhe o profile do classico"
-	check_contains "$output" "server-port=27019" "classico na porta propria"
+	check_contains "$output" "server-port=27015" "classico na porta aberta da VPS"
 
 	output="$(DRY_RUN=1 PORT=32000 "$0" survival start)"
 	check_contains "$output" "server-port=32000" "PORT alternativo respeitado"
+	check_contains "$output" "GAME_SERVER_PORT=32000" "PORT alternativo chega no compose"
 
 	output="$(DRY_RUN=1 "$0" tdm stop)"
 	check_contains "$output" "stop tdm" "parar um modo so derruba aquele container"
@@ -303,9 +325,10 @@ interactive_menu() {
 	while true; do
 		echo
 		echo "=== servidor local (box_godot) — um container por modo ==="
-		echo "1) sobrevivencia  - rebuild + subir   (porta ${default_ports[survival]})"
-		echo "2) mata-mata TDM  - rebuild + subir   (porta ${default_ports[tdm]}, $(mode_label tdm))"
-		echo "3) classico       - rebuild + subir   (porta ${default_ports[classic]})"
+		echo "todos os modos usam a porta $(port_of) (a aberta na VPS); subir um derruba o outro"
+		echo "1) sobrevivencia  - rebuild + subir"
+		echo "2) mata-mata TDM  - rebuild + subir   ($(mode_label tdm))"
+		echo "3) classico       - rebuild + subir"
 		echo "4) sobrevivencia  - subir sem rebuild"
 		echo "5) mata-mata TDM  - subir sem rebuild"
 		echo "6) parar TUDO"
