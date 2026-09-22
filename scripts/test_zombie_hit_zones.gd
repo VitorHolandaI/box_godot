@@ -18,6 +18,7 @@ func run(test_root: Node) -> void:
 	await _test_arm_shot_weakens_attack(test_root)
 	await _test_arm_loss_hides_member_and_slows_zombie(test_root)
 	await _test_leg_loss_hides_member_and_further_slows_zombie(test_root)
+	await _test_two_lost_legs_turn_walker_into_crawler(test_root)
 	await _test_network_limb_loss_hides_member(test_root)
 	await _test_ragdoll_keeps_lost_member(test_root)
 	await _test_hit_without_position_is_torso(test_root)
@@ -120,6 +121,30 @@ func _test_leg_loss_hides_member_and_further_slows_zombie(test_root: Node) -> vo
 		_fail(test_root, "Perna deveria sumir e deixar zumbi manco; escondido=%s mask=%d velocidade=%.2f." % [member_hidden, mask, speed_after])
 		return
 	print("PASS: Tres tiros removem perna e deixam zumbi manco.")
+
+
+func _test_two_lost_legs_turn_walker_into_crawler(test_root: Node) -> void:
+	print("Testando duas pernas amputadas virando rastejo...")
+	var zombie := await _spawn_walker(test_root, Vector3(1032.0, 1.0, 1000.0))
+	var left_leg := zombie.get_node("Model/LeftLeg") as Node3D
+	var right_leg := zombie.get_node("Model/RightLeg") as Node3D
+	var collision := zombie.get_node("CollisionShape") as CollisionShape3D
+	var initial_collision_y := collision.position.y
+	var initial_capsule_height := (collision.shape as CapsuleShape3D).height
+	for _shot in 3:
+		zombie.take_damage(10, Vector3.FORWARD, "bullet", null, left_leg.global_position)
+	for _shot in 3:
+		zombie.take_damage(10, Vector3.FORWARD, "bullet", null, right_leg.global_position)
+	var crawler := bool(zombie.call("is_crawling"))
+	var crawler_collision := zombie.get_node("CollisionShape") as CollisionShape3D
+	var collision_y := crawler_collision.position.y
+	var capsule_height := (crawler_collision.shape as CapsuleShape3D).height
+	var model_pitch := (zombie.get_node("Model") as Node3D).rotation.x
+	zombie.free()
+	if not crawler or collision_y >= initial_collision_y or capsule_height >= initial_capsule_height or model_pitch <= 0.5:
+		_fail(test_root, "Duas pernas deveriam deixar o zumbi rastejando; crawler=%s colisao_y=%.2f altura=%.2f pitch=%.2f." % [crawler, collision_y, capsule_height, model_pitch])
+		return
+	print("PASS: Duas pernas amputadas trocam o walker para rastejo baixo.")
 
 
 func _test_network_limb_loss_hides_member(test_root: Node) -> void:

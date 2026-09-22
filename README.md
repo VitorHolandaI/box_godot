@@ -13,6 +13,22 @@ macOS.
 
 Autor: Vitor Holanda.
 
+## Gameplay
+
+![Carro dirigido por bot cruzando a cidade](docs/imagens/carro-dirigindo.gif)
+
+Carro dirigivel: o bot usa o mesmo contrato de acelerador e volante do jogador,
+para o veiculo ser testavel tambem em rede.
+
+![Combate em primeira pessoa contra horda](docs/imagens/fps-combate.gif)
+
+Primeira pessoa: mira, arma, HUD e horda na mesma camera do jogador.
+
+![Cliente TDM recebendo jogadores remotos](docs/imagens/multiplayer-pvp.gif)
+
+Multiplayer: cliente ligado a um servidor TDM local com bots, recebendo os
+jogadores remotos por snapshot.
+
 ## Imagens
 
 ![Sobrevivencia: horda cercando o jogador num cruzamento da cidade](docs/imagens/hero-horda.jpg)
