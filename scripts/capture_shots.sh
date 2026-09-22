@@ -20,7 +20,7 @@ CAPTURE_TIMEOUT="${CAPTURE_TIMEOUT:-240}"
 OPTIMIZE_WIDTH="${OPTIMIZE_WIDTH:-1600}"
 OPTIMIZE_QUALITY="${OPTIMIZE_QUALITY:-82}"
 RECIPES=(hero-horda horda-onda-alta cidade-ampla sonar tela-dividida aereo-na-horda granada-na-horda swat-aliado airdrop airdrop-aviao pvp-loadout pvp-mata-mata pvp-fim-de-partida)
-GIF_DIR="$IMAGE_DIR_ZUMBIS"
+EXTRA_GIF_RECIPES=(carro-dirigindo fps-combate multiplayer-pvp)
 # Uma receita por variante de zumbi (21 no enum de zombie_mutator.gd): elas so
 # rodam com --gif ou --shot=zumbi-NN, nunca no lote normal (sao lentas).
 GIF_RECIPES=()
@@ -40,6 +40,8 @@ while [[ $# -gt 0 ]]; do
 		--list)
 			printf 'frames:\n'
 			printf '  %s\n' "${RECIPES[@]}"
+			printf 'gifs de gameplay (use --shot=NOME):\n'
+			printf '  %s\n' "${EXTRA_GIF_RECIPES[@]}"
 			printf 'gifs por variante (use --gif ou --shot=zumbi-NN):\n'
 			printf '  %s\n' "${GIF_RECIPES[@]}"
 			exit 0
@@ -63,7 +65,7 @@ done
 
 if [[ -n "$requested_shot" && "$requested_shot" != "__gif__" ]]; then
 	found=0
-	for recipe in "${RECIPES[@]}" "${GIF_RECIPES[@]}"; do
+	for recipe in "${RECIPES[@]}" "${EXTRA_GIF_RECIPES[@]}" "${GIF_RECIPES[@]}"; do
 		[[ "$recipe" == "$requested_shot" ]] && found=1
 	done
 	if [[ "$found" -ne 1 ]]; then
@@ -76,23 +78,53 @@ fi
 command -v godot >/dev/null 2>&1 || { echo "godot nao encontrado no PATH" >&2; exit 1; }
 mkdir -p "$OUT_DIR"
 
-# AVI (Movie Maker) -> GIF: corta o fim do video, que e o trecho com o ataque.
-encode_variant_gif() {
+is_gif_recipe() {
+	case "$1" in
+		zumbi-*|carro-dirigindo|fps-combate|multiplayer-pvp) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+
+gif_path_for() {
+	local recipe="$1"
+	if [[ "$recipe" == zumbi-* ]]; then
+		printf '%s/%s.gif\n' "$IMAGE_DIR_ZUMBIS" "$recipe"
+		return
+	fi
+	printf '%s/%s.gif\n' "$IMG_DIR" "$recipe"
+}
+
+
+gif_filter_for() {
+	if [[ "$1" == "fps-combate" || "$1" == "multiplayer-pvp" ]]; then
+		printf '%s\n' "fps=10,scale=400:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=64[p];[b][p]paletteuse=dither=bayer:bayer_scale=3"
+		return
+	fi
+	printf '%s\n' "fps=14,scale=560:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3"
+}
+
+
+# AVI (Movie Maker) -> GIF: corta o fim do video, que e o trecho de gameplay.
+encode_gif() {
 	local recipe="$1"
 	local avi="$OUT_DIR/$recipe.avi"
-	local gif="$GIF_DIR/$recipe.gif"
+	local gif
+	gif="$(gif_path_for "$recipe")"
+	local filter
+	filter="$(gif_filter_for "$recipe")"
 	if [[ ! -f "$avi" ]]; then
 		echo "   FALHOU: sem AVI do --write-movie" >&2
 		return 1
 	fi
-	mkdir -p "$GIF_DIR"
+	mkdir -p "$(dirname "$gif")"
 	if ! ffmpeg -y -sseof -4.8 -i "$avi" \
-		-vf "fps=14,scale=560:-1:flags=lanczos,split[a][b];[a]palettegen=max_colors=128[p];[b][p]paletteuse=dither=bayer:bayer_scale=3" \
+		-vf "$filter" \
 		-loop 0 "$gif" > /dev/null 2>&1; then
 		echo "   FALHOU: ffmpeg nao gerou $gif" >&2
 		return 1
 	fi
-	echo "   gif: docs/imagens/zumbis/$recipe.gif ($(du -h "$gif" | cut -f1))"
+	echo "   gif: ${gif#"$PROJECT_DIR/"} ($(du -h "$gif" | cut -f1))"
 }
 
 
@@ -102,6 +134,8 @@ extra_flags_for() {
 		horda-onda-alta) echo "--test-wave=8" ;;
 		tela-dividida) echo "--local-players=4" ;;
 		pvp-*) echo "--join=127.0.0.1 --server-port=27015" ;;
+		carro-dirigindo) echo "--car-bot=1" ;;
+		multiplayer-pvp) echo "--join=127.0.0.1 --server-port=${CAPTURE_SERVER_PORT:-27015}" ;;
 		*) echo "" ;;
 	esac
 }
@@ -113,7 +147,7 @@ for recipe in "${RECIPES[@]}"; do
 	echo ">> capturando '$recipe' ${extra:+(+ $extra)}"
 	rm -f "$OUT_DIR/$recipe.png"
 	engine_flags=""
-	if [[ "$recipe" == zumbi-* ]]; then
+	if is_gif_recipe "$recipe"; then
 		# Movie Maker: grava o processo inteiro em AVI; o ffmpeg corta o fim.
 		engine_flags="--write-movie $OUT_DIR/$recipe.avi --fixed-fps 15"
 	fi
@@ -129,8 +163,8 @@ for recipe in "${RECIPES[@]}"; do
 	fi
 	size="$(du -h "$OUT_DIR/$recipe.png" | cut -f1)"
 	echo "   ok: dist/capturas/$recipe.png ($size)"
-	if [[ "$recipe" == zumbi-* ]]; then
-		if encode_variant_gif "$recipe"; then
+	if is_gif_recipe "$recipe"; then
+		if encode_gif "$recipe"; then
 			rm -f "$OUT_DIR/$recipe.avi"
 		else
 			rm -f "$OUT_DIR/$recipe.avi"
@@ -149,7 +183,7 @@ if [[ "$optimize" -eq 1 ]]; then
 	mkdir -p "$IMG_DIR"
 	echo ">> otimizando para docs/imagens (${OPTIMIZE_WIDTH}px, q${OPTIMIZE_QUALITY})"
 	for recipe in "${RECIPES[@]}"; do
-		[[ "$recipe" == zumbi-* ]] && continue
+		is_gif_recipe "$recipe" && continue
 		magick "$OUT_DIR/$recipe.png" \
 			-resize "${OPTIMIZE_WIDTH}x" -strip -interlace Plane -quality "$OPTIMIZE_QUALITY" \
 			"$IMG_DIR/$recipe.jpg"
