@@ -644,6 +644,10 @@ func _apply_network_extras(state: Dictionary) -> void:
 	if next_eliminated == is_eliminated:
 		return
 	is_eliminated = next_eliminated
+	# Transicao vivo -> morto no cliente: e aqui que o corpo cai, porque o
+	# _pvp_die roda no servidor e o cliente so ve o estado chegar no snapshot.
+	if is_eliminated:
+		spawn_pvp_corpse(velocity + Vector3.UP * 1.5)
 	visible = not is_eliminated
 	collision_layer = 0 if is_eliminated else 1
 	collision_mask = 0 if is_eliminated else 1
@@ -1546,12 +1550,28 @@ func _pvp_die() -> void:
 	pvp_respawn_left = TdmMatch.RESPAWN_SECONDS
 	spawn_protection_left = 0.0
 	is_eliminated = true
+	# O corpo antes de sumir: o ragdoll nasce com a velocidade do tombo, entao
+	# tem que ser lido ANTES do zero abaixo.
+	spawn_pvp_corpse(velocity + Vector3.UP * 1.5)
 	visible = false
 	collision_layer = 0
 	collision_mask = 0
 	velocity = Vector3.ZERO
 	health = 0
 	pvp_died.emit(killer)
+
+
+## Deixa o cadaver articulado no lugar da morte, na cor do time. O servidor
+## dedicado nao renderiza, entao nao gasta corpo: quem monta e cada cliente,
+## igual ao ragdoll do zumbi (Zombie._spawn_ragdoll).
+## Uso: player.spawn_pvp_corpse(velocidade_do_tombo)
+func spawn_pvp_corpse(death_velocity: Vector3) -> void:
+	if NetworkSession.is_server() or not NetworkSession.pvp_mode:
+		return
+	var scene := get_tree().current_scene
+	if scene == null or not scene.has_method("spawn_player_corpse"):
+		return
+	scene.call("spawn_player_corpse", global_position, rotation.y, death_velocity, TdmMatch.color_for_team(pvp_team))
 
 
 ## Guarda a arma escolhida no menu de loadout (0 = so a pistola). Quem aplica
