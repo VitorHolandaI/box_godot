@@ -66,7 +66,7 @@ check_absent() {
 	fi
 }
 
-printf '%s\n' "Fase 1/2: movimento do jogador (servidor + bot)..."
+printf '%s\n' "Fase 1/3: movimento do jogador (servidor + bot)..."
 server_pid="$(start_server "$work_dir/move_server.log" --smoke-test-zombie)"
 sleep 3
 run_engine "$work_dir/move_bot.log" "--bot=127.0.0.1" "--server-port=$port"
@@ -77,7 +77,7 @@ check "cliente imprime o build" "$work_dir/move_bot.log" '"event":"build".*"role
 check "servidor aceita o handshake de build" "$work_dir/move_server.log" 'reportou build .*\(ok\)'
 check "jogador conectou, andou e matou um zumbi" "$work_dir/move_bot.log" 'BOT_TEST_PASS'
 
-printf '%s\n' "Fase 2/2: esquadrao SWAT visivel e se movendo no cliente..."
+printf '%s\n' "Fase 2/3: esquadrao SWAT visivel e se movendo no cliente..."
 server_pid="$(start_server "$work_dir/swat_server.log" --smoke-test-swat)"
 sleep 3
 run_engine "$work_dir/swat_client.log" "--join=127.0.0.1" "--server-port=$port" --smoke-test-swat
@@ -86,6 +86,19 @@ wait "$server_pid" 2>/dev/null
 check "servidor criou o esquadrao" "$work_dir/swat_server.log" '"event":"swat_smoke_called"'
 check "cliente ve os 4 soldados" "$work_dir/swat_client.log" '"alive":4,"at_origin":0,"event":"swat_seen_done"'
 check "soldados se movem no cliente (max_travel > 0.5)" "$work_dir/swat_client.log" '"max_travel":([1-9][0-9]*|0\.[5-9])'
+
+printf '%s\n' "Fase 3/3: cliente de build diferente e recusado sem sujar o roster..."
+server_pid="$(start_server "$work_dir/reject_server.log" --smoke-test-zombie)"
+sleep 3
+run_engine "$work_dir/reject_client.log" "--join=127.0.0.1" "--server-port=$port" --fake-build=0000-00-00.0
+kill "$server_pid" 2>/dev/null
+wait "$server_pid" 2>/dev/null
+check "servidor recusa o build diferente" "$work_dir/reject_server.log" 'recusado: Build do cliente diferente'
+# O bug: _report_build derrubava o peer, mas o _request_slots que o cliente ja
+# tinha mandado na mesma leva chegava depois e entrava no roster assim mesmo.
+check "peer recusado NAO entra no roster" "$work_dir/reject_server.log" 'pediu vaga sem passar pelo handshake'
+check_absent "$work_dir/reject_server.log" 'entrou com [0-9]+ jogador'
+check_absent "$work_dir/reject_server.log" 'Unable to send packet'
 
 check_absent "$work_dir/move_server.log" 'checksum|SCRIPT ERROR|RPC -'
 check_absent "$work_dir/move_bot.log" 'checksum|SCRIPT ERROR|RPC -'
@@ -96,5 +109,5 @@ if ((failures > 0)); then
 	printf '\n%s\n' "SESSION_TEST_FAIL: $failures verificacao(oes) falharam; logs em $work_dir"
 	exit 1
 fi
-printf '\n%s\n' "SESSION_TEST_PASS: build, handshake, movimento e SWAT visivel/se movendo."
+printf '\n%s\n' "SESSION_TEST_PASS: build, handshake, movimento, SWAT visivel/se movendo e recusa limpa de build velho."
 printf '%s\n' "Logs em $work_dir"
