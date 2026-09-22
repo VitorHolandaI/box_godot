@@ -73,21 +73,20 @@ godot --headless --path . -- --server --server-port=27015 --survival
 
 # servidor via Docker: um container POR MODO, você escolhe qual sobe
 docker compose --profile survival up -d --build   # sobrevivência, porta 27015
-docker compose --profile tdm up -d --build        # mata-mata, porta 27017
+docker compose --profile tdm up -d --build        # mata-mata, mesma porta
 scripts/server_menu.sh            # menu interativo (faz o mesmo)
 scripts/server_menu.sh tdm up     # mata-mata (sem bots)
 PVP_BOTS=4 scripts/server_menu.sh tdm up   # com 4 bots, para testar
 ```
 
-Portas: **27015/udp** (sobrevivência), **27017/udp** (mata-mata), **27019/udp**
-(clássico); a porta seguinte de cada uma é a descoberta de salas na LAN. Não
-abra TCP.
+Portas: **27015/udp** (jogo) e **27016/udp** (descoberta de salas na LAN), para
+qualquer modo. Não abra TCP.
 
 ## Modos
 
 Cada modo é um serviço próprio no `compose.yaml`, com porta e container
-próprios, escolhido pelo profile — dá para deixar mais de um no ar ao mesmo
-tempo. Ver [modos e containers](docs/modos-e-containers.md).
+escolhido pelo profile. Todos usam a mesma porta, então subir um modo derruba o
+outro. Ver [modos e containers](docs/modos-e-containers.md).
 
 - **Sobrevivência**: ondas progressivas até 600 zumbis vivos, safehouse com 3
   vidas por jogador, arma que desgasta e munição escassa.
