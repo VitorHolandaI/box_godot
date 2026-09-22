@@ -59,10 +59,6 @@ const PLAYER_SPAWN_POINTS := [
 @onready var split_screen = $Interface/SplitScreen
 @onready var sun: DirectionalLight3D = $Sun
 @onready var in_game_menu: Control = $Interface/InGameMenu
-# Resolvida sob demanda: a cidade em etapas cria a safehouse com call_deferred,
-# depois do @onready (antes ficava null e a porta nunca abria no client).
-var safehouse_door: Node = null
-
 var local_players: Array[Node] = []
 var network_players: Dictionary = {}
 ## Contador de nomes estaveis para pickups de arma dropada no chao.
@@ -578,6 +574,40 @@ func spawn_zombie_ragdoll(position: Vector3, rotation: float, velocity: Vector3,
 		ragdoll.set_meta("source_zombie", source_name)
 		ragdolls_by_zombie[source_name] = ragdoll
 	FramePerfProbe.end("ragdoll_spawn", perf_start)
+
+
+## Segundos que o corpo do jogador morto fica no chao no mata-mata. O respawn e
+## em 5 s (TdmMatch.RESPAWN_SECONDS), entao o corpo ainda fica um tempo depois de
+## o jogador ja estar de pe na base — que e o ponto: dar tempo de ver o tombo.
+const PVP_CORPSE_SECONDS := 10.0
+## Paleta do cadaver de jogador: pele e calca fixas, tronco na cor do time (e
+## assim que se sabe de quem era o corpo).
+const PLAYER_CORPSE_SKIN := Color(0.76, 0.6, 0.47)
+const PLAYER_CORPSE_PANTS := Color(0.17, 0.18, 0.21)
+
+
+## Corpo do jogador morto no mata-mata: o MESMO ragdoll articulado do zumbi,
+## pintado na cor do time em vez da paleta verde. Antes o boneco sumia na hora
+## (`visible = false` no _pvp_die) e nao dava para ver nada do abate.
+## Uso: cena.spawn_player_corpse(pos, rot, velocidade, TdmMatch.color_for_team(t))
+func spawn_player_corpse(corpse_position: Vector3, corpse_rotation: float, velocity: Vector3, team_color: Color) -> void:
+	var ragdoll := ZOMBIE_RAGDOLL_SCENE.instantiate()
+	# Antes de entrar na arvore: _ready monta as partes e o setup pinta. A paleta
+	# precisa ser Array[Color] DE VERDADE: um literal destipado por set() falha
+	# calado e o cadaver volta a nascer verde de zumbi.
+	var palette: Array[Color] = [PLAYER_CORPSE_SKIN, team_color, PLAYER_CORPSE_PANTS]
+	ragdoll.set("color_override", palette)
+	add_child(ragdoll)
+	ragdoll.position = corpse_position
+	ragdoll.rotation.y = corpse_rotation
+	ragdoll.setup(velocity)
+	# Fora do _cleanup_far_ragdolls de proposito: o corpo do jogador tem tempo
+	# fixo, nao depende de estar longe de alguem.
+	get_tree().create_timer(PVP_CORPSE_SECONDS, false).timeout.connect(
+		func() -> void:
+			if is_instance_valid(ragdoll):
+				ragdoll.queue_free()
+	)
 
 
 ## Corpos visiveis (ragdolls) so somem longe de todos os jogadores; antes o mais
@@ -1185,8 +1215,9 @@ func _apply_ground_snapshot(supply_states: Array, ground_weapons: Array) -> void
 
 
 func _send_player_snapshots(states: Array) -> void:
-	var door := _find_safehouse_door()
-	var door_open := door != null and bool(door.call("is_open_requested"))
+	# TODAS as portas numa mascara: no mata-mata as duas bases tem porta propria
+	# e antes so a da casa central viajava (ver SafehouseDoorSync).
+	var door_mask := SafehouseDoorSync.mask_from(SafehouseDoorSync.ordered_doors(get_tree()))
 	var include_slots: Dictionary = {}
 	for state_value in states:
 		var state := state_value as Dictionary
@@ -1200,7 +1231,7 @@ func _send_player_snapshots(states: Array) -> void:
 	for packet_states in PlayerSnapshotCodec.split_into_packets(states, include_slots, PLAYER_SNAPSHOT_PACKET_BYTES):
 		var payload := PlayerSnapshotCodec.encode(packet_states, include_slots)
 		for peer_id in NetworkSession.loaded_peers:
-			_apply_player_snapshot.rpc_id(int(peer_id), payload, door_open)
+			_apply_player_snapshot.rpc_id(int(peer_id), payload, door_mask)
 
 
 ## Carros dirigiveis: transform + vida/gasolina/estado a 10 Hz (junto do snapshot
@@ -1326,22 +1357,12 @@ func _send_zombie_snapshots(states: Array) -> void:
 	zombie_snapshot_sequence += 1
 
 
-## Porta da safehouse central, guardada assim que a cidade em etapas a cria.
-## Uso: var door := _find_safehouse_door()
-func _find_safehouse_door() -> Node:
-	if is_instance_valid(safehouse_door):
-		return safehouse_door
-	safehouse_door = get_node_or_null("GeneratedCity/CentralSafehouse/SafehouseDoor")
-	return safehouse_door
-
 
 @rpc("authority", "call_remote", "unreliable_ordered")
-func _apply_player_snapshot(payload: PackedByteArray, door_open: bool) -> void:
+func _apply_player_snapshot(payload: PackedByteArray, door_open_mask: int) -> void:
 	if not NetworkSession.is_client():
 		return
-	var door := _find_safehouse_door()
-	if door != null:
-		door.call("apply_network_open_state", door_open)
+	SafehouseDoorSync.apply_mask(SafehouseDoorSync.ordered_doors(get_tree()), door_open_mask)
 	for state in PlayerSnapshotCodec.decode(payload):
 		var player = network_players.get(String(state.get("key", "")))
 		if player != null:

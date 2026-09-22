@@ -238,12 +238,41 @@ func _update_minimaps() -> void:
 		for boss in bosses:
 			if not reveal_zombies.has(boss):
 				reveal_zombies = reveal_zombies + [boss]
-		minimaps[index].tracked_players = all_players
+		minimaps[index].tracked_players = visible_players_for(view_player, all_players, NetworkSession.pvp_mode)
+		minimaps[index].colors = minimap_colors_for(view_player, NetworkSession.pvp_mode)
 		minimaps[index].tracked_zombies = reveal_zombies
 		minimaps[index].tracked_crates = all_crates
 		minimaps[index].tracked_loot = all_loot
 		minimaps[index].city_layout = _minimap_layout
 		minimaps[index].queue_redraw()
+
+
+## Quem o minimapa pode mostrar: no mata-mata SO os companheiros do proprio
+## time. Mostrar todo mundo entregava a posicao do inimigo de graca, que e
+## radar-hack embutido num modo competitivo. Nos modos cooperativos continua
+## todo mundo (ver o inimigo nao existe la).
+## Uso: var mostrados := visible_players_for(jogador, todos, NetworkSession.pvp_mode)
+static func visible_players_for(viewer: Node, all_players: Array, pvp: bool) -> Array:
+	if not pvp or viewer == null or not is_instance_valid(viewer):
+		return all_players
+	var viewer_team := int(viewer.get("pvp_team"))
+	if viewer_team < 0:
+		return all_players
+	return all_players.filter(func(node: Variant) -> bool:
+		return is_instance_valid(node) and int((node as Node).get("pvp_team")) == viewer_team)
+
+
+## Cores dos pontos do minimapa: no mata-mata todo ponto visivel e companheiro,
+## entao todos saem na cor do time (o mapa inteiro so tem duas cores). Fora do
+## mata-mata cada vaga local mantem a sua cor.
+## Uso: minimap.colors = minimap_colors_for(jogador, NetworkSession.pvp_mode)
+static func minimap_colors_for(viewer: Node, pvp: bool) -> Array:
+	if not pvp or viewer == null or not is_instance_valid(viewer):
+		return MINIMAP_PLAYER_COLORS
+	var viewer_team := int(viewer.get("pvp_team"))
+	if viewer_team < 0:
+		return MINIMAP_PLAYER_COLORS
+	return [TdmMatch.color_for_team(viewer_team)]
 
 
 ## Ruas/predios do mapa gerado, lidos do no da cidade (GeneratedCity). Vazio

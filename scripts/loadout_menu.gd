@@ -86,10 +86,28 @@ func _process(_delta: float) -> void:
 	if not is_instance_valid(_player):
 		return
 	if Input.is_action_just_pressed(String(_player.get("input_action_prefix")) + "buy"):
-		_panel.visible = not _panel.visible
-	if _panel.visible:
+		set_panel_open(not is_panel_open())
+	if is_panel_open():
 		refresh()
 	_refresh_banner()
+
+
+func is_panel_open() -> bool:
+	return _panel != null and _panel.visible
+
+
+## Abre/fecha o painel SOLTANDO o cursor junto. Em primeira pessoa o mouse fica
+## preso (PlayerCharacter._apply_mouse_capture): antes o painel so alternava a
+## visibilidade, entao o jogador ficava sem cursor para clicar na arma e o
+## mouse-look seguia girando o boneco enquanto ele tentava escolher.
+## Uso: menu.set_panel_open(true)
+func set_panel_open(open: bool) -> void:
+	if _panel == null:
+		return
+	_panel.visible = open
+	GameConfig.set_menu_open(get_tree(), open)
+	if open:
+		refresh()
 
 
 ## Invulnerabilidade de respawn: contagem na tela enquanto durar.
@@ -125,14 +143,26 @@ func refresh() -> void:
 	var chosen := int(_player.get("pvp_loadout_kind")) if is_instance_valid(_player) else 0
 	_team_label.text = "Seu time: %s" % TdmMatch.name_for_team(team)
 	_team_label.add_theme_color_override("font_color", TdmMatch.color_for_team(team))
-	var scene := get_tree().current_scene
-	_score_label.text = String(scene.get("pvp_state_text")) if scene != null else ""
+	# `get()` devolve null quando a cena atual nao tem a propriedade (cena de
+	# teste, lab, menu): String(null) estoura em vez de virar texto vazio.
+	var state_text: Variant = scene_pvp_state_text(get_tree().current_scene)
+	_score_label.text = state_text
 	for kind in _buttons:
 		var button := _buttons[kind] as Button
 		button.text = "%s%s" % [WeaponStats.stats_for(int(kind)).get("label", kind), "  (equipada)" if int(kind) == chosen else ""]
 	_status_label.text = ""
 	if _status_provider.is_valid():
-		_status_label.text = String(_status_provider.call())
+		var answer: Variant = _status_provider.call()
+		_status_label.text = String(answer) if answer != null else ""
+
+
+## Placar do mata-mata publicado pela cena de jogo, ou vazio quando a cena atual
+## nao tem esse estado (cena de teste, lab, menu). Uso: interno do refresh.
+static func scene_pvp_state_text(scene: Node) -> String:
+	if scene == null:
+		return ""
+	var state: Variant = scene.get("pvp_state_text")
+	return String(state) if state != null else ""
 
 
 func _on_row_pressed(kind: int) -> void:
