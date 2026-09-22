@@ -122,6 +122,7 @@ enum LodLevel {
 
 var health := 100
 var zombie_type := ZombieType.WALKER
+var is_crawling_state := false
 var appearance_hash := 0
 var lod_level: LodLevel = LodLevel.NEAR
 var is_cluster_leader := true
@@ -1151,6 +1152,23 @@ func _apply_limb_loss_mask(mask: int) -> void:
 			continue
 		var limb_bit: int = LIMB_STATE_SCRIPT.bit_for_name(limb_name)
 		mesh.visible = natural_limb_loss_mask & limb_bit == 0 and limb_loss_mask & limb_bit == 0
+	_update_locomotion_from_limb_loss()
+
+
+## Duas pernas arrancadas mantem o zumbi na perseguicao, agora rastejando.
+## Uso: chamado ao aplicar a mascara local ou recebida pela rede.
+func _update_locomotion_from_limb_loss() -> void:
+	var leg_mask := LIMB_STATE_SCRIPT.LEFT_LEG | LIMB_STATE_SCRIPT.RIGHT_LEG
+	var both_legs_lost := limb_loss_mask & leg_mask == leg_mask
+	if not both_legs_lost or is_crawling_state:
+		return
+	is_crawling_state = true
+	ZombieMutator.apply_crawler_locomotion(self)
+
+
+## Estado visivel de locomocao; jogadores e testes podem distinguir o rastejo.
+func is_crawling() -> bool:
+	return is_crawling_state
 
 
 ## Zona do corpo cuja parte esta mais perto do ponto local atingido. Puro e
@@ -1415,6 +1433,7 @@ func _configure_variant() -> void:
 	else:
 		zombie_type = ZombieMutator.random_variant_for_hash(appearance_hash) as ZombieType
 	ZombieMutator.apply_appearance(self, int(zombie_type), appearance_hash)
+	is_crawling_state = int(zombie_type) == ZombieType.CRAWLER
 	# Passada fora de fase entre zumbis: hash do nome, deterministico e estavel.
 	walk_time = float(appearance_hash % 1000) * WALK_PHASE_STEP
 	# Grupo proprio: o minimapa mostra o chefe sempre sem varrer a horda inteira.
