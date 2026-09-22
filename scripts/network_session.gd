@@ -56,6 +56,10 @@ var _connected_to_server := false
 ## andava). Fica vazio para quem nao reportar dentro de BUILD_REPORT_TIMEOUT.
 var peer_builds: Dictionary = {}
 const BUILD_REPORT_TIMEOUT := 8.0
+## `--fake-build=X`: so para teste. Faz o cliente reportar um build inventado no
+## handshake, que e o unico jeito barato de exercitar a recusa sem manter um
+## segundo export antigo por perto (ver scripts/test_session.sh, fase 3).
+var handshake_build_override := ""
 var _ping_elapsed := PING_INTERVAL
 var _discovery_socket: PacketPeerUDP
 ## Servidor filho do "Hospedar partida" (no jogo do host) e, no proprio
@@ -71,7 +75,7 @@ func _ready() -> void:
 		return
 	if _start_dedicated_server():
 		return
-	_read_bot_name_argument()
+	_read_client_arguments()
 	if _join_as_bot():
 		return
 	_enter_direct_offline_scene()
@@ -134,10 +138,15 @@ func _start_dedicated_server() -> bool:
 	return true
 
 
-func _read_bot_name_argument() -> void:
+## Bandeiras que so o lado cliente le, antes de tentar entrar no servidor:
+## `--bot-name=` (nome na sala) e `--fake-build=` (gancho de teste).
+## Uso: _read_client_arguments()
+func _read_client_arguments() -> void:
 	for argument in OS.get_cmdline_user_args():
 		if argument.begins_with("--bot-name="):
 			bot_name = argument.trim_prefix("--bot-name=").strip_edges()
+		elif argument.begins_with("--fake-build="):
+			handshake_build_override = argument.trim_prefix("--fake-build=").strip_edges()
 
 
 ## Clientes automaticos: `--bot=IP` (teste de fluxo, sai no fim) e
@@ -313,7 +322,8 @@ func _on_connected_to_server() -> void:
 	_ping_elapsed = PING_INTERVAL
 	print(BuildInfo.describe("client"))
 	var handshake: Array = BuildInfo.handshake_payload()
-	_report_build.rpc_id(SERVER_ID, String(handshake[0]), String(handshake[1]))
+	var reported_build := handshake_build_override if not handshake_build_override.is_empty() else String(handshake[0])
+	_report_build.rpc_id(SERVER_ID, reported_build, String(handshake[1]))
 	_request_slots.rpc_id(SERVER_ID, requested_slots)
 
 
@@ -335,6 +345,18 @@ func _await_build_report(peer_id: int) -> void:
 		return
 	push_error("Peer %d nao reportou o build em %.0f s (cliente antigo?); desconectando. Servidor: %s." % [peer_id, BUILD_REPORT_TIMEOUT, BuildInfo.short_text()])
 	_kick_peer(peer_id, "Build antigo/incompativel: o cliente nao reportou a versao.")
+
+
+## O peer ja passou pelo handshake de build? Enquanto nao passou, nenhum RPC
+## dele vale: o cliente dispara _report_build e _request_slots em sequencia
+## (_on_connected_to_server), entao o pedido de vaga de quem foi recusado JA
+## esta na fila e chega depois do kick. Sem esta guarda o servidor metia um peer
+## desconectado no roster ("Peer N entrou com 1 jogador(es)" logo apos "Peer N
+## recusado") e ainda tentava responder nele, com tres
+## "Unable to send packet on channel 0, max channels: 0" no log da VPS.
+## Uso: if not peer_passed_handshake(peer_builds, sender_id): return
+static func peer_passed_handshake(reported_builds: Dictionary, peer_id: int) -> bool:
+	return reported_builds.has(peer_id)
 
 
 ## Handshake de versao: recusa build diferente com mensagem legivel.
@@ -367,6 +389,9 @@ func _request_slots(slot_count: int) -> void:
 	if not is_server():
 		return
 	var sender_id := multiplayer.get_remote_sender_id()
+	if not peer_passed_handshake(peer_builds, sender_id):
+		print("Peer %d pediu vaga sem passar pelo handshake de build; ignorado." % sender_id)
+		return
 	var rejection := PlayerCapacity.join_rejection(_total_player_count(), slot_count, max_players)
 	if not rejection.is_empty():
 		_join_result.rpc_id(sender_id, false, rejection, procedural_city_enabled, world_seed, survival_mode, pvp_mode)
@@ -637,7 +662,10 @@ static func parse_world_seed_value(raw_seed: String) -> Variant:
 func _ping_request(sent_at_usec: int) -> void:
 	if not is_server() or sent_at_usec <= 0:
 		return
-	_ping_response.rpc_id(multiplayer.get_remote_sender_id(), sent_at_usec)
+	var sender_id := multiplayer.get_remote_sender_id()
+	if not peer_passed_handshake(peer_builds, sender_id):
+		return
+	_ping_response.rpc_id(sender_id, sent_at_usec)
 
 
 @rpc("authority", "call_remote", "unreliable")
