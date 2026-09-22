@@ -60,6 +60,13 @@ const DRIVABLE_CAR_SCENE: PackedScene = preload("res://scenes/drivable_car.tscn"
 const DRIVABLE_CAR_SPOTS := [
 	Vector3(-24.0, 0.4, 6.0),
 ]
+## Carro de base do mata-mata: fica no quintal, ao LADO dos pontos de
+## nascimento (os bots nascem espalhados ate 2,1 m do centro), para nao cair em
+## cima de quem renasce. Mesma altura de spawn do carro da rua: nasce alguns
+## centimetros no ar e assenta.
+const PVP_TEAM_CAR_SIDE_OFFSET := 6.0
+const PVP_TEAM_CAR_YARD_DISTANCE := 7.0
+const PVP_TEAM_CAR_HEIGHT := 0.4
 const BUILDING_COLORS := [
 	Color(0.48, 0.25, 0.18),
 	Color(0.25, 0.36, 0.46),
@@ -177,6 +184,8 @@ func _build_procedural_city() -> void:
 		await get_tree().process_frame
 	_create_abandoned_cars(_street_props_rng())
 	_create_drivable_cars(_street_props_rng())
+	if NetworkSession.pvp_mode:
+		_create_pvp_team_cars()
 	_create_boundaries()
 	_create_forest()
 	city_ready = true
@@ -215,21 +224,29 @@ func _hide_legacy_center_roads() -> void:
 
 
 func _create_procedural_safehouse() -> void:
-	_build_safehouse("CentralSafehouse", Vector3(-10.5, 0.12, 10.5))
-	# PVP: uma casa por time, nos cantos opostos do mapa.
+	# No mata-mata as bases sao DUAS, uma por time, em cantos opostos: a casa
+	# central e a base da sobrevivencia e no PVP nao pertence a ninguem — no
+	# meio do mapa ela virava so mais uma cobertura no caminho, com uma terceira
+	# porta que nenhum time defende.
 	if not NetworkSession.pvp_mode:
+		_build_safehouse("CentralSafehouse", Vector3(-10.5, 0.12, 10.5))
 		return
 	for index in PVP_SAFEHOUSE_NAMES.size():
-		_build_safehouse(PVP_SAFEHOUSE_NAMES[index], PVP_SAFEHOUSE_POSITIONS[index], PVP_SAFEHOUSE_YAWS[index])
+		_build_safehouse(PVP_SAFEHOUSE_NAMES[index], PVP_SAFEHOUSE_POSITIONS[index], PVP_SAFEHOUSE_YAWS[index], index)
 
 
 ## Constroi uma safehouse (com os marcadores PlayerSpawn1..4 dela) e configura o
 ## recorte na cidade. Uso: _build_safehouse("PvpSafehouse", PVP_SAFEHOUSE_POSITION)
-func _build_safehouse(house_name: String, house_position: Vector3, house_yaw: float = 0.0) -> void:
+func _build_safehouse(house_name: String, house_position: Vector3, house_yaw: float = 0.0, owner_team: int = -1) -> void:
 	var safehouse: StaticBody3D = SafehouseBuilder.build_safehouse()
 	safehouse.name = house_name
 	safehouse.position = house_position
 	safehouse.rotation.y = house_yaw
+	# Base de time: a porta so abre para quem e do time dela (a casa central da
+	# sobrevivencia fica com -1 e abre para qualquer um).
+	var door := safehouse.get_node_or_null("SafehouseDoor")
+	if door != null:
+		door.set("owner_team", owner_team)
 	add_child(safehouse)
 	var safehouse_min := safehouse.global_position + Vector3(-6.4, 0.0, -6.4)
 	# Ate o topo da mureta do telhado (6.47 + 1.0).
@@ -331,6 +348,33 @@ func _create_drivable_cars(rng: RandomNumberGenerator) -> void:
 		car.position = DRIVABLE_CAR_SPOTS[index]
 		car.rotation.y = rng.randf_range(0.0, TAU)
 		add_child(car)
+
+
+## Um carro por time no mata-mata, no quintal da propria base, com tanque
+## infinito e lataria blindada: e equipamento do time, nao loot. Carro que fica
+## sem gasolina no meio da partida ou que morre no primeiro minuto some do jogo
+## ate o fim dela, e ai a base fica a pe sem isso ser decisao de ninguem.
+## Uso: interno de _build_procedural_city, so com NetworkSession.pvp_mode.
+func _create_pvp_team_cars() -> void:
+	for index in PVP_SAFEHOUSE_NAMES.size():
+		var car := DRIVABLE_CAR_SCENE.instantiate() as VehicleBody3D
+		if car == null:
+			continue
+		car.name = "PvpTeamCar%d" % index
+		var base: Vector3 = PVP_SAFEHOUSE_POSITIONS[index]
+		# O lado da porta segue a rotacao da casa (time 0 em -Z, time 1 em +Z),
+		# igual ao quintal onde os jogadores renascem.
+		var door_sign := -1.0 if index == 0 else 1.0
+		car.position = Vector3(
+			base.x + PVP_TEAM_CAR_SIDE_OFFSET,
+			PVP_TEAM_CAR_HEIGHT,
+			base.z + door_sign * PVP_TEAM_CAR_YARD_DISTANCE
+		)
+		car.rotation.y = PVP_SAFEHOUSE_YAWS[index]
+		car.set("unlimited_fuel", true)
+		car.set("indestructible", true)
+		add_child(car)
+		car.call("paint_team_color", TdmMatch.color_for_team(index))
 
 
 func _create_abandoned_cars(rng: RandomNumberGenerator) -> void:
