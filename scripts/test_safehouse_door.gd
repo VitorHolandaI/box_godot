@@ -28,14 +28,16 @@ func _test_main_finds_door_of_staged_city(test_root: Node) -> void:
 	await test_root.get_tree().process_frame
 	await test_root.get_tree().physics_frame
 	var door := main_world.get_node_or_null("GeneratedCity/CentralSafehouse/SafehouseDoor")
-	var resolved: Node = main_world.call("_find_safehouse_door")
-	var same_door := door != null and resolved == door
+	# A busca agora e pelo GRUPO, nao por um caminho fixo: o mata-mata tem porta
+	# em cada base e todas precisam entrar na mascara do snapshot.
+	var listed: Array = SafehouseDoorSync.ordered_doors(test_root.get_tree())
+	var found := door != null and listed.has(door)
 	main_world.free()
 	NetworkSession.procedural_city_enabled = previous_city
-	if not same_door:
-		_fail(test_root, "Main deveria achar a SafehouseDoor criada depois do _ready; porta_na_cena=%s resolvida=%s." % [door, resolved])
+	if not found:
+		_fail(test_root, "A porta criada depois do _ready deveria entrar na lista do SafehouseDoorSync; porta_na_cena=%s listadas=%d." % [door, listed.size()])
 		return
-	print("PASS: Main acha a porta da safehouse criada pela cidade em etapas.")
+	print("PASS: Porta da cidade em etapas entra na lista replicada (%d porta(s))." % listed.size())
 
 
 ## Player em frente a porta aperta E: raycast deve achar o painel e o toggle
