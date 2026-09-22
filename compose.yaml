@@ -9,13 +9,19 @@
 #   docker compose --profile survival up -d --build
 #   docker compose --profile tdm up -d --build
 #   docker compose --profile classic up -d --build
-#   docker compose --profile survival --profile tdm up -d   # os dois juntos
 #   docker compose ps
 #   scripts/server_menu.sh                                  # menu interativo
 #
-# Variaveis por modo (SURVIVAL_*, TDM_*, CLASSIC_*): PORT, DISCOVERY_PORT,
-# NAME, WORLD_SEED e TEST_MODE (este ultimo so para o smoke test do container,
-# ver scripts/test_container.sh; no jogo de verdade fica --production).
+# TODOS os modos usam a MESMA porta (GAME_SERVER_PORT, 27016 para descoberta):
+# na VPS so 27015/udp e 27016/udp estao abertas no firewall, entao um modo numa
+# porta propria simplesmente nao recebia conexao. Como consequencia os modos NAO
+# rodam juntos: subir um derruba o outro, que e exatamente a escolha que o
+# scripts/server_menu.sh oferece. Para rodar dois de verdade, abra outra porta
+# na VPS e passe GAME_SERVER_PORT no segundo.
+#
+# Variaveis por modo (SURVIVAL_*, TDM_*, CLASSIC_*): NAME, WORLD_SEED e
+# TEST_MODE (este ultimo so para o smoke test do container, ver
+# scripts/test_container.sh; no jogo de verdade fica --production).
 #
 # Sem profile nenhum o `up` nao sobe nada, de proposito: o modo e escolha.
 
@@ -45,7 +51,7 @@ services:
     container_name: box-godot-survival
     command:
       - "--server"
-      - "--server-port=${SURVIVAL_PORT:-27015}"
+      - "--server-port=${GAME_SERVER_PORT:-27015}"
       - "${SURVIVAL_TEST_MODE:---production}"
       - "--procedural-city"
       - "--survival"
@@ -54,8 +60,8 @@ services:
     environment:
       GAME_SERVER_WORLD_SEED: "${SURVIVAL_WORLD_SEED:-}"
     ports:
-      - "${SURVIVAL_PORT:-27015}:${SURVIVAL_PORT:-27015}/udp"
-      - "${SURVIVAL_DISCOVERY_PORT:-27016}:${SURVIVAL_DISCOVERY_PORT:-27016}/udp"
+      - "${GAME_SERVER_PORT:-27015}:${GAME_SERVER_PORT:-27015}/udp"
+      - "${GAME_SERVER_DISCOVERY_PORT:-27016}:${GAME_SERVER_DISCOVERY_PORT:-27016}/udp"
 
   # Mata-mata por times (Team Deathmatch): duas bases em cantos opostos, placar
   # continuo de abates, respawn com invulnerabilidade. Ver docs/pvp.md.
@@ -65,7 +71,7 @@ services:
     container_name: box-godot-tdm
     command:
       - "--server"
-      - "--server-port=${TDM_PORT:-27017}"
+      - "--server-port=${GAME_SERVER_PORT:-27015}"
       - "${TDM_TEST_MODE:---production}"
       - "--procedural-city"
       - "--pvp"
@@ -75,8 +81,8 @@ services:
     environment:
       GAME_SERVER_WORLD_SEED: "${TDM_WORLD_SEED:-}"
     ports:
-      - "${TDM_PORT:-27017}:${TDM_PORT:-27017}/udp"
-      - "${TDM_DISCOVERY_PORT:-27018}:${TDM_DISCOVERY_PORT:-27018}/udp"
+      - "${GAME_SERVER_PORT:-27015}:${GAME_SERVER_PORT:-27015}/udp"
+      - "${GAME_SERVER_DISCOVERY_PORT:-27016}:${GAME_SERVER_DISCOVERY_PORT:-27016}/udp"
 
   # Classico: zumbis sem a progressao de ondas do survival (--classic-mode).
   classic:
@@ -85,7 +91,7 @@ services:
     container_name: box-godot-classic
     command:
       - "--server"
-      - "--server-port=${CLASSIC_PORT:-27019}"
+      - "--server-port=${GAME_SERVER_PORT:-27015}"
       - "${CLASSIC_TEST_MODE:---production}"
       - "--procedural-city"
       - "--classic-mode"
@@ -94,5 +100,5 @@ services:
     environment:
       GAME_SERVER_WORLD_SEED: "${CLASSIC_WORLD_SEED:-}"
     ports:
-      - "${CLASSIC_PORT:-27019}:${CLASSIC_PORT:-27019}/udp"
-      - "${CLASSIC_DISCOVERY_PORT:-27020}:${CLASSIC_DISCOVERY_PORT:-27020}/udp"
+      - "${GAME_SERVER_PORT:-27015}:${GAME_SERVER_PORT:-27015}/udp"
+      - "${GAME_SERVER_DISCOVERY_PORT:-27016}:${GAME_SERVER_DISCOVERY_PORT:-27016}/udp"

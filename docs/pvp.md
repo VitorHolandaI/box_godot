@@ -40,12 +40,12 @@ contador de horda, sem sonar).
 
 ## Subir o servidor
 
-Cada modo e um **container proprio**, com porta e nome proprios, escolhido pelo
-profile do compose — da para deixar sobrevivencia e mata-mata no ar ao mesmo
-tempo.
+Cada modo e um **container proprio**, escolhido pelo profile do compose. Todos
+usam a **mesma porta** (27015, a aberta na VPS), entao subir um modo derruba o
+outro — e a escolha que o menu do servidor oferece.
 
 ```bash
-docker compose --profile tdm up -d --build     # mata-mata, porta 27017
+docker compose --profile tdm up -d --build     # mata-mata, porta 27015
 docker compose ps
 
 # atalho: menu que escolhe no ato o modo (com ou sem rebuild) e cuida de
@@ -57,10 +57,11 @@ scripts/server_menu.sh tdm logs           # so o log do mata-mata
 scripts/server_menu.sh tdm stop           # derruba so este modo
 
 # cliente (mesmo build do servidor):
-godot --path . -- --join=127.0.0.1 --server-port=27017
+godot --path . -- --join=127.0.0.1 --server-port=27015
 ```
 
-Variaveis do modo: `TDM_PORT`, `TDM_BOTS`, `TDM_NAME`, `TDM_WORLD_SEED`.
+Variaveis do modo: `TDM_BOTS`, `TDM_NAME`, `TDM_WORLD_SEED` (a porta e
+`GAME_SERVER_PORT`, compartilhada por todos os modos).
 Ver [modos-e-containers.md](modos-e-containers.md) para os outros modos.
 
 ## Onde mexer
