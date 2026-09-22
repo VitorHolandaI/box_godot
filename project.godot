@@ -22,6 +22,14 @@ GameConfig="*res://scripts/game_config.gd"
 NetworkSession="*res://scripts/network_session.gd"
 AudioFeedback="*res://scripts/audio_feedback.gd"
 
+[debug]
+
+; Sem isto o cliente nao guarda log nenhum: quando o jogo caiu no mata-mata so
+; restou o que estava rolando no terminal, e a linha da causa ja tinha subido.
+; Agora fica em user://logs/godot.log (Linux: ~/.local/share/godot/app_userdata/Box Godot/logs).
+file_logging/enable_file_logging=true
+file_logging/max_log_files=10
+
 [display]
 
 window/size/viewport_width=1280
