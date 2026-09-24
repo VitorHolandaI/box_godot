@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends CharacterBody3D
 
 signal died(killer: Node)
@@ -1487,7 +1489,8 @@ func _animate_pose(delta: float, is_walking: bool) -> void:
 	# Taxa de giro desde o ultimo frame animado: o corpo inclina na curva.
 	var turn_rate := wrapf(rotation.y - _last_yaw, -PI, PI) / maxf(delta, 0.001)
 	_last_yaw = rotation.y
-	ZombieMutator.animate_variant_pose(self, int(zombie_type), delta, is_walking, attack_weight, walk_time, _pose_nodes, turn_rate)
+	var pose_type := ZombieMutator.animated_type(int(zombie_type), is_crawling_state)
+	ZombieMutator.animate_variant_pose(self, pose_type, delta, is_walking, attack_weight, walk_time, _pose_nodes, turn_rate)
 	ZombieMutator.animate_hit_reaction(
 		self,
 		delta,

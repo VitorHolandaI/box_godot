@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 class_name DrivableCar
 extends VehicleBody3D
 
@@ -16,9 +18,12 @@ const VISUAL_SCALE := 1.3
 ## O jipe encara +Z no GLB; o Godot usa -Z como frente. Gira 180 graus para o bico
 ## apontar para onde engine_force positivo empurra.
 const MODEL_YAW := PI
-## No GLB o fundo das rodas fica em y=-0,99. Este lift sobe o modelo para o pneu
-## tocar o chao do carro (y=0) depois da escala.
-const MODEL_GROUND_LIFT := 0.99
+## No GLB o fundo das rodas fica em y=-0,99, entao 0,99 punha o pneu no y=0 do
+## carro. So que o jipe nao assenta com o y=0 no chao: a suspensao segura o corpo
+## 0,24 m acima (o VehicleWheel3D para a 0,24 dos 0,3 de curso), e o jipe ficava
+## boiando. Como as rodas sao parte do GLB e nao se mexem sozinhas, o certo e
+## descontar essa folga do lift: 0,99 - 0,24/1,3. Medido em test_ground_contact.gd.
+const MODEL_GROUND_LIFT := 0.807
 ## Nome (case-insensitive) do material do para-brisa: vira transparente para a
 ## camera interna enxergar a rua.
 const WINDOW_MATERIAL_KEYWORD := "window"
