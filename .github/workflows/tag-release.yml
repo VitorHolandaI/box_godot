@@ -1,16 +1,19 @@
 name: tag-release
 
-# Toda entrega na main vira release? Nao. So quando o GAME_BUILD muda.
+# Todo push na main gera os binarios. A Release usada e a do GAME_BUILD
+# declarado em scripts/build_info.gd: a tag nasce na primeira vez que aquele
+# build chega na main, e os pushes seguintes com o mesmo build so trocam os
+# arquivos da Release (o release.yml sobe com --clobber).
 #
-# O GAME_BUILD ja e o identificador que o servidor compara no handshake: cliente
-# com build diferente do servidor e recusado. Entao ele, e nao o commit, e quem
-# define o que e uma versao nova de verdade. Correcao de typo entra na main sem
-# gerar tres binarios de ~90 MB; mudanca que altera o build gera a release
-# sozinha.
+# Por que amarrar no GAME_BUILD e nao no commit: ele e o identificador que o
+# servidor compara no handshake, entao ele e quem define o que e uma versao
+# diferente para quem joga. Uma tag por commit encheria o repo de tags que nao
+# significam nada para o jogador.
 #
 # A tag sai daqui com o GITHUB_TOKEN, e tag empurrada com esse token NAO dispara
-# outro workflow (protecao contra workflow recursivo). Por isso o release e
-# CHAMADO como workflow_call em vez de esperar o gatilho de push da tag.
+# outro workflow (protecao do GitHub contra workflow recursivo). Por isso o
+# release e CHAMADO como workflow_call em vez de esperar o gatilho de push da
+# tag.
 on:
   push:
     branches:
@@ -24,7 +27,6 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       tag: ${{ steps.calcular.outputs.tag }}
-      nova: ${{ steps.calcular.outputs.nova }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,7 +34,7 @@ jobs:
           # toda entrega na main pareceria uma versao nova.
           fetch-depth: 0
 
-      - name: Decidir se ha versao nova
+      - name: Garantir a tag do build declarado
         id: calcular
         run: |
           set -euo pipefail
@@ -44,18 +46,15 @@ jobs:
           TAG="build-$BUILD"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
           if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            echo "nova=false" >> "$GITHUB_OUTPUT"
-            echo ">> $TAG ja existe, nada a publicar"
+            echo ">> $TAG ja existe; a Release dela vai receber os binarios novos"
             exit 0
           fi
-          echo "nova=true" >> "$GITHUB_OUTPUT"
           git tag "$TAG"
           git push origin "$TAG"
           echo ">> $TAG criada"
 
   publicar:
     needs: decidir
-    if: needs.decidir.outputs.nova == 'true'
     uses: ./.github/workflows/release.yml
     permissions:
       contents: write
