@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://labs/controle_lab.gd" id="1_controle_lab"]
+
+[node name="ControleLab" type="Node"]
+script = ExtResource("1_controle_lab")
