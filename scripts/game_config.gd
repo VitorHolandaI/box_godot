@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends Node
 
 const ACTIONS := ["up", "down", "left", "right", "jump", "sprint", "attack", "knife", "pistol", "reload", "interact", "sonar", "shotgun", "uzi", "magnum", "drop_weapon", "double_barrel", "carbine", "cycle_weapon", "grenade", "throw_knife", "air_strike", "swat", "buy", "view"]
@@ -5,6 +7,7 @@ const SETTINGS_PATH := "user://settings.cfg"
 const MAX_SAVED_SERVERS := 12
 const MIN_SERVER_PORT := 1024
 const MAX_SERVER_PORT := 65535
+const OFFICIAL_SERVER := {"address": "bitssand.blog", "port": 27015, "label": "Servidor Oficial"}
 const SUPPORTED_RESOLUTIONS: Array[Vector2i] = [
 	Vector2i(800, 600),
 	Vector2i(1280, 720),
@@ -20,6 +23,7 @@ var graphics_resolution := Vector2i(1280, 720)
 var graphics_quality := GraphicsQuality.HIGH
 var graphics_fullscreen := false
 var saved_servers: Array[Dictionary] = []
+var official_server_seeded := false
 ## Mira pelo cursor do mouse (isometrica) e cameras em primeira pessoa. O menu
 ## de configuracoes e a tecla "view" alternam a primeira pessoa por jogador.
 var mouse_aim_enabled := true
@@ -64,6 +68,15 @@ func _ready() -> void:
 		elif argument == "--quality=high":
 			graphics_quality = GraphicsQuality.HIGH
 	_apply_window_settings()
+	Input.joy_connection_changed.connect(_on_joy_connection_changed)
+
+
+## Controle arrancado da USB no meio da partida: o dono dele volta ao teclado
+## antes que qualquer menu perceba, senao fica sem comando nenhum.
+func _on_joy_connection_changed(device_id: int, connected: bool) -> void:
+	if connected:
+		return
+	release_unplugged_joypad(device_id)
 
 
 func apply_graphics_settings(resolution: Vector2i, quality: int, fullscreen: bool) -> Error:
@@ -85,6 +98,25 @@ func get_saved_servers() -> Array[Dictionary]:
 	for server in saved_servers:
 		result.append(server.duplicate(true))
 	return result
+
+
+static func saved_servers_with_official_default(configured_servers: Variant, official_server_seeded: bool) -> Array[Dictionary]:
+	var loaded_servers: Array[Dictionary] = []
+	var official_already_saved := false
+	if configured_servers is Array:
+		for configured_server: Variant in configured_servers:
+			if not configured_server is Dictionary:
+				continue
+			var address := String(configured_server.get("address", "")).strip_edges()
+			var port := int(configured_server.get("port", 0))
+			if address.is_empty() or port < MIN_SERVER_PORT or port > MAX_SERVER_PORT:
+				continue
+			var entry := {"address": address, "port": port, "label": String(configured_server.get("label", ""))}
+			loaded_servers.append(entry)
+			official_already_saved = official_already_saved or (address == OFFICIAL_SERVER["address"] and port == OFFICIAL_SERVER["port"])
+	if not official_server_seeded and not official_already_saved:
+		loaded_servers.push_front(OFFICIAL_SERVER.duplicate(true))
+	return loaded_servers
 
 
 func save_server(address: String, port: int, label: String = "") -> Error:
@@ -134,9 +166,7 @@ func uses_world_shadows() -> bool:
 func _load_graphics_settings() -> bool:
 	var config := ConfigFile.new()
 	var error := config.load(SETTINGS_PATH)
-	if error == ERR_FILE_NOT_FOUND:
-		return false
-	if error != OK:
+	if error != OK and error != ERR_FILE_NOT_FOUND:
 		push_error("Nao foi possivel carregar %s: %s." % [SETTINGS_PATH, error_string(error)])
 		return false
 
@@ -154,14 +184,16 @@ func _load_graphics_settings() -> bool:
 	mouse_aim_enabled = bool(config.get_value("gameplay", "mouse_aim", mouse_aim_enabled))
 	first_person_enabled = bool(config.get_value("gameplay", "first_person", first_person_enabled))
 	var configured_servers: Variant = config.get_value("network", "saved_servers", [])
-	if configured_servers is Array:
-		for configured_server in configured_servers:
-			if configured_server is Dictionary:
-				var address := String(configured_server.get("address", "")).strip_edges()
-				var port := int(configured_server.get("port", 0))
-				if not address.is_empty() and port >= MIN_SERVER_PORT and port <= MAX_SERVER_PORT:
-					saved_servers.append({"address": address, "port": port, "label": String(configured_server.get("label", ""))})
-	return true
+	official_server_seeded = bool(config.get_value("network", "official_server_seeded", false))
+	saved_servers = saved_servers_with_official_default(configured_servers, official_server_seeded)
+	if official_server_seeded:
+		return true
+	official_server_seeded = true
+	var seed_error := _save_network_settings()
+	if seed_error == OK:
+		return true
+	official_server_seeded = false
+	return false
 
 
 func _save_graphics_settings() -> Error:
@@ -213,6 +245,7 @@ func _save_network_settings() -> Error:
 		push_error("Nao foi possivel atualizar %s: %s." % [SETTINGS_PATH, error_string(load_error)])
 		return load_error
 	config.set_value("network", "saved_servers", saved_servers)
+	config.set_value("network", "official_server_seeded", official_server_seeded)
 	var error := config.save(SETTINGS_PATH)
 	if error != OK:
 		push_error("Nao foi possivel salvar servidores em %s: %s." % [SETTINGS_PATH, error_string(error)])
@@ -266,7 +299,8 @@ func create_gamepad_config(device_id: int) -> Dictionary:
 	bindings["right"] = _create_joy_motion(device_id, JOY_AXIS_LEFT_X, 1.0)
 	bindings["jump"] = _create_joy_button(device_id, JOY_BUTTON_A)
 	bindings["sprint"] = _create_joy_button(device_id, JOY_BUTTON_B)
-	bindings["attack"] = _create_joy_button(device_id, JOY_BUTTON_X)
+	# Tiro no gatilho direito (RT/R2), nao no X: e onde a mao ja esta.
+	bindings["attack"] = _create_joy_motion(device_id, JOY_AXIS_TRIGGER_RIGHT, 1.0)
 	bindings["knife"] = _create_joy_button(device_id, JOY_BUTTON_LEFT_SHOULDER)
 	bindings["pistol"] = _create_joy_button(device_id, JOY_BUTTON_RIGHT_SHOULDER)
 	bindings["reload"] = _create_joy_button(device_id, JOY_BUTTON_Y)
@@ -282,6 +316,105 @@ func create_gamepad_config(device_id: int) -> Dictionary:
 		"device_name": "Controle %d" % (device_id + 1),
 		"bindings": bindings,
 	}
+
+
+## Controles conectados na maquina, no formato que selectable_devices espera.
+## Unico ponto que fala com o singleton Input sobre joypads.
+## Uso: GameConfig.selectable_devices(0, player_input_configs, GameConfig.connected_joypads())
+func connected_joypads() -> Array[Dictionary]:
+	var joypads: Array[Dictionary] = []
+	for device_id in Input.get_connected_joypads():
+		joypads.append({"id": device_id, "name": Input.get_joy_name(device_id)})
+	return joypads
+
+
+## Dispositivos que o jogador do slot pode escolher: o teclado sempre, e cada
+## controle conectado que nenhum OUTRO jogador local ja esteja usando.
+static func selectable_devices(slot: int, configs: Array, joypads: Array) -> Array[Dictionary]:
+	var devices: Array[Dictionary] = [{"type": "keyboard", "id": -1, "name": "Teclado"}]
+	for joypad: Variant in joypads:
+		if not joypad is Dictionary:
+			continue
+		var device_id := int((joypad as Dictionary).get("id", -1))
+		var users := slots_using_joypad(configs, device_id)
+		if not users.is_empty() and not users.has(slot):
+			continue
+		var fallback_name := "Controle %d" % (device_id + 1)
+		devices.append({"type": "gamepad", "id": device_id, "name": String((joypad as Dictionary).get("name", fallback_name))})
+	return devices
+
+
+## Slots locais que estao usando esse controle. Serve para a troca (impedir dois
+## jogadores no mesmo controle) e para o desplugue (quem volta para o teclado).
+static func slots_using_joypad(configs: Array, device_id: int) -> Array[int]:
+	var slots: Array[int] = []
+	for slot in configs.size():
+		var config: Variant = configs[slot]
+		if not config is Dictionary:
+			continue
+		var entry := config as Dictionary
+		if String(entry.get("device_type", "keyboard")) == "gamepad" and int(entry.get("device_id", -1)) == device_id:
+			slots.append(slot)
+	return slots
+
+
+## Esse slot local joga no controle? Quem joga no controle mira pelo analogico
+## direito, e nao pelo cursor do mouse (que e unico e e do jogador 1).
+static func slot_uses_gamepad(configs: Array, slot: int) -> bool:
+	if slot < 0 or slot >= configs.size():
+		return false
+	var config: Variant = configs[slot]
+	if not config is Dictionary:
+		return false
+	return String((config as Dictionary).get("device_type", "keyboard")) == "gamepad"
+
+
+## Analogico direito do controle desse jogador, cru (sem zona morta). Zero
+## quando ele joga no teclado. Unico ponto que le eixo de joypad.
+## Uso: GameConfig.player_look_axis(local_slot)
+func player_look_axis(slot: int) -> Vector2:
+	if not slot_uses_gamepad(player_input_configs, slot):
+		return Vector2.ZERO
+	var device_id := int(player_input_configs[slot].get("device_id", -1))
+	return Vector2(Input.get_joy_axis(device_id, JOY_AXIS_RIGHT_X), Input.get_joy_axis(device_id, JOY_AXIS_RIGHT_Y))
+
+
+## Troca o dispositivo de um jogador local durante a partida e reaplica o
+## InputMap na hora. Devolve false quando o controle ja e de outro jogador, para
+## o menu avisar em vez de dois bonecos andarem juntos.
+## Uso: GameConfig.set_player_device(1, "gamepad", 0, "Generic X-Box pad")
+func set_player_device(slot: int, device_type: String, device_id: int, device_name: String = "") -> bool:
+	if slot < 0 or slot >= player_input_configs.size():
+		push_error("Troca de dispositivo invalida: jogador=%d; esperado slot local de 0 a %d." % [slot, player_input_configs.size() - 1])
+		return false
+	if device_type != "keyboard" and device_type != "gamepad":
+		push_error("Dispositivo invalido: '%s'; esperado 'keyboard' ou 'gamepad'." % device_type)
+		return false
+	if device_type == "keyboard":
+		player_input_configs[slot] = create_keyboard_config(slot)
+		_apply_input_map()
+		return true
+	var taken_by := slots_using_joypad(player_input_configs, device_id)
+	if not taken_by.is_empty() and not taken_by.has(slot):
+		return false
+	var config := create_gamepad_config(device_id)
+	if not device_name.is_empty():
+		config["device_name"] = device_name
+	player_input_configs[slot] = config
+	_apply_input_map()
+	return true
+
+
+## Controle desplugado: quem estava nele volta ao teclado, senao o jogador fica
+## sem comando nenhum no meio da partida. Devolve os slots afetados.
+## Uso: GameConfig.release_unplugged_joypad(0)
+func release_unplugged_joypad(device_id: int) -> Array[int]:
+	var affected := slots_using_joypad(player_input_configs, device_id)
+	for slot in affected:
+		player_input_configs[slot] = create_keyboard_config(slot)
+	if not affected.is_empty():
+		_apply_input_map()
+	return affected
 
 
 func action_name(slot: int, action: String) -> StringName:

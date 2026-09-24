@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Vitor Holanda
+// SPDX-License-Identifier: AGPL-3.0-or-later
 shader_type spatial;
 // Desintegracao estilo "estalo do Thanos": o corpo some em graos de voxel, de
 // cima para baixo, com borda de cinza. Nao usar uniforms por instancia: no renderer

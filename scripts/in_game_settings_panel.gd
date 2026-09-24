@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 class_name InGameSettingsPanel
 extends PanelContainer
 
@@ -18,6 +20,8 @@ var _capture_slot := -1
 var _capture_action := ""
 var _capture_button: Button = null
 var _message: Label
+## O rebuild recria o Label, entao o aviso da ultima acao mora aqui.
+var _message_text := "Clique numa acao e aperte a tecla ou botao novo."
 var _resolution: OptionButton
 var _quality: OptionButton
 var _fullscreen: CheckButton
@@ -40,6 +44,7 @@ func _ready() -> void:
 	_build()
 	_fit_to_viewport()
 	get_viewport().size_changed.connect(_fit_to_viewport)
+	Input.joy_connection_changed.connect(_on_joypad_connection_changed)
 
 
 func is_capturing() -> bool:
@@ -64,9 +69,15 @@ func _input(event: InputEvent) -> void:
 
 ## Recria os botoes (jogadores podem ter mudado desde a ultima abertura).
 ## Uso: painel.refresh()
+## O rebuild sai do popup do OptionButton que acabou de emitir `item_selected`.
+## `free()` imediato matava esse emissor no meio da emissao e o jogo caia com
+## SIGSEGV (godot.log de 2026-09-24: "Object was freed or unreferenced while a
+## signal is being emitted from it"). `remove_child` tira a UI velha da arvore
+## na hora e `queue_free` so destroi no fim do frame, ja fora da emissao.
 func refresh() -> void:
 	for child in get_children():
-		child.free()
+		remove_child(child)
+		child.queue_free()
 	_build()
 
 
@@ -97,7 +108,7 @@ func _build() -> void:
 	for slot in GameConfig.player_input_configs.size():
 		_build_player_bindings(content, slot)
 	_message = Label.new()
-	_message.text = "Clique numa acao e aperte a tecla ou botao novo."
+	_message.text = _message_text
 	root.add_child(_message)
 	var back := Button.new()
 	back.name = "Back"
@@ -187,7 +198,8 @@ func _apply_gameplay(_pressed: bool = false) -> void:
 
 func _build_player_bindings(content: VBoxContainer, slot: int) -> void:
 	var config: Dictionary = GameConfig.player_input_configs[slot]
-	content.add_child(_title_label("CONTROLES DO JOGADOR %d (%s)" % [slot + 1, String(config.get("device_name", "Teclado"))], 20))
+	content.add_child(_title_label("CONTROLES DO JOGADOR %d" % (slot + 1), 20))
+	content.add_child(_device_selector(slot, config))
 	var grid := GridContainer.new()
 	grid.columns = 2
 	grid.add_theme_constant_override("h_separation", 8)
@@ -205,6 +217,45 @@ func _build_player_bindings(content: VBoxContainer, slot: int) -> void:
 		button.disabled = KeybindingEditor.uses_analog(config, action)
 		button.pressed.connect(_begin_capture.bind(slot, action, button))
 		grid.add_child(button)
+
+
+## Teclado ou um controle que nenhum outro jogador local esteja usando. Trocar
+## aqui vale na hora: o InputMap daquele slot e reescrito antes de fechar.
+func _device_selector(slot: int, config: Dictionary) -> OptionButton:
+	var selector := OptionButton.new()
+	selector.name = "Device_%d" % slot
+	selector.custom_minimum_size = Vector2(0.0, 36.0)
+	var devices := GameConfig.selectable_devices(slot, GameConfig.player_input_configs, GameConfig.connected_joypads())
+	for index in devices.size():
+		var device: Dictionary = devices[index]
+		selector.add_item(String(device["name"]))
+		selector.set_item_metadata(index, device)
+		if String(config.get("device_type", "keyboard")) == String(device["type"]) and int(config.get("device_id", -1)) == int(device["id"]):
+			selector.select(index)
+	selector.item_selected.connect(_on_device_selected.bind(slot, selector))
+	return selector
+
+
+## O rebuild libera o proprio OptionButton que emitiu o sinal, entao ele e
+## adiado para depois da emissao.
+func _on_device_selected(item_index: int, slot: int, selector: OptionButton) -> void:
+	var device: Dictionary = selector.get_item_metadata(item_index)
+	var device_name := String(device["name"])
+	if GameConfig.set_player_device(slot, String(device["type"]), int(device["id"]), device_name):
+		_message_text = "Jogador %d joga agora no %s." % [slot + 1, device_name]
+	else:
+		_message_text = "%s ja esta com outro jogador." % device_name
+	refresh.call_deferred()
+
+
+## Controle plugado ou tirado da USB com o jogo aberto. GameConfig ja devolveu
+## ao teclado quem perdeu o controle; aqui so a lista precisa acompanhar.
+func _on_joypad_connection_changed(device_id: int, connected: bool) -> void:
+	if not visible:
+		return
+	if not connected:
+		_message_text = "Controle %d desconectado." % (device_id + 1)
+	refresh.call_deferred()
 
 
 func _begin_capture(slot: int, action: String, button: Button) -> void:

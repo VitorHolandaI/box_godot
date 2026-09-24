@@ -1,8 +1,22 @@
 name: release
 
 # Gera os clientes Linux/Windows/macOS e publica a Release.
-# Dispara na mao (Actions -> release -> Run workflow) ou empurrando uma tag build-*.
+#
+# Tres gatilhos:
+#   - workflow_call: chamado pelo tag-release.yml quando o GAME_BUILD muda na main;
+#   - workflow_dispatch: na mao, em Actions -> release -> Run workflow;
+#   - push de tag build-*: quando alguem cria a tag do proprio terminal.
+#
+# O tag-release precisa CHAMAR este workflow em vez de so empurrar a tag, porque
+# tag empurrada com o GITHUB_TOKEN nao dispara outro workflow (protecao do
+# GitHub contra workflow recursivo).
 on:
+  workflow_call:
+    inputs:
+      tag:
+        description: "Tag da release, por exemplo build-2026-09-18"
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       tag:
@@ -61,7 +75,7 @@ jobs:
       - name: Publicar ou atualizar a Release
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG_INPUT: ${{ github.event.inputs.tag }}
+          TAG_INPUT: ${{ inputs.tag }}
         run: |
           set -euo pipefail
           TAG="${TAG_INPUT:-${GITHUB_REF_NAME}}"

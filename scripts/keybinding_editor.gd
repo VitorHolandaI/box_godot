@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 class_name KeybindingEditor
 extends RefCounted
 
@@ -7,6 +9,10 @@ extends RefCounted
 ## Uso:
 ##   if KeybindingEditor.is_cancel(event, config): cancelar()
 ##   var novo := KeybindingEditor.capture_event(event, config)
+
+## Gatilho so conta como apertado a partir daqui (solto ele nao fica exatamente
+## em zero em controle generico).
+const TRIGGER_PULL_THRESHOLD := 0.5
 
 ## Ordem de exibicao; cada acao de GameConfig.ACTIONS precisa de um rotulo.
 const ACTION_LABELS := [
@@ -66,7 +72,25 @@ static func capture_event(event: InputEvent, config: Dictionary) -> InputEvent:
 		joy_event.device = event.device
 		joy_event.button_index = (event as InputEventJoypadButton).button_index
 		return joy_event
-	return null
+	return _capture_trigger(event, config)
+
+
+## Gatilhos (RT/LT) chegam como eixo, nao como botao: sem isso o tiro padrao do
+## controle nao poderia ser remapeado de volta depois de trocado. So os dois
+## eixos de gatilho, e so puxado de verdade (o analogico parado ja passa de 0).
+static func _capture_trigger(event: InputEvent, config: Dictionary) -> InputEvent:
+	if not event is InputEventJoypadMotion or event.device != int(config.get("device_id", -1)):
+		return null
+	var motion := event as InputEventJoypadMotion
+	if motion.axis != JOY_AXIS_TRIGGER_LEFT and motion.axis != JOY_AXIS_TRIGGER_RIGHT:
+		return null
+	if absf(motion.axis_value) < TRIGGER_PULL_THRESHOLD:
+		return null
+	var trigger := InputEventJoypadMotion.new()
+	trigger.device = motion.device
+	trigger.axis = motion.axis
+	trigger.axis_value = signf(motion.axis_value)
+	return trigger
 
 
 ## Movimento no controle usa o analogico e nao e remapeavel.

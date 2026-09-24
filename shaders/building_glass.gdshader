@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Vitor Holanda
+// SPDX-License-Identifier: AGPL-3.0-or-later
 shader_type spatial;
 render_mode blend_mix, depth_draw_opaque, cull_disabled;
 

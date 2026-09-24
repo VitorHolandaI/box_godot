@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 class_name CarroLab
 extends Node3D
 
@@ -5,8 +7,8 @@ extends Node3D
 ## e um bot dirigindo ele sozinho, com a MESMA camera isometrica do survival.
 ##
 ## Uso:
-##   godot --path . scenes/carro_lab.tscn
-##   godot --path . scenes/carro_lab.tscn -- --sem-bot
+##   godot --path . labs/carro_lab.tscn
+##   godot --path . labs/carro_lab.tscn -- --sem-bot
 
 const CAR_SCENE := preload("res://scenes/drivable_car.tscn")
 const CAR_BOT_SCRIPT := preload("res://scripts/car_bot_driver.gd")

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 ## Testes do desvio de obstaculo dos bots de PVP (funcoes puras).
 ## Uso: godot --headless --path . -- --unit-test --test-group=pvp_navigation
 const PvpNavigationScript := preload("res://scripts/pvp_navigation.gd")

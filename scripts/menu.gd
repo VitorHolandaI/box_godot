@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends Control
 
 @onready var selection: VBoxContainer = $MenuPanel/Selection
@@ -61,6 +63,7 @@ func _ready() -> void:
 	add_server_button.pressed.connect(_save_server)
 	quality_select.item_selected.connect(_on_quality_selected)
 	get_viewport().size_changed.connect(_layout_menu)
+	Input.joy_connection_changed.connect(_on_joypad_connection_changed)
 	server_address_row.visible = false
 	selection.visible = true
 	setup.visible = false
@@ -151,9 +154,13 @@ func _layout_menu() -> void:
 		card.custom_minimum_size.x = minf(430.0, panel_size.x - 64.0)
 
 
+## Mesmo cuidado do painel do Esc: o cartao velho carrega o OptionButton que
+## emitiu `item_selected`, entao ele sai da arvore agora e so morre no fim do
+## frame. Ver in_game_settings_panel.refresh().
 func _rebuild_player_cards() -> void:
 	for child in players_grid.get_children():
-		child.free()
+		players_grid.remove_child(child)
+		child.queue_free()
 	for slot in player_configs.size():
 		_create_player_card(slot)
 
@@ -172,17 +179,15 @@ func _create_player_card(slot: int) -> void:
 	card.add_child(title)
 
 	var device_selector := OptionButton.new()
+	device_selector.name = "Device_%d" % slot
 	device_selector.custom_minimum_size = Vector2(0, 38)
-	device_selector.add_item("Teclado")
-	device_selector.set_item_metadata(0, {"type": "keyboard", "id": -1})
-	var selected_item := 0
-	for joypad_id in Input.get_connected_joypads():
-		device_selector.add_item(Input.get_joy_name(joypad_id))
-		var item_index := device_selector.item_count - 1
-		device_selector.set_item_metadata(item_index, {"type": "gamepad", "id": joypad_id})
-		if config["device_type"] == "gamepad" and config["device_id"] == joypad_id:
-			selected_item = item_index
-	device_selector.select(selected_item)
+	var devices := GameConfig.selectable_devices(slot, player_configs, GameConfig.connected_joypads())
+	for index in devices.size():
+		var device: Dictionary = devices[index]
+		device_selector.add_item(String(device["name"]))
+		device_selector.set_item_metadata(index, device)
+		if String(config["device_type"]) == String(device["type"]) and int(config["device_id"]) == int(device["id"]):
+			device_selector.select(index)
 	device_selector.item_selected.connect(_on_device_selected.bind(slot, device_selector))
 	card.add_child(device_selector)
 
@@ -208,13 +213,28 @@ func _create_player_card(slot: int) -> void:
 		bindings_grid.add_child(binding_button)
 
 
+## O rebuild libera o proprio OptionButton que emitiu o sinal, entao ele e
+## adiado para depois da emissao.
 func _on_device_selected(item_index: int, slot: int, selector: OptionButton) -> void:
 	var metadata: Dictionary = selector.get_item_metadata(item_index)
-	if metadata["type"] == "keyboard":
+	if String(metadata["type"]) == "keyboard":
 		player_configs[slot] = GameConfig.create_keyboard_config(slot)
 	else:
-		player_configs[slot] = GameConfig.create_gamepad_config(metadata["id"])
-	_rebuild_player_cards()
+		var config := GameConfig.create_gamepad_config(int(metadata["id"]))
+		config["device_name"] = String(metadata["name"])
+		player_configs[slot] = config
+	_rebuild_player_cards.call_deferred()
+
+
+## Controle plugado ou tirado da USB com o menu aberto: os cartoes acompanham, e
+## quem estava no controle que saiu volta para o teclado.
+func _on_joypad_connection_changed(device_id: int, connected: bool) -> void:
+	if not connected:
+		for slot in GameConfig.slots_using_joypad(player_configs, device_id):
+			player_configs[slot] = GameConfig.create_keyboard_config(slot)
+		message.text = "Controle %d foi desconectado." % (device_id + 1)
+	if setup.visible:
+		_rebuild_player_cards.call_deferred()
 
 
 func _begin_capture(slot: int, action: String, button: Button) -> void:
@@ -352,9 +372,13 @@ func _save_server() -> void:
 	_refresh_servers()
 
 
+## As linhas saem e voltam a partir dos proprios botoes delas (entrar, editar,
+## remover), entao valem o mesmo cuidado dos cartoes: fora da arvore agora,
+## destruidas no fim do frame. Ver _rebuild_player_cards().
 func _render_server_list() -> void:
 	for child in server_list.get_children():
-		child.free()
+		server_list.remove_child(child)
+		child.queue_free()
 	var servers := NetworkSession.get_server_list()
 	if servers.is_empty():
 		var empty_label := Label.new()
