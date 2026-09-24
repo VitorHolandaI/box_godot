@@ -127,11 +127,22 @@ outro. Ver [modos e containers](docs/modos-e-containers.md).
 No gamepad: analógico esquerdo move; `A` pula, `B` corre, `X` ataca, `LB`/`RB`
 facas/pistola, `Y` recarrega. Cada jogador remapeia o próprio controle no menu.
 
+## Licença
+
+Código sob **AGPL-3.0-or-later** (`LICENSE`). Quem distribuir um derivado, ou
+rodar um servidor modificado que outras pessoas acessem pela rede, precisa
+oferecer o código fonte sob a mesma licença.
+
+Os assets **não** são cobertos por ela: cada modelo mantém a licença de origem
+(CC0 na maioria, CC-BY 3.0 no jipe militar, que exige crédito). A lista está em
+`CREDITS.md`.
+
 ## Estrutura
 
 ```
 scripts/          lógica do jogo (rede, jogador, zumbis, cidade, PVP, testes)
 scenes/           cenas e modelos
+labs/             cenas de teste visíveis (controle, zumbis, casas, carro)
 shaders/          shaders
 compose.yaml      servidor dedicado em Docker
 dist/             clientes exportados (gerados, não versionados)

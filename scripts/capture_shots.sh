@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Captura os frames de divulgacao (README/docs) pelo modo --capture do jogo.
 #
 # Uso:

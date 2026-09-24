@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Publica o projeto no repositorio PUBLICO do GitHub a partir de um clone
 # espelho, com o historico limpo: sem binarios de release e sem IPs de
 # infraestrutura (nem no conteudo antigo, nem nas mensagens de commit).

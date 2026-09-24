@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends RefCounted
 
 ## Regressoes da fila de ataque: no maximo MAX_ATTACKERS_PER_TARGET zumbis

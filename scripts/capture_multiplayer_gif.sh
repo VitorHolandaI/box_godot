@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Sobe uma partida TDM local com bots e grava o cliente que recebe os snapshots.
 set -euo pipefail
 

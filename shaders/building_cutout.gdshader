@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Vitor Holanda
+// SPDX-License-Identifier: AGPL-3.0-or-later
 shader_type spatial;
 // Faces de tras aparecem como "tampa" escura onde a parede foi cortada.
 render_mode cull_disabled;
