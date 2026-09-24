@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Teste ponta-a-ponta de N peers reais em PVP: sobe 1 servidor dedicado --pvp +
 # N clientes bot (processos separados, ENet de verdade) e exige que TODOS
 # conectem, lutem e que a partida comece. Decisao do dono: ate 8 peers no PvP.

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Teste ponta-a-ponta de multiplayer com N peers reais: sobe 1 servidor
 # dedicado + N clientes bot em processos separados (ENet de verdade, sem
 # simular dentro de um processo so) e exige que TODOS conectem e joguem.

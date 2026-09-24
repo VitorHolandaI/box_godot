@@ -1,4 +1,6 @@
 #!/usr/bin/env python3
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 """Baixa SO o template de macOS do pacote oficial de export templates do Godot.
 
 O pacote completo (`Godot_v<versao>_export_templates.tpz`) tem >1 GB porque traz

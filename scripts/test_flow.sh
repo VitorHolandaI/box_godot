@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 set -euo pipefail
 
 # Teste de fluxos end-to-end: servidor dedicado com auditoria de fluxos

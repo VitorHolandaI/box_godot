@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Exporta clientes release para Linux, Windows e macOS e seus checksums.
 # O macOS usa o template universal oficial, que nao vem no pacote enxuto do
 # projeto: baixe so ele com scripts/fetch_macos_template.py (o .tpz inteiro tem

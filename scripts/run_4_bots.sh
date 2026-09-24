@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Abre 4 janelas de bots jogando sozinhos. Sem alvo, sobe um servidor dedicado
 # local; com alvo (ex.: o VPS), os bots entram nele e nenhum servidor local sobe.
 # Uso:

@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends StaticBody3D
 
 ## Duble de teste para o atropelamento do carro: entra no grupo pedido

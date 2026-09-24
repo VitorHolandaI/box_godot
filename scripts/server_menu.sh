@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Menu do servidor local (docker compose): escolhe NA HORA qual modo subir, se
 # precisa rebuildar, e ainda parar/logs/status.
 #
