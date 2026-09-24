@@ -36,29 +36,22 @@ O teste so passa depois que o cliente observa movimento, consumo de stamina,
 projetil visual e a morte de um zumbi.
 Entrada nao predeterminada e erros de script embarcam nesses smoke tests.
 
-## Publicacao no GitHub (historico limpo)
+## Publicacao no GitHub
 
-O repositorio publico **nao** recebe push direto do repo de trabalho: os binarios
-de release e os IPs de infraestrutura que existem no historico antigo seriam
-levados junto. A publicacao passa por `scripts/publish_public.sh`, que clona um
-espelho, reescreve o historico (remove `*.x86_64`/`*.exe`/`*.pck` e troca os IPs
-do mapa, tanto no conteudo quanto nas mensagens de commit), confere o resultado e
-so entao empurra para o repositorio publico.
+O GitHub e o unico remoto: a `main` de trabalho e a `main` publica sao a mesma
+branch, e o push e direto. Nao ha mais espelho nem reescrita de historico na
+publicacao.
 
-Requisito: `git-filter-repo` no PATH (`pacman -S git-filter-repo` ou
-`pip install --user git-filter-repo`). Sem ele, aponte o caminho do script:
-`FILTER_REPO_BIN=/caminho/git-filter-repo`.
+Foi assim ate 2026-09-24: o repo publico era um espelho gerado por
+`scripts/publish_public.sh`, que reescrevia o historico para tirar os IPs de
+infraestrutura. A reescrita chegou a ser feita e depois **mergeada de volta** na
+linha original, entao a historia ficou duplicada e os IPs continuaram
+alcancaveis. Em 2026-09-24 o historico foi reescrito de vez (`git-filter-repo`
+trocando `195.35.42.208` por `bitssand.blog` e os IPs internos por
+`git-interno`/`host-interno`), a linha limpa virou a unica, e o script saiu.
 
-```bash
-cp .publish-ip-map.example.txt .publish-ip-map.txt   # e ponha os IPs reais
-scripts/publish_public.sh --dry-run                  # ve o plano
-scripts/publish_public.sh                            # publica (pede confirmacao)
-PUBLIC_REMOTE=git@github.com:user/outro.git scripts/publish_public.sh
-```
-
-O mapa `.publish-ip-map.txt` fica fora do repositorio (gitignored) porque contem
-os valores reais; o `.example` mostra o formato. O script recusa mapa malformado
-e falha se ainda sobrar binario ou IP no historico reescrito.
+Consequencia pratica: **nao versione IP de infraestrutura**. Endereco de
+servidor entra por DNS, como o `OFFICIAL_SERVER` do `game_config.gd`.
 
 ### macOS
 
