@@ -1,7 +1,0 @@
-# Mapa de IPs para scripts/publish_public.sh (formato antigo==>novo, um por linha).
-# Copie para .publish-ip-map.txt (esse arquivo e gitignored) e ponha os IPs reais
-# da sua infraestrutura no lado esquerdo. Use faixas de documentacao do lado
-# direito: 203.0.113.0/24, 198.51.100.0/24 e 192.0.2.0/24 (RFC 5737) ou IPs
-# privados genericos (10.0.0.x, 192.168.1.x).
-198.51.100.7==>203.0.113.10
-10.10.10.10==>10.0.0.14

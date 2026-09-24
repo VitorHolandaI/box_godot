@@ -130,8 +130,7 @@ document = f"""<!DOCTYPE html>
 </head>
 <body class="markdown-body">
 <p class="summary">Preview local - {len(found) + len(extra)} frames + {len(gifs)} GIFs de zumbi.
-Os PNG brutos 1920x1080 estao no mesmo servidor. Nada aqui foi publicado: o repo publico so muda
-quando <code>scripts/publish_public.sh</code> roda. <a href="#zumbis">Ir para os GIFs</a>.</p>
+Os PNG brutos 1920x1080 estao no mesmo servidor. Nada aqui foi publicado ainda. <a href="#zumbis">Ir para os GIFs</a>.</p>
 {gif_section}
 {cards}
 </body>
