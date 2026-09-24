@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 class_name PlayerCharacter
 extends CharacterBody3D
 
@@ -181,6 +183,13 @@ var aim_world_point := Vector3.INF
 ## do modo FPS (o corpo segue ele); `view_pitch` inclina so a camera.
 const AIM_SENSITIVITY := 0.0022
 const AIM_PITCH_LIMIT := 1.35
+## Analogico direito faz o papel do mouse: zona morta contra o drift do controle
+## e velocidade de giro no talo (rad/s). Quadratica perto do centro, para mirar
+## fino sem perder a virada rapida na borda.
+const LOOK_STICK_DEADZONE := 0.2
+const LOOK_STICK_TURN_RATE := 3.2
+## Velocidade do cursor virtual na 3a pessoa, em pixels por segundo no talo.
+const CURSOR_STICK_SPEED := 1100.0
 ## Velocidade com que o corpo vira para a mira (por segundo). Baixo demais e o
 ## boneco "arrasta" atras do cursor; usado tambem na previsao local do cliente.
 const AIM_TURN_RATE := 22.0
@@ -190,6 +199,14 @@ var mouse_aim := true
 var first_person := false
 var camera_yaw := 0.0
 var view_pitch := 0.0
+## Cursor virtual de quem joga no controle, em pixels do quadro DELE: o
+## analogico direito empurra a bolinha amarela do reticulo, e a mira sai do
+## raycast por esse ponto, igual ao mouse. Comeca no centro do quadro.
+var virtual_cursor := Vector2.ZERO
+var virtual_cursor_centered := false
+## Fonte do analogico direito. Vazia = o controle do slot, lido pelo GameConfig.
+## Os testes trocam por uma fake nomeada para mirar sem controle plugado.
+var look_axis_source := Callable()
 ## Dirigindo em primeira pessoa: giro horizontal da cabeca relativo ao carro
 ## (0 = olhando para o para-brisa). Ver DRIVE_LOOK_YAW_LIMIT.
 var drive_look_yaw := 0.0
@@ -268,6 +285,10 @@ func _physics_process(delta: float) -> void:
 		return
 	# A troca de camera (H) vale a pe e dirigindo; por isso nao fica nos ramos.
 	_poll_view_toggle()
+	# Mira do controle tambem fica fora dos ramos: no cliente o jogador local e
+	# um proxy e nao passa por _collect_tick_input, mas continua mirando.
+	if is_local_controller:
+		_apply_look_stick(delta)
 	if is_driving():
 		_sync_to_vehicle()
 		_handle_vehicle_exit()
@@ -1998,6 +2019,100 @@ func _input(event: InputEvent) -> void:
 		view_pitch = clampf(view_pitch - motion.relative.y * AIM_SENSITIVITY, -AIM_PITCH_LIMIT, AIM_PITCH_LIMIT)
 
 
+## Este jogador joga no controle? Uso: mira (o cursor e so de quem usa mouse).
+func uses_gamepad() -> bool:
+	return GameConfig.slot_uses_gamepad(GameConfig.player_input_configs, local_slot)
+
+
+## Onde a mira deste jogador esta na tela DELE: o cursor virtual quando joga no
+## controle, o cursor do mouse quando joga no teclado. E o ponto que o reticulo
+## desenha (a bolinha amarela) e por onde a mira faz o raycast.
+## Uso: aim_reticle.gd e a mira em 3a pessoa.
+func aim_cursor_position() -> Vector2:
+	if aim_viewport == null or not is_instance_valid(aim_viewport):
+		return virtual_cursor
+	if not uses_gamepad():
+		return aim_viewport.get_mouse_position()
+	if not virtual_cursor_centered:
+		virtual_cursor = Vector2(aim_viewport.size) * 0.5
+		virtual_cursor_centered = true
+	return virtual_cursor
+
+
+## Empurra o cursor virtual com o analogico, preso ao quadro do jogador.
+## Uso: interno de _apply_look_stick.
+func _move_virtual_cursor(stick: Vector2, delta: float) -> void:
+	if aim_viewport == null or not is_instance_valid(aim_viewport):
+		return
+	var screen := Vector2(aim_viewport.size)
+	if not virtual_cursor_centered:
+		virtual_cursor = screen * 0.5
+		virtual_cursor_centered = true
+	virtual_cursor = moved_cursor(virtual_cursor, stick, CURSOR_STICK_SPEED, delta, screen)
+
+
+## Cursor virtual depois de um passo do analogico, preso dentro da tela.
+## Pura: da para testar sem viewport nem controle.
+## Uso: var novo := PlayerCharacter.moved_cursor(cursor, stick, 1100.0, delta, tela)
+static func moved_cursor(cursor: Vector2, stick: Vector2, speed: float, delta: float, viewport_size: Vector2) -> Vector2:
+	var moved := cursor + stick * speed * delta
+	return Vector2(clampf(moved.x, 0.0, viewport_size.x), clampf(moved.y, 0.0, viewport_size.y))
+
+
+## Analogico direito no lugar do mouse. Em primeira pessoa ele gira a camera
+## (yaw/pitch); na terceira ele aponta direto, como o cursor aponta. Chamado
+## todo frame pelo dono local, inclusive dirigindo e no proxy do cliente.
+func _apply_look_stick(delta: float) -> void:
+	if GameConfig.menu_open:
+		return
+	if not uses_gamepad():
+		# Voltou para o teclado: o cursor virtual some e o do mouse manda de novo.
+		virtual_cursor_centered = false
+		return
+	var stick := look_stick_vector(_read_look_axis(), LOOK_STICK_DEADZONE)
+	if stick.is_zero_approx():
+		return
+	if first_person:
+		var step := look_stick_step(drive_look_yaw if is_driving() else camera_yaw, view_pitch, stick, LOOK_STICK_TURN_RATE, delta)
+		if is_driving():
+			# Na direcao em primeira pessoa a cabeca gira em relacao ao carro.
+			drive_look_yaw = clampf(step.x, -DRIVE_LOOK_YAW_LIMIT, DRIVE_LOOK_YAW_LIMIT)
+		else:
+			camera_yaw = step.x
+		view_pitch = step.y
+		return
+	_move_virtual_cursor(stick, delta)
+
+
+## Analogico direito deste jogador, cru (sem zona morta).
+## Uso: interno de _apply_look_stick; os testes injetam look_axis_source.
+func _read_look_axis() -> Vector2:
+	if look_axis_source.is_valid():
+		return look_axis_source.call(local_slot)
+	return GameConfig.player_look_axis(local_slot)
+
+
+## Analogico com zona morta radial e resposta quadratica, ja limitado a 1.
+## Pura: da para testar sem controle plugado.
+## Uso: var stick := PlayerCharacter.look_stick_vector(eixo_cru, 0.2)
+static func look_stick_vector(raw: Vector2, deadzone: float) -> Vector2:
+	var length := raw.length()
+	if length <= deadzone or deadzone >= 1.0:
+		return Vector2.ZERO
+	var ramp: float = minf((length - deadzone) / (1.0 - deadzone), 1.0)
+	return raw.normalized() * (ramp * ramp)
+
+
+## Passo de camera do analogico: devolve [yaw, pitch] novos. Analogico para a
+## direita gira para a direita e para cima olha para cima, iguais ao mouse.
+## Pura: da para testar sem camera nem controle.
+## Uso: var passo := PlayerCharacter.look_stick_step(yaw, pitch, stick, 3.2, delta)
+static func look_stick_step(yaw: float, pitch: float, stick: Vector2, turn_rate: float, delta: float) -> Vector2:
+	var turned := wrapf(yaw - stick.x * turn_rate * delta, -PI, PI)
+	var tilted := clampf(pitch - stick.y * turn_rate * delta, -AIM_PITCH_LIMIT, AIM_PITCH_LIMIT)
+	return Vector2(turned, tilted)
+
+
 ## Direcao de mira local no plano XZ (compatibilidade: corpo, granada, rede
 ## "aim"). Derivada da mira 3D. Uso: get_local_input_state e testes.
 func _local_aim_input() -> Vector2:
@@ -2044,8 +2159,10 @@ func _local_aim_target() -> Variant:
 		if aim_camera != null and is_instance_valid(aim_camera):
 			return _fps_target_point(_fps_forward())
 		return null
+	if uses_gamepad():
+		return _screen_world_point(aim_cursor_position())
 	if GameConfig.mouse_aim_enabled and mouse_aim and mouse_owner:
-		return _mouse_world_point()
+		return _screen_world_point(aim_cursor_position())
 	return null
 
 
@@ -2134,13 +2251,13 @@ func _aim_relative_move(raw: Vector2) -> Vector2:
 	return raw.rotated(-camera_yaw)
 
 
-## Ponto do mundo sob o cursor do jogador. Raycast da camera pelo cursor com a
-## mesma mascara das balas; exclui o proprio corpo e o carro em que esta. Sem
-## acerto cai no plano do chao. Uso: interno da mira em 3a pessoa.
-func _mouse_world_point() -> Variant:
+## Ponto do mundo sob um ponto da TELA do jogador (cursor do mouse ou cursor
+## virtual do controle). Raycast da camera com a mesma mascara das balas; exclui
+## o proprio corpo e o carro em que esta. Sem acerto cai no plano do chao.
+## Uso: interno da mira em 3a pessoa.
+func _screen_world_point(screen_point: Vector2) -> Variant:
 	if aim_camera == null or not is_instance_valid(aim_camera) or aim_viewport == null or not is_instance_valid(aim_viewport):
 		return null
-	var screen_point := aim_viewport.get_mouse_position()
 	var from := aim_camera.project_ray_origin(screen_point)
 	var ray_direction := aim_camera.project_ray_normal(screen_point)
 	var to := from + ray_direction * MOUSE_AIM_RANGE

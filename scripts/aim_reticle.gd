@@ -1,9 +1,12 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends Control
 
 ## Retículo de mira desenhado por cima do quadro do jogador (filho do painel do
 ## split). FPS: cruz pequena no centro da tela, que e para onde o tiro vai.
-## 3a pessoa (mouse): linha fina do boneco ate o cursor e um ponto no cursor,
-## no estilo Foxhole. Nao intercepta mouse nem input.
+## 3a pessoa: linha fina do boneco ate o cursor e um ponto no cursor, no estilo
+## Foxhole. O cursor e o do mouse, ou o virtual do analogico direito quando o
+## jogador esta no controle. Nao intercepta mouse nem input.
 ## Uso (split_screen_manager):
 ##   var reticle := AIM_RETICLE_SCRIPT.new()
 ##   panel.add_child(reticle)
@@ -39,12 +42,14 @@ func _draw() -> void:
 	if bool(player.get("first_person")):
 		_draw_crosshair(size * 0.5)
 		return
-	if not bool(player.get("mouse_owner")):
+	# So quem tem cursor desenha: o dono do mouse, ou quem joga no controle (esse
+	# tem o cursor virtual do analogico direito).
+	if not bool(player.get("mouse_owner")) and not bool(player.call("uses_gamepad")):
 		return
 	if camera == null or not is_instance_valid(camera):
 		return
 	var from := camera.unproject_position(player.global_position + Vector3.UP * AIM_LINE_HEIGHT)
-	var to := get_local_mouse_position()
+	var to: Vector2 = player.call("aim_cursor_position")
 	if from.distance_squared_to(to) < 1.0:
 		return
 	draw_line(from, to, LINE_COLOR, 1.0)
