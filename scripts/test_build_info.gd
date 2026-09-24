@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends RefCounted
 
 ## Regressoes da identidade de build e do handshake de versao.
@@ -22,7 +24,14 @@ const RPC_SIGNATURE := "8514a39cfa1b2b54"
 ## que nao e o seu, ate alguem bater numa parede que o outro nao ve.
 ## Foi o furo real: a superficie de RPC ficou intacta enquanto o mundo do
 ## mata-mata era reescrito (casa central removida, carros de base adicionados).
-const WORLD_SIGNATURE := "c835f824dcd2b383"
+##
+## O hash saiu de c835f824dcd2b383 para 90d62cbe0538fc84 ao adicionar o
+## cabecalho SPDX da AGPL nos 28 arquivos do gerador, e o GAME_BUILD ficou onde
+## estava de proposito. O motivo do bump e "o outro joga num mapa diferente", e
+## comentario nao muda mapa: o diff desses arquivos foi 56 insercoes, todas as
+## duas linhas de SPDX por arquivo, com zero linha de codigo adicionada ou
+## removida. Bumpar aqui so quebraria a conexao com a VPS a troco de nada.
+const WORLD_SIGNATURE := "90d62cbe0538fc84"
 const WORLD_FILES := [
 	"res://scripts/city_generator.gd",
 	"res://scripts/safehouse_builder.gd",

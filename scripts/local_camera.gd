@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends Camera3D
 
 const OUTDOOR_OFFSET := Vector3(0.0, 19.0, 17.1)

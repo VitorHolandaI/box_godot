@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends RefCounted
 
 const SURVIVAL_WAVE_SCHEDULE_SCRIPT := preload("res://scripts/survival_wave_schedule.gd")

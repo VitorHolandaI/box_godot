@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends Control
 
 ## Pedido do botao "Destravar personagem"; main.gd resolve local ou pela rede.

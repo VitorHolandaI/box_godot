@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 set -euo pipefail
 # Clean total do compose: containers, volumes, imagens locais e orphans
 # Uso: bash scripts/clean_docker.sh [--images]
