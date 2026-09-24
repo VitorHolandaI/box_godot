@@ -46,9 +46,12 @@ Foi assim ate 2026-09-24: o repo publico era um espelho gerado por
 `scripts/publish_public.sh`, que reescrevia o historico para tirar os IPs de
 infraestrutura. A reescrita chegou a ser feita e depois **mergeada de volta** na
 linha original, entao a historia ficou duplicada e os IPs continuaram
-alcancaveis. Em 2026-09-24 o historico foi reescrito de vez (`git-filter-repo`
-trocando `195.35.42.208` por `bitssand.blog` e os IPs internos por
+alcancaveis. Em 2026-09-24 o historico foi reescrito de vez com `git-filter-repo`
+(o IP publico da VPS virou `bitssand.blog`, os internos viraram
 `git-interno`/`host-interno`), a linha limpa virou a unica, e o script saiu.
+
+Os valores trocados ficam fora daqui de proposito: escrever o IP no texto que
+explica como ele foi removido o poe de volta no historico. Aconteceu uma vez.
 
 Consequencia pratica: **nao versione IP de infraestrutura**. Endereco de
 servidor entra por DNS, como o `OFFICIAL_SERVER` do `game_config.gd`.
