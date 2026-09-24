@@ -1,14 +1,17 @@
 name: tag-release
 
-# Todo push na main gera os binarios. A Release usada e a do GAME_BUILD
-# declarado em scripts/build_info.gd: a tag nasce na primeira vez que aquele
-# build chega na main, e os pushes seguintes com o mesmo build so trocam os
-# arquivos da Release (o release.yml sobe com --clobber).
+# Todo push na main vira uma Release nova, com os tres clientes compilados.
 #
-# Por que amarrar no GAME_BUILD e nao no commit: ele e o identificador que o
-# servidor compara no handshake, entao ele e quem define o que e uma versao
-# diferente para quem joga. Uma tag por commit encheria o repo de tags que nao
-# significam nada para o jogador.
+# A tag e a data com um contador: build-AAAA-MM-DD, e build-AAAA-MM-DD.N a
+# partir da segunda do mesmo dia. Assim a Release marcada como "Latest" e sempre
+# a do codigo que acabou de entrar.
+#
+# A tag NAO e o GAME_BUILD, e isso e de proposito: sao duas coisas diferentes.
+# O GAME_BUILD e a identidade de PROTOCOLO, que o handshake compara para recusar
+# cliente incompativel com o servidor; ele so sobe quando cliente e servidor
+# precisam ser atualizados juntos. A tag e so o rotulo de "este binario saiu
+# deste commit". Amarrar as duas fazia a Release nova nunca nascer, porque o
+# GAME_BUILD fica parado por varios commits de propósito.
 #
 # A tag sai daqui com o GITHUB_TOKEN, e tag empurrada com esse token NAO dispara
 # outro workflow (protecao do GitHub contra workflow recursivo). Por isso o
@@ -30,28 +33,36 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          # O historico inteiro, senao o rev-parse nao enxerga as tags antigas e
-          # toda entrega na main pareceria uma versao nova.
+          # O historico inteiro com as tags, senao o contador do dia comeca do
+          # zero e a criacao da tag falha por ja existir no remoto.
           fetch-depth: 0
+          fetch-tags: true
 
-      - name: Garantir a tag do build declarado
+      - name: Escolher a tag livre de hoje
         id: calcular
         run: |
           set -euo pipefail
-          BUILD="$(sed -n 's/^const GAME_BUILD := "\(.*\)"$/\1/p' scripts/build_info.gd)"
-          if [ -z "$BUILD" ]; then
-            echo "GAME_BUILD nao encontrado em scripts/build_info.gd; esperado 'const GAME_BUILD := \"AAAA-MM-DD.N\"'." >&2
-            exit 1
+          BASE="build-$(date -u +%Y-%m-%d)"
+          if git rev-parse -q --verify "refs/tags/$BASE" >/dev/null; then
+            # Ja houve release hoje: pega o maior sufixo numerico e soma 1.
+            MAIOR=0
+            for TAG_EXISTENTE in $(git tag -l "$BASE.*"); do
+              SUFIXO="${TAG_EXISTENTE#"$BASE".}"
+              case "$SUFIXO" in
+                ''|*[!0-9]*) continue ;;
+              esac
+              if [ "$SUFIXO" -gt "$MAIOR" ]; then
+                MAIOR="$SUFIXO"
+              fi
+            done
+            TAG="$BASE.$((MAIOR + 1))"
+          else
+            TAG="$BASE"
           fi
-          TAG="build-$BUILD"
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
-          if git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
-            echo ">> $TAG ja existe; a Release dela vai receber os binarios novos"
-            exit 0
-          fi
           git tag "$TAG"
           git push origin "$TAG"
-          echo ">> $TAG criada"
+          echo ">> $TAG criada (GAME_BUILD declarado: $(sed -n 's/^const GAME_BUILD := "\(.*\)"$/\1/p' scripts/build_info.gd))"
 
   publicar:
     needs: decidir

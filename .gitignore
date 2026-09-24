@@ -18,3 +18,10 @@ box-godot-windows*.exe
 
 # Import sidecar de imagem de documentacao (nunca e carregada como recurso)
 docs/imagens/*.import
+
+# Instrucoes de agente (Claude Code, Codex, OpenCode, Cursor). Sao configuracao
+# da maquina de quem desenvolve, nao do jogo: ficam no disco, fora do repo.
+CLAUDE.md
+AGENTS.md
+.claude/
+.opencode/
