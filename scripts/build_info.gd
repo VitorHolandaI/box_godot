@@ -25,7 +25,7 @@ extends RefCounted
 ## commit dele e sempre "dev", enquanto o cliente e um export com o commit
 ## injetado. Comparar commit recusaria um par perfeitamente compativel. O que
 ## pega o caso real (cliente velho esquecido) e o build declarado + a versao.
-const GAME_BUILD := "2026-09-22.1"
+const GAME_BUILD := "2026-09-24.1"
 const COMMIT := "dev"
 const BUILT_AT := "dev"
 
