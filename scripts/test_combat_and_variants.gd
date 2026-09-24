@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends Node3D
 
 ## Suite de testes de combate: Fogo Amigo, Animacao de Impacto (Flinch) e 9 Variantes Anatomicas de Zumbi.
@@ -51,7 +53,9 @@ const EQUIPMENT_TESTS_SCRIPT := preload("res://scripts/test_equipment.gd")
 const SUPPORT_CALLS_TESTS_SCRIPT := preload("res://scripts/test_support_calls.gd")
 const ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT := preload("res://scripts/test_zombie_l4d_specials.gd")
 const IN_GAME_SETTINGS_TESTS_SCRIPT := preload("res://scripts/test_in_game_settings.gd")
+const GAMEPAD_AIM_TESTS_SCRIPT := preload("res://scripts/test_gamepad_aim.gd")
 const MINIMAP_TESTS_SCRIPT := preload("res://scripts/test_minimap.gd")
+const GROUND_CONTACT_TESTS_SCRIPT := preload("res://scripts/test_ground_contact.gd")
 const ZOMBIE_HIT_ZONE_TESTS_SCRIPT := preload("res://scripts/test_zombie_hit_zones.gd")
 const ZOMBIE_SPIDER_TESTS_SCRIPT := preload("res://scripts/test_zombie_spider.gd")
 const WEAPON_RELOAD_TESTS_SCRIPT := preload("res://scripts/test_weapon_reload.gd")
@@ -103,7 +107,9 @@ const FOCUSED_TEST_GROUPS := {
 	"support_calls": SUPPORT_CALLS_TESTS_SCRIPT,
 	"zombie_l4d_specials": ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT,
 	"in_game_settings": IN_GAME_SETTINGS_TESTS_SCRIPT,
+	"gamepad_aim": GAMEPAD_AIM_TESTS_SCRIPT,
 	"minimap": MINIMAP_TESTS_SCRIPT,
+	"ground_contact": GROUND_CONTACT_TESTS_SCRIPT,
 	"zombie_hit_zones": ZOMBIE_HIT_ZONE_TESTS_SCRIPT,
 	"zombie_spider": ZOMBIE_SPIDER_TESTS_SCRIPT,
 	"weapon_reload": WEAPON_RELOAD_TESTS_SCRIPT,
@@ -166,7 +172,9 @@ func _ready() -> void:
 	await SUPPORT_CALLS_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_L4D_SPECIALS_TESTS_SCRIPT.new().run(self)
 	await IN_GAME_SETTINGS_TESTS_SCRIPT.new().run(self)
+	await GAMEPAD_AIM_TESTS_SCRIPT.new().run(self)
 	MINIMAP_TESTS_SCRIPT.new().run(self)
+	await GROUND_CONTACT_TESTS_SCRIPT.new().run(self)
 	await ZOMBIE_HIT_ZONE_TESTS_SCRIPT.new().run(self)
 	ZOMBIE_SPIDER_TESTS_SCRIPT.new().run(self)
 	WEAPON_RELOAD_TESTS_SCRIPT.new().run(self)
