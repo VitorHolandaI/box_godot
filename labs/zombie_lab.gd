@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 class_name ZombieLab
 extends Node3D
 
@@ -5,7 +7,7 @@ extends Node3D
 ## simulam sozinhos, porque `simulation_enabled` nasce true (zombie.gd). O
 ## player e dirigido pelo PlayerBotAI, o mesmo dos bots do jogo, para ver as
 ## interacoes de cada variante sem montar partida.
-## Uso: abra `scenes/zumbi_lab.tscn` e aperte F6.
+## Uso: abra `labs/zumbi_lab.tscn` e aperte F6.
 ##
 ## Teclas (nao conflitam com as do player, que sao WASD/F/R/E/1-7):
 ##   [ ] ou setas <- ->  escolhe a variante
@@ -481,7 +483,7 @@ func _connect_spit_signals() -> void:
 ##   --lab-spawn=N     spawna N zumbis vivos
 ##   --lab-corpse=N    spawna N cadaveres
 ## Uso: godot --headless --path . --fixed-fps 60 --quit-after 300 \
-##   res://scenes/zumbi_lab.tscn -- --lab-variant=10 --lab-corpse=1 \
+##   res://labs/zumbi_lab.tscn -- --lab-variant=10 --lab-corpse=1 \
 ##   --lab-variant=15 --lab-corpse=1 --lab-variant=21 --lab-spawn=1
 func _apply_lab_arguments() -> void:
 	for argument in OS.get_cmdline_user_args():

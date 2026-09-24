@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 class_name CasasLab
 extends Node3D
 
@@ -9,9 +11,9 @@ extends Node3D
 ## A ideia e GERAR: escolha o tipo (casa/loja/mercado/predio) e aperte Gerar
 ## para sortear outra seed e ver outro layout interno. Nao ha planta fixa.
 ##
-## Uso: abra `scenes/casas_lab.tscn` e aperte F6, ou:
-##   godot --path . scenes/casas_lab.tscn -- --lab-seed=18273 --lab-kind=house
-##   godot --path . scenes/casas_lab.tscn -- --lab-voo
+## Uso: abra `labs/casas_lab.tscn` e aperte F6, ou:
+##   godot --path . labs/casas_lab.tscn -- --lab-seed=18273 --lab-kind=house
+##   godot --path . labs/casas_lab.tscn -- --lab-voo
 ##
 ## Teclas: [ ] troca o tipo, G gera outra seed, ESC solta o mouse para clicar
 ## nos botoes. A camera e a MESMA do survival/PVP (`local_camera.gd`).

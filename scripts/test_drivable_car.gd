@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends RefCounted
 
 ## Regressoes do carro dirigivel do MVP: montagem da cena, entrar/sair e o dano
@@ -6,7 +8,7 @@ extends RefCounted
 const CAR_SCRIPT := preload("res://scripts/drivable_car.gd")
 const CAR_SCENE := preload("res://scenes/drivable_car.tscn")
 const CAR_BOT_SCRIPT := preload("res://scripts/car_bot_driver.gd")
-const CARRO_LAB_SCENE := preload("res://scenes/carro_lab.tscn")
+const CARRO_LAB_SCENE := preload("res://labs/carro_lab.tscn")
 const PLAYER_SCENE := preload("res://scenes/player.tscn")
 const RUN_OVER_TARGET_SCRIPT := preload("res://scripts/test_run_over_target.gd")
 
