@@ -1,6 +1,6 @@
 [gd_scene format=3 uid="uid://bn3dtf01ksmpg"]
 
-[ext_resource type="Script" uid="uid://xed21g61u3u2" path="res://scripts/zombie_lab.gd" id="1_lab"]
+[ext_resource type="Script" uid="uid://xed21g61u3u2" path="res://labs/zombie_lab.gd" id="1_lab"]
 [ext_resource type="PackedScene" path="res://scenes/zombie.tscn" id="2_zombie"]
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="3_player"]
 

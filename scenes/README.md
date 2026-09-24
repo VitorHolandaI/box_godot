@@ -9,9 +9,7 @@ Cenas reutilizaveis e composicao principal do jogo.
 - `bullet.tscn`: projetil visual e autoritativo com trajetoria fixa apos o disparo.
 - `bush.tscn`: arbusto verde para floresta e ruinas.
 - `car.tscn`: carro voxel decorativo.
-- `casas_lab.tscn`: cena de inspecao das construcoes procedurais: uma casa, uma loja, um mercado e um apartamento lado a lado, com o player do jogo e camera em terceira pessoa (WASD anda, mouse mira) para ver o boneco andando por dentro.
 - `drivable_car.tscn`: carro dirigivel (chassi `VehicleBody3D`, 4 `VehicleWheel3D`, assento, ponto de saida e `RunOverArea`); o modelo e o jipe CC0 `assets/models/jeep/pickup_armored.glb`, montado por `scripts/drivable_car.gd`.
-- `carro_lab.tscn`: laboratorio do carro: mapa vazio com sol, chao texturizado e um jipe dirigido por bot.
 - `grass_tuft.tscn`: tufo de grama decorativo.
 - `in_game_menu.tscn`: menu sobreposto durante a partida (continuar, destravar personagem, menu principal, sair).
 - `main.tscn`: mundo sem zumbis autorados nas ruas; entidades surgem pela politica da partida.
@@ -30,4 +28,3 @@ Cenas reutilizaveis e composicao principal do jogo.
 - `tree_sequoia.tscn`: sequoia alta com copa conica em camadas.
 - `zombie.tscn`: inimigo voxel com vida, membros animados e colisao que contem o modelo visual.
 - `zombie_ragdoll.tscn`: ragdoll articulado com pescoco fisicamente limitado.
-- `zumbi_lab.tscn`: cena de teste para abrir no editor e rodar com F6: um player dirigido por bot e zumbis de variantes escolhidas no Inspector, sem partida nem servidor.
