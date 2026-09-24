@@ -1,3 +1,5 @@
+// SPDX-FileCopyrightText: 2026 Vitor Holanda
+// SPDX-License-Identifier: AGPL-3.0-or-later
 shader_type spatial;
 
 uniform vec3 dirt_base : source_color = vec3(0.42, 0.31, 0.20);

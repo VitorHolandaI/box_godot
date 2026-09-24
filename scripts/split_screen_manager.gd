@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends Control
 
 const LOCAL_CAMERA_SCRIPT := preload("res://scripts/local_camera.gd")

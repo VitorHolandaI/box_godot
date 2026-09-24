@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends Camera3D
 
 ## Camera em primeira pessoa presa na cabeca do alvo. A pe: o yaw vem do corpo

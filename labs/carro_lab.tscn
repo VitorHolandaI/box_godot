@@ -1,6 +1,6 @@
 [gd_scene load_steps=2 format=3]
 
-[ext_resource type="Script" path="res://scripts/carro_lab.gd" id="1_carro_lab"]
+[ext_resource type="Script" path="res://labs/carro_lab.gd" id="1_carro_lab"]
 
 [node name="CarroLab" type="Node3D"]
 script = ExtResource("1_carro_lab")

@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 # Compila templates release do Godot otimizados para tamanho, so com o que o
 # box_godot usa (renderer gl_compatibility, Jolt/fisica 3D, CSG, glTF importado,
 # ENet, navegacao 3D). Templates oficiais trazem Vulkan/D3D12/XR/video/audio

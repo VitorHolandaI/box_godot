@@ -1,4 +1,6 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 set -euo pipefail
 
 # Analise estatica de qualidade do GDScript com o addon godot-gdscript-linter.

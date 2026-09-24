@@ -1,3 +1,5 @@
+# SPDX-FileCopyrightText: 2026 Vitor Holanda
+# SPDX-License-Identifier: AGPL-3.0-or-later
 extends RefCounted
 
 ## Regressoes do tamanho dos zumbis grandes: pes no chao (modelo ampliado a
