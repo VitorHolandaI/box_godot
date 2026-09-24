@@ -422,17 +422,69 @@ static func _apply_crawler_pose(zombie: CharacterBody3D, model: Node3D) -> void:
 	var head := zombie.get_node_or_null("Model/Head") as Node3D
 	if head != null:
 		head.rotation.x = deg_to_rad(-50.0)
+	_fit_shape_to_drawn_body(zombie, model)
+
+
+## Folga entre a base da capsula e o corpo desenhado, a mesma que o zumbi em pe
+## ja tem (pe um pouco dentro da capsula).
+const DRAWN_BODY_CLEARANCE := 0.06
+## Altura da etiqueta de vida acima do topo do corpo desenhado.
+const HEALTH_LABEL_ABOVE_BODY := 0.6
+
+
+## Encaixa a capsula no corpo que esta DESENHADO. A pose de rastejo muda de
+## tamanho com a escala da variante (body_scale_for), entao numero fixo so
+## acertava a escala 1: em outras variantes o rastejante boiava sobre uma
+## colisao invisivel e a cabeca ainda saia pelo topo da capsula.
+## Uso: interno de _apply_crawler_pose.
+static func _fit_shape_to_drawn_body(zombie: CharacterBody3D, model: Node3D) -> void:
+	var extent := drawn_vertical_extent(zombie, model)
+	if not is_finite(extent.x) or not is_finite(extent.y):
+		return
 	var col_shape := zombie.get_node_or_null("CollisionShape") as CollisionShape3D
-	if col_shape != null:
-		col_shape.position = Vector3(0.0, -0.3, 0.0)
-		if col_shape.shape is CapsuleShape3D:
-			var standing_capsule := col_shape.shape as CapsuleShape3D
-			var crawler_capsule := standing_capsule.duplicate() as CapsuleShape3D
-			crawler_capsule.height = crawler_capsule.radius * 2.0
-			col_shape.shape = crawler_capsule
+	if col_shape != null and col_shape.shape is CapsuleShape3D:
+		var crawler_capsule := (col_shape.shape as CapsuleShape3D).duplicate() as CapsuleShape3D
+		crawler_capsule.height = maxf(extent.y - extent.x + DRAWN_BODY_CLEARANCE, crawler_capsule.radius * 2.0)
+		col_shape.shape = crawler_capsule
+		# Ancora pela BASE, como apply_body_scale faz com o zumbi em pe: e a base
+		# que encosta no chao e define onde o corpo aparece.
+		col_shape.position = Vector3(0.0, extent.x - DRAWN_BODY_CLEARANCE + crawler_capsule.height * 0.5, 0.0)
 	var health_lbl := zombie.get_node_or_null("HealthLabel") as Label3D
 	if health_lbl != null:
-		health_lbl.position.y = 0.95
+		health_lbl.position.y = extent.y + HEALTH_LABEL_ABOVE_BODY
+
+
+## Base e topo do que esta desenhado do zumbi, no espaco do corpo dele. Ignora
+## membro arrancado (malha invisivel) e ja leva pose, rotacao e escala.
+## Uso: var extent := ZombieMutator.drawn_vertical_extent(zombie, model)
+static func drawn_vertical_extent(zombie: CharacterBody3D, model: Node3D) -> Vector2:
+	var lowest := INF
+	var highest := -INF
+	var to_body := zombie.global_transform.affine_inverse()
+	for node in model.find_children("*", "MeshInstance3D", true, false):
+		var instance := node as MeshInstance3D
+		if instance.mesh == null or not _drawn_under(instance, model):
+			continue
+		var aabb := instance.get_aabb()
+		var relative := to_body * instance.global_transform
+		for corner in 8:
+			var height: float = (relative * aabb.get_endpoint(corner)).y
+			lowest = minf(lowest, height)
+			highest = maxf(highest, height)
+	return Vector2(lowest, highest)
+
+
+## Esta malha aparece? Sobe ate o Model olhando cada pai: is_visible_in_tree nao
+## serve porque o zumbi pode ser montado antes de entrar na cena.
+static func _drawn_under(instance: MeshInstance3D, model: Node3D) -> bool:
+	var walker: Node = instance
+	while walker != null:
+		if walker is Node3D and not (walker as Node3D).visible:
+			return false
+		if walker == model:
+			return true
+		walker = walker.get_parent()
+	return true
 
 
 ## Brute: corpo maior e ombreiras de paletizado escuro para leitura imediata.
@@ -674,6 +726,15 @@ static func _quick_mat(color: Color, roughness: float, emission: Color = Color(0
 ## Atualiza as poses e a locomocao de acordo com a variante anatomica.
 ## Uso:
 ##   ZombieMutator.animate_variant_pose(zombie, z_type, delta, is_walking, attack_w, walk_time)
+## Tipo que manda na ANIMACAO por frame. Zumbi que perdeu as duas pernas rasteja
+## mesmo que a variante dele seja outra: sem isso a pose da variante original
+## continuava rodando e puxava o modelo de volta todo frame, entao o corpo
+## flutuava acima da colisao e o rastejo "piscava".
+## Uso: ZombieMutator.animate_variant_pose(z, ZombieMutator.animated_type(tipo, rastejando), ...)
+static func animated_type(z_type: int, crawling: bool) -> int:
+	return Type.CRAWLER if crawling else z_type
+
+
 static func animate_variant_pose(
 	zombie: CharacterBody3D,
 	z_type: int,
