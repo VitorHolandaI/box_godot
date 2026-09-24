@@ -59,7 +59,11 @@ const DOOR_INTERACT_REACH := 3.5
 ## Distancia HORIZONTAL minima entre o jogador e o ponto de mira para a mira
 ## valer (ver aim_point_is_usable). 1,2 m fica fora do corpo do boneco e do
 ## alcance da faca, entao nao atrapalha mirar em quem esta colado.
-const MIN_AIM_PLANAR_DISTANCE := 1.2
+## So vale para o TIRO (cano -> ponto), nao para o corpo virar: quem vira usa
+## body_aim_vector, que sai do centro e nao sofre a realimentacao do cano. Por
+## isso o minimo pode ser pequeno, o bastante para descartar so o cursor
+## praticamente em cima do boneco.
+const MIN_AIM_PLANAR_DISTANCE := 0.25
 ## Segurando interagir ao lado do caido, reanimacao completa em ~3s.
 const REVIVE_DURATION := 3.0
 ## Duracao da animacao de recarga (cosmetica: a municao entra na hora; o valor
@@ -1892,7 +1896,7 @@ func _update_stamina(delta: float, wants_to_sprint: bool) -> void:
 func _poll_input() -> void:
 	move_input = _aim_relative_move(Input.get_vector(input_action_prefix + "left", input_action_prefix + "right", input_action_prefix + "up", input_action_prefix + "down"))
 	aim_direction = _local_aim_direction()
-	aim_input = _horizontal_from_direction(aim_direction)
+	aim_input = _local_aim_input()
 	var local_point: Variant = _local_aim_target()
 	aim_world_point = local_point if local_point is Vector3 else Vector3.INF
 	jump_pressed = Input.is_action_just_pressed(input_action_prefix + "jump")
@@ -2113,10 +2117,34 @@ static func look_stick_step(yaw: float, pitch: float, stick: Vector2, turn_rate:
 	return Vector2(turned, tilted)
 
 
-## Direcao de mira local no plano XZ (compatibilidade: corpo, granada, rede
-## "aim"). Derivada da mira 3D. Uso: get_local_input_state e testes.
+## Direcao de mira local no plano XZ: para onde o CORPO vira, e o que vai na rede
+## como "aim". Sai do centro do jogador ate o ponto, e nao do cano.
+## Uso: get_local_input_state, _poll_input e o proxy do cliente.
 func _local_aim_input() -> Vector2:
+	var point: Variant = _local_aim_target()
+	if point is Vector3:
+		var flat := body_aim_vector(global_position, point as Vector3)
+		if not flat.is_zero_approx():
+			return flat
 	return _horizontal_from_direction(_local_aim_direction())
+
+
+## Direcao horizontal do centro do jogador ate o ponto de mira, normalizada, ou
+## zero quando o ponto esta em cima dele (ai nao ha direcao nenhuma).
+##
+## Sai do CENTRO e nao do cano de proposito. O cano gira junto com o corpo: com o
+## cursor perto, virar o corpo movia o cano em volta do alvo, a direcao
+## cano -> ponto se invertia e o boneco rodopiava. A defesa antiga era desistir
+## da mira abaixo de MIN_AIM_PLANAR_DISTANCE, o que tirava a mira de perto do
+## jogador (relato de 2026-09-24: "se o mouse ta muito perto do personagem ele
+## nao mira direito"). Do centro nao ha realimentacao, porque a origem nao se
+## mexe quando o corpo vira.
+##
+## Pura: da para testar sem cena.
+## Uso: var mira := PlayerCharacter.body_aim_vector(global_position, ponto)
+static func body_aim_vector(origin: Vector3, point: Vector3) -> Vector2:
+	var flat := Vector2(point.x - origin.x, point.z - origin.z)
+	return flat.normalized() if not flat.is_zero_approx() else Vector2.ZERO
 
 
 ## Direcao de mira 3D no mundo. FPS: do cano ate o ponto do retículo (centro da

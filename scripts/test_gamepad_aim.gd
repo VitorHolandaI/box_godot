@@ -32,6 +32,7 @@ func run(test_root: Node) -> void:
 	await _test_joypad_event_moves_the_cursor_end_to_end(test_root)
 	await _test_left_stick_walks_and_buttons_act(test_root)
 	await _test_four_local_players_do_not_mix_devices(test_root)
+	_test_cursor_close_to_the_body_still_aims(test_root)
 
 
 ## Joystick de verdade, sem fake: `Input.parse_input_event` com um
@@ -103,6 +104,31 @@ func _test_left_stick_walks_and_buttons_act(test_root: Node) -> void:
 		_fail(test_root, "Controle simulado: move=%s (esperado +x -y) pulou=%s faca=%s recarga_solta=%s." % [move, jumped, knifed, idle_action])
 		return
 	print("PASS: Analogico esquerdo anda e os botoes acionam pulo e faca.")
+
+
+## Cursor a meio metro do boneco tem que mirar, e a direcao nao pode depender de
+## para onde o corpo esta virado. O cano gira JUNTO com o corpo, entao a direcao
+## cano -> ponto se inverte quando o corpo vira, e com o ponto perto isso vira
+## realimentacao: o boneco rodopia. A defesa antiga era desistir da mira abaixo
+## de 1,2 m, o que deixava o jogador sem mira de perto (relato de 2026-09-24).
+func _test_cursor_close_to_the_body_still_aims(test_root: Node) -> void:
+	print("Testando mira com o cursor colado no boneco...")
+	var body := Vector3(10.0, 0.0, -4.0)
+	var perto := body + Vector3(0.5, 0.0, 0.0)
+	var mira: Vector2 = PlayerCharacter.body_aim_vector(body, perto)
+	var aponta_certo := mira.is_normalized() and mira.is_equal_approx(Vector2(1.0, 0.0))
+	# Mesmo ponto, corpo virado para quatro lados: a direcao tem que ser a MESMA.
+	var estavel := true
+	for volta in 4:
+		var girado: Vector2 = PlayerCharacter.body_aim_vector(body, perto)
+		if not girado.is_equal_approx(mira):
+			estavel = false
+	# Em cima do boneco nao ha direcao nenhuma, e ai sim vale desistir.
+	var em_cima: Vector2 = PlayerCharacter.body_aim_vector(body, body + Vector3(0.0, -1.0, 0.0))
+	if not aponta_certo or not estavel or not em_cima.is_zero_approx():
+		_fail(test_root, "Mira de perto: aponta=%s estavel=%s em_cima=%s." % [mira, estavel, em_cima])
+		return
+	print("PASS: Cursor a 0,5 m mira certo e a direcao nao gira com o corpo.")
 
 
 ## Quatro jogadores no mesmo computador com dispositivos diferentes. O que pode
