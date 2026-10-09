@@ -45,7 +45,7 @@ static func build_safehouse() -> StaticBody3D:
 	_build_ground_floor(house, ground_mat)
 	_build_mezzanine_walkways(house, cutout_floor_mat)
 	_build_all_cutout_walls(house, cutout_wall_mat)
-	_build_automatic_door(house)
+	build_automatic_door(house)
 	_build_staircase(house, wood_mat)
 	_build_respawn_bunks(house)
 	_build_player_spawn_markers(house)
@@ -157,10 +157,13 @@ static func _add_wall_block(parent: Node3D, sz: Vector3, pos: Vector3, mat: Mate
 	parent.add_child(col)
 
 
-static func _build_automatic_door(house: StaticBody3D) -> void:
+## Porta automatica (folha + area de deteccao) acrescentada como filha de
+## `house`. Parametrizada para a base padrao E para a casinha compacta da
+## escolta, que tem vao menor. Uso: SafehouseBuilder.build_automatic_door(casa)
+static func build_automatic_door(house: StaticBody3D, door_position := Vector3(0.0, 0.0, -6.25), opening_width := 3.8, opening_height := 2.8, detection_size := Vector3(5.0, 3.0, 6.0), detection_offset := Vector3(0.0, 1.5, 0.0)) -> void:
 	var door := SAFEHOUSE_DOOR_SCRIPT.new() as Node3D
 	door.name = "SafehouseDoor"
-	door.position = Vector3(0.0, 0.0, -6.25)
+	door.position = door_position
 
 	var panel := AnimatableBody3D.new()
 	panel.name = "Panel"
@@ -171,7 +174,7 @@ static func _build_automatic_door(house: StaticBody3D) -> void:
 	# fica travada no lugar.
 	panel.sync_to_physics = false
 	var panel_mesh := BoxMesh.new()
-	panel_mesh.size = Vector3(3.8, 2.8, 0.18)
+	panel_mesh.size = Vector3(opening_width, opening_height, 0.18)
 	var panel_material := StandardMaterial3D.new()
 	panel_material.albedo_color = Color(0.16, 0.22, 0.18)
 	panel_material.metallic = 0.65
@@ -196,12 +199,14 @@ static func _build_automatic_door(house: StaticBody3D) -> void:
 	var detection_area := Area3D.new()
 	detection_area.name = "DetectionArea"
 	detection_area.collision_layer = 0
-	detection_area.collision_mask = 6
+	# 2 = jogador, 4 = zumbi (o que a porta ja via) e 8 = civil da escolta: sem
+	# o bit 8 a Area3D nem enxergava o familiar, e a porta nao abria para ele.
+	detection_area.collision_mask = 6 | 8
 	var detection_collision := CollisionShape3D.new()
 	var detection_shape := BoxShape3D.new()
-	detection_shape.size = Vector3(5.0, 3.0, 6.0)
+	detection_shape.size = detection_size
 	detection_collision.shape = detection_shape
-	detection_collision.position = Vector3(0.0, 1.5, 0.0)
+	detection_collision.position = detection_offset
 	detection_area.add_child(detection_collision)
 	door.add_child(detection_area)
 	house.add_child(door)

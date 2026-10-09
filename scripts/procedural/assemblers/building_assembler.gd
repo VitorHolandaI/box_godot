@@ -266,6 +266,11 @@ static func _add_door(body: StaticBody3D, door_data: Dictionary, axis: String, l
 	var size := Vector3(WALL_THICKNESS, DOOR_HEIGHT, width) if axis == "vertical" else Vector3(width, DOOR_HEIGHT, WALL_THICKNESS)
 	var swing_direction := float(door_data.get("swing_direction", 0.0))
 	door.configure(size, BUILDING_MATERIALS.opaque(Color(0.24, 0.12, 0.055), BUILDING_MATERIALS.DEFAULT_FLOOR_HEIGHT), swing_direction)
+	# A planta ja sabe qual vao da na rua ("outside"); quem chega de fora so se
+	# interessa por essas (ver EscortDirector._nearest_shelter_door). Sem a
+	# marca, a porta de quarto/estoque passava por entrada do predio.
+	if String(door_data.get("room_a", "")) == "outside" or String(door_data.get("room_b", "")) == "outside":
+		door.add_to_group("exterior_door")
 	door.position = Vector3(origin.x + line, floor_y, origin.y + along - width * 0.5) if axis == "vertical" else Vector3(origin.x + along - width * 0.5, floor_y, origin.y + line)
 	body.add_child(door)
 

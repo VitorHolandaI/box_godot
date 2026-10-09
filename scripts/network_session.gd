@@ -44,6 +44,11 @@ var weapons_lab := false
 var survival_mode := true
 ## Mata-mata estilo CS: sem zumbis/ondas, economia e placar proprios.
 var pvp_mode := false
+## Escolta experimental (`--escort`): horda continua, mas a vitoria sai da
+## onda de sobrevivencia e passa a ser levar 3 NPCs de ponto A ate ponto B.
+var escort_mode := false
+## Bots de PvP pedidos pelo menu de modos; >= 0 sobrescreve `--pvp-bots=`.
+var pvp_bots_override := -1
 var world_seed := DEFAULT_WORLD_SEED
 ## Nome padrao e nome proprio da sala de mata-mata (aparece na descoberta).
 const DEFAULT_SERVER_NAME := "Box Godot"
@@ -379,7 +384,7 @@ func _report_build(client_build: String, client_version: String) -> void:
 ## Derruba o peer com motivo; avisa antes (se o cliente tiver o RPC) para a
 ## mensagem aparecer no menu dele em vez de uma queda sem explicacao.
 func _kick_peer(peer_id: int, reason: String) -> void:
-	_join_result.rpc_id(peer_id, false, reason, procedural_city_enabled, world_seed, survival_mode, pvp_mode)
+	_join_result.rpc_id(peer_id, false, reason, procedural_city_enabled, world_seed, survival_mode, pvp_mode, escort_mode)
 	var peer := multiplayer.multiplayer_peer as ENetMultiplayerPeer
 	if peer != null:
 		peer.disconnect_peer(peer_id)
@@ -396,14 +401,14 @@ func _request_slots(slot_count: int) -> void:
 		return
 	var rejection := PlayerCapacity.join_rejection(_total_player_count(), slot_count, max_players)
 	if not rejection.is_empty():
-		_join_result.rpc_id(sender_id, false, rejection, procedural_city_enabled, world_seed, survival_mode, pvp_mode)
+		_join_result.rpc_id(sender_id, false, rejection, procedural_city_enabled, world_seed, survival_mode, pvp_mode, escort_mode)
 		return
 	var requested_count := slot_count
 
 	peer_slots[sender_id] = requested_count
 	roster_changed.emit()
 	_sync_roster.rpc(peer_slots)
-	_join_result.rpc_id(sender_id, true, "", procedural_city_enabled, world_seed, survival_mode, pvp_mode)
+	_join_result.rpc_id(sender_id, true, "", procedural_city_enabled, world_seed, survival_mode, pvp_mode, escort_mode)
 	print("Peer %d entrou com %d jogador(es)." % [sender_id, requested_count])
 
 
@@ -414,12 +419,13 @@ func _sync_roster(new_roster: Dictionary) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
-func _join_result(accepted: bool, message: String, server_uses_procedural_city: bool, server_world_seed: int, server_uses_survival: bool, server_uses_pvp: bool) -> void:
+func _join_result(accepted: bool, message: String, server_uses_procedural_city: bool, server_world_seed: int, server_uses_survival: bool, server_uses_pvp: bool, server_uses_escort: bool) -> void:
 	if accepted:
 		procedural_city_enabled = server_uses_procedural_city
 		world_seed = server_world_seed
 		survival_mode = server_uses_survival
 		pvp_mode = server_uses_pvp
+		escort_mode = server_uses_escort
 		get_tree().call_deferred("change_scene_to_file", "res://scenes/main.tscn")
 		join_accepted.emit()
 		return
@@ -584,6 +590,8 @@ func _is_saved_server(address: String, port: int) -> bool:
 func _server_mission_name() -> String:
 	if pvp_mode:
 		return "Mata-mata (2 times)"
+	if escort_mode:
+		return "Escolta da familia"
 	if survival_mode:
 		return "Sobrevivencia"
 	if procedural_city_enabled:
@@ -615,18 +623,52 @@ func _get_command_line_server_name() -> String:
 	return DEFAULT_SERVER_NAME
 
 
+## Modo escolta (`--escort`) e a bancada do "Jogar local": o menu chama isto
+## no caminho offline para abrir a partida direto na escolta.
+## Uso: NetworkSession.activate_local_escort_mode()
+func activate_local_escort_mode() -> void:
+	escort_mode = true
+	# A escolta substitui a onda de sobrevivencia: a horda continua, mas
+	# quem decide fim de partida e o EscortDirector.
+	survival_mode = false
+	pvp_mode = false
+
+
+## Modo sobrevivencia offline (padrao do jogo), escolhido no menu de modos.
+## Uso: NetworkSession.activate_local_survival_mode()
+func activate_local_survival_mode() -> void:
+	survival_mode = true
+	escort_mode = false
+	pvp_mode = false
+
+
+## PvP offline com bots: o menu decide o total de bots (4 = 4 locais vs 4).
+## Uso: NetworkSession.activate_local_pvp_mode(4)
+func activate_local_pvp_mode(bot_count: int) -> void:
+	pvp_mode = true
+	escort_mode = false
+	survival_mode = false
+	pvp_bots_override = maxi(bot_count, 0)
+
+
 func _reset_world_config_from_arguments() -> void:
 	var arguments := OS.get_cmdline_user_args()
 	var unit_test_mode := "--unit-test" in arguments
 	procedural_city_enabled = not unit_test_mode and "--legacy-city" not in arguments
 	survival_mode = not unit_test_mode and "--classic-mode" not in arguments
 	pvp_mode = not unit_test_mode and "--pvp" in arguments
+	escort_mode = not unit_test_mode and "--escort" in arguments
 	weapons_lab = "--armas-lab" in arguments
 	if weapons_lab:
 		# Sem cidade, sem onda, sem PVP: so o campo de armas.
 		survival_mode = false
 	elif pvp_mode:
 		# PVP nao tem onda de sobrevivencia: o modo substitui o survival.
+		survival_mode = false
+	elif escort_mode:
+		# Escolta nao tem onda de sobrevivencia: a vitoria e outra. A horda
+		# continua pelo spawner do modo classico, que roda quando
+		# survival_mode e falso e pvp_mode e falso.
 		survival_mode = false
 	world_seed = DEFAULT_WORLD_SEED
 	for argument in OS.get_cmdline_user_args():

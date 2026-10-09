@@ -16,6 +16,7 @@ const WAVE_SUPPLY_CONTROLLER_SCRIPT := preload("res://scripts/wave_supply_contro
 const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state.gd")
 const AIRDROP_CONTROLLER_SCRIPT := preload("res://scripts/airdrop_controller.gd")
 const AIRDROP_PLANE_SCRIPT := preload("res://scripts/airdrop_plane.gd")
+const ESCORT_DIRECTOR_SCRIPT := preload("res://scripts/escort_director.gd")
 const CORPSE_CLEANUP_POLICY_SCRIPT := preload("res://scripts/corpse_cleanup_policy.gd")
 const ZOMBIE_SNAPSHOT_CODEC_SCRIPT := preload("res://scripts/zombie_snapshot_codec.gd")
 const LOAD_TEST_OPTIONS_SCRIPT := preload("res://scripts/load_test_options.gd")
@@ -125,6 +126,11 @@ var pvp := PvpServerDirector.new(self)
 ## Estado replicado do mata-mata para o cliente (linha de HUD com placar).
 var pvp_state_text := ""
 var pvp_state_elapsed := 0.0
+## Modo escolta: simulacao no servidor; no cliente, os fantasmas por estado.
+var escort_director = null
+var escort_state_text := ""
+var escort_state_elapsed := 0.0
+var escort_proxies: Dictionary = {}
 ## Ultima resposta do servidor a escolha de arma no mata-mata ("" = equipou).
 var last_loadout_message := ""
 ## Menu de arma do cliente (tecla B), criado quando o jogador local existe.
@@ -216,6 +222,14 @@ func _start_offline_match() -> void:
 	_start_car_bots_if_requested()
 
 
+## Bots de PvP: o menu de modos manda pelo override; sem ele, `--pvp-bots=`.
+## Uso: pvp.spawn_bots_when_ready.call_deferred(_pvp_bot_count_from_session())
+func _pvp_bot_count_from_session() -> int:
+	if NetworkSession.pvp_bots_override >= 0:
+		return NetworkSession.pvp_bots_override
+	return LOAD_TEST_OPTIONS_SCRIPT.pvp_bot_count(OS.get_cmdline_user_args())
+
+
 ## Servidor ou cliente: roster de peers, smoke tests de dev e, no servidor, a
 ## carga inicial e os bots de PVP.
 func _start_network_match() -> void:
@@ -230,7 +244,7 @@ func _start_network_match() -> void:
 		_prespawn_load_test_zombies(LOAD_TEST_OPTIONS_SCRIPT.prespawn_zombie_count(OS.get_cmdline_user_args()))
 		_start_car_bots_if_requested()
 		if NetworkSession.pvp_mode:
-			pvp.spawn_bots_when_ready.call_deferred(LOAD_TEST_OPTIONS_SCRIPT.pvp_bot_count(OS.get_cmdline_user_args()))
+			pvp.spawn_bots_when_ready.call_deferred(_pvp_bot_count_from_session())
 	_notify_scene_loaded.call_deferred()
 
 
@@ -389,7 +403,27 @@ func _process(delta: float) -> void:
 	if NetworkSession.survival_mode:
 		_tick_survival(delta)
 		return
+	if NetworkSession.escort_mode:
+		_tick_escort(delta)
+		return
 	_tick_classic_spawns(delta)
+
+
+## Escolta: horda continua pelo spawner classico e o diretor entrega a simu-
+## lacao da familia; estado vai para os clientes no ritmo de consenso do PVP.
+func _tick_escort(delta: float) -> void:
+	# Spawn so com a familia andando: parada no checkpoint (ou antes do E) nao
+	# nasce zumbi novo, sobra so a horda que ja estava na rua.
+	if escort_director == null or escort_director.allows_spawns():
+		_apply_escort_spawn_profile()
+		_tick_classic_spawns(delta)
+	if escort_director == null:
+		return
+	escort_director.tick(delta, get_tree())
+	escort_state_text = escort_director.hud_text()
+	escort_state_elapsed += delta
+	if escort_state_elapsed >= ESCORT_BROADCAST_INTERVAL:
+		_refresh_escort_broadcast()
 
 
 ## Sonda de frame, auditoria de fluxo, medidor de atraso, visao dos jogadores
@@ -417,6 +451,11 @@ func _finish_city_setup() -> void:
 		# os sinais com o mundo completo (watch e idempotente).
 		_city_doors_watched = true
 		door_state_replicator.watch(get_tree())
+	# Escolta nasce junto da cidade pronta; seu tick e roteado em _process.
+	if NetworkSession.escort_mode and escort_director == null:
+		escort_director = ESCORT_DIRECTOR_SCRIPT.new()
+		add_child(escort_director)
+		escort_director.start(get_tree(), self, NetworkSession.world_seed)
 	if _initial_loot_spawned:
 		return
 	# Cidade pronta: agora as ancoras internas existem, entao o primeiro
@@ -448,6 +487,58 @@ func _tick_classic_spawns(delta: float) -> void:
 	var alive_count := get_tree().get_nodes_in_group("zombies").size()
 	if zombie_spawn_schedule.has_capacity(alive_count) and not _spawn_zombie():
 		push_warning("Spawn de zumbi adiado: nenhum ponto autorizado esta livre.")
+
+
+## Escolta: o teto/intervalo da horda cresce por trecho (50 -> 100 -> 150 -> 200
+## VIVOS) e o spawner REPOE os mortos ate o teto, mas so enquanto a familia
+## anda: ao chegar na casa o spawn para de nascer (ver allows_spawns) e o E
+## libera o proximo trecho com o teto maior.
+func _apply_escort_spawn_profile() -> void:
+	if escort_director == null:
+		return
+	var profile: Dictionary = escort_director.spawn_profile()
+	zombie_spawn_schedule.target = int(profile["cap"])
+	zombie_spawn_schedule.interval = float(profile["interval"])
+
+
+## Ritmo de replicacao do estado da escolta (posicao/vida dos familiares).
+const ESCORT_BROADCAST_INTERVAL := 0.2
+
+
+## Servidor: empurra estado da escolta para os peers carregados.
+## Uso: chamado no _tick_escort pelo acumulador escort_state_elapsed.
+func _refresh_escort_broadcast() -> void:
+	escort_state_elapsed = 0.0
+	if escort_director == null or not NetworkSession.is_server():
+		return
+	var state: Dictionary = escort_director.state_for_network()
+	for peer_id in NetworkSession.loaded_peers:
+		_escort_state.rpc_id(int(peer_id), state)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _escort_state(state: Dictionary) -> void:
+	if not NetworkSession.is_client():
+		return
+	escort_state_text = String(state.get("status", ""))
+	for family_state in state.get("family", []):
+		_apply_escort_ghost(family_state)
+
+
+## Fantasma do familiar (cliente): corpo sem simulacao, guiado pelo estado.
+## Uso: main._escort_state(state)
+func _apply_escort_ghost(family_state: Dictionary) -> void:
+	var member_name := String(family_state.get("name", ""))
+	if member_name.is_empty():
+		return
+	if not escort_proxies.has(member_name):
+		var tint := Color(float(family_state.get("tint_r", 1.0)), float(family_state.get("tint_g", 1.0)), float(family_state.get("tint_b", 1.0)))
+		var ghost_scale := float(family_state.get("scale", 1.0))
+		var ghost = ESCORT_DIRECTOR_SCRIPT.FAMILY_MEMBER_SCRIPT.new_civilian(self, "EscortGhost-%s" % member_name, tint, ghost_scale)
+		ghost.simulates = false
+		escort_proxies[member_name] = ghost
+	var ghost_member = escort_proxies[member_name]
+	ghost_member.replicate_state(family_state)
 
 
 ## Tick de fisica: o que vale para todos, depois o lado do cliente (envia
@@ -819,6 +910,9 @@ func _spawn_offline_player(slot: int, config: Dictionary) -> void:
 	player.input_device_name = config["device_name"]
 	player.position = _get_player_spawn_position(slot)
 	player.set_color_index(slot)
+	# Modo teste: na escolta (e com --infinite-lives) o jogador nao perde vida —
+	# o modo ainda esta em teste e morrer no meio da rota atrapalha a validacao.
+	player.infinite_lives = NetworkSession.escort_mode or ("--infinite-lives" in OS.get_cmdline_user_args())
 	players_node.add_child(player)
 	player.set_spawn_position(player.global_position)
 	_connect_crate_weapon_signals(player)
@@ -1475,6 +1569,9 @@ func _spawn_zombie(position_override: Variant = null, variant_override: int = -1
 	if variant < 0 and NetworkSession.survival_mode and survival_wave_controller != null:
 		var roll := posmod(spawn_index * 37 + NetworkSession.world_seed * 13, 100)
 		variant = survival_wave_controller.schedule.pick_variant(survival_wave_controller.wave_index, roll)
+	# Escolta: mistura por trecho (fraco no comeco, tanques no fim e teto baixo).
+	if variant < 0 and NetworkSession.escort_mode and escort_director != null:
+		variant = escort_director.pick_zombie_variant(spawn_index)
 	var prefer_indoor := ZOMBIE_SPAWN_LOCATOR_SCRIPT.prefers_indoor(variant)
 	var spawn_position: Vector3 = position_override as Vector3 if position_override is Vector3 else zombie_spawn_locator.pick_spawn_position(get_tree(), prefer_indoor)
 	if spawn_position == ZOMBIE_SPAWN_LOCATOR_SCRIPT.INVALID_SPAWN_POSITION:
@@ -1575,6 +1672,8 @@ func get_survival_hud_text() -> String:
 	if NetworkSession.pvp_mode:
 		# No servidor/offline o texto sai da partida; no cliente vem replicado.
 		return pvp.hud_text() if pvp.is_active() else pvp_state_text
+	if NetworkSession.escort_mode:
+		return escort_state_text
 	return survival_wave_controller.get_hud_text() if NetworkSession.survival_mode else ""
 
 
@@ -1846,6 +1945,10 @@ func _schedule_wave_task(delay: float, task: Callable) -> void:
 
 
 func _get_player_spawn_position(slot: int) -> Vector3:
+	# Escolta: jogador e familia nascem juntos na ponta do corredor (nao na
+	# safehouse), que e o ponto de encontro do modo.
+	if NetworkSession.escort_mode:
+		return ESCORT_DIRECTOR_SCRIPT.ESCORT_START + Vector3(0.0, 0.0, 2.4 + float(slot) * 1.6)
 	var spawn_slot := slot % PLAYER_SPAWN_POINTS.size()
 	var marker_path := "GeneratedCity/CentralSafehouse/PlayerSpawn%d" % (spawn_slot + 1)
 	var marker := get_node_or_null(marker_path) as Marker3D

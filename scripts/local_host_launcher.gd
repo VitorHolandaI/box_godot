@@ -30,8 +30,10 @@ var _idle_elapsed := 0.0
 
 ## Argumentos do processo servidor. Pelo editor o executavel e o proprio Godot
 ## e precisa de --path para achar o projeto; no binario exportado nao.
-## Uso: LocalHostLauncher.build_server_arguments(27015, 42, OS.has_feature("editor"), ProjectSettings.globalize_path("res://"))
-static func build_server_arguments(port: int, world_seed: int, running_from_editor: bool, project_path: String) -> PackedStringArray:
+## `mode_arguments` leva as flags do modo escolhido no menu (--pvp, --escort,
+## --pvp-bots=N...); vazio hospeda a sobrevivencia.
+## Uso: LocalHostLauncher.build_server_arguments(27015, 42, OS.has_feature("editor"), caminho, PackedStringArray(["--pvp"]))
+static func build_server_arguments(port: int, world_seed: int, running_from_editor: bool, project_path: String, mode_arguments: PackedStringArray = PackedStringArray()) -> PackedStringArray:
 	var arguments := PackedStringArray(["--headless"])
 	if running_from_editor:
 		arguments.append_array(["--path", project_path])
@@ -43,6 +45,7 @@ static func build_server_arguments(port: int, world_seed: int, running_from_edit
 		"--server-name=%s" % HOSTED_SERVER_NAME,
 		"%s%d" % [HOST_IDLE_EXIT_ARGUMENT, HOST_IDLE_EXIT_SECONDS],
 	])
+	arguments.append_array(mode_arguments)
 	return arguments
 
 
@@ -73,10 +76,10 @@ static func filter_lan_ipv4(addresses: PackedStringArray) -> PackedStringArray:
 
 
 ## Sobe o servidor filho; ERR_CANT_CREATE se o SO recusar o processo.
-## Uso: var error := launcher.launch(27015)
-func launch(port: int) -> Error:
+## Uso: var error := launcher.launch(27015, PackedStringArray(["--escort"]))
+func launch(port: int, mode_arguments: PackedStringArray = PackedStringArray()) -> Error:
 	stop()
-	var arguments := build_server_arguments(port, randi(), OS.has_feature("editor"), ProjectSettings.globalize_path("res://"))
+	var arguments := build_server_arguments(port, randi(), OS.has_feature("editor"), ProjectSettings.globalize_path("res://"), mode_arguments)
 	var pid := OS.create_process(OS.get_executable_path(), arguments)
 	if pid <= 0:
 		push_error("Nao foi possivel iniciar o servidor hospedado: executavel=%s argumentos=%s pid=%d." % [OS.get_executable_path(), arguments, pid])

@@ -42,6 +42,14 @@ func configure(size: Vector3, material: Material, requested_swing_direction: flo
 	swing_direction = 1.0 if panel_size.z > panel_size.x else -1.0
 
 
+## Normal da PAREDE onde a porta mora, em coordenadas do predio: X quando a
+## folha e fina em X (parede vertical) e Z no outro caso. A folha gira ao abrir,
+## entao quem precisa da normal em mundo compoe com a base do PREDIO, nunca com
+## a do no da porta. Uso: var normal := porta.wall_normal()
+func wall_normal() -> Vector3:
+	return Vector3.RIGHT if panel_size.z > panel_size.x else Vector3.BACK
+
+
 func _ready() -> void:
 	add_to_group("destructible_door")
 	health = max_health
@@ -74,6 +82,32 @@ func interact(opener: Node3D = null) -> void:
 	if not is_open and opener != null:
 		_set_swing_away_from(opener.global_position)
 	is_open = not is_open
+	set_physics_process(true)
+	network_state_changed.emit(self)
+
+
+## Abre a porta se estiver fechada, escolhendo o lado oposto a quem abriu. A
+## familia da escolta usa isto ao chegar: diferente de interact(), e idempotente
+## (nao fecha a porta que ja esta aberta nem quando chamado varias vezes).
+## Uso: door.open_for(escort_member)
+func open_for(opener: Node3D = null) -> void:
+	if is_destroyed or is_open:
+		return
+	if opener != null:
+		_set_swing_away_from(opener.global_position)
+	is_open = true
+	set_physics_process(true)
+	network_state_changed.emit(self)
+
+
+## Fecha a porta que esta aberta. Espelho de open_for: idempotente, nao mexe na
+## que ja esta fechada nem na arrombada (vao arrombado nao volta). A escolta
+## fecha a porta da casa do checkpoint com a familia toda dentro.
+## Uso: door.close_for()
+func close_for() -> void:
+	if is_destroyed or not is_open:
+		return
+	is_open = false
 	set_physics_process(true)
 	network_state_changed.emit(self)
 

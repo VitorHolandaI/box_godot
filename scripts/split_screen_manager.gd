@@ -25,6 +25,10 @@ class MinimapView extends Control:
 	var tracked_zombies: Array = []
 	var tracked_crates: Array = []
 	var tracked_loot: Array = []
+	## Modo escolta: familiares e o ponto B que eles buscam (NetworkSession.escort_mode).
+	var tracked_escort: Array = []
+	var escort_goal := Vector2.ZERO
+	var has_escort_goal := false
 	## Ruas e pegadas do mapa gerado; vem de CityGenerator.get_minimap_layout().
 	var city_layout: Dictionary = {}
 	var own_player: Node = null
@@ -67,6 +71,44 @@ class MinimapView extends Control:
 				continue
 			var loot_point := (center + Vector2(loot.global_position.x, loot.global_position.z) * scale_value).clamp(Vector2.ONE * 8.0, size - Vector2.ONE * 8.0)
 			draw_rect(Rect2(loot_point - Vector2(3.0, 3.0), Vector2(6.0, 6.0)), Color(0.95, 0.8, 0.2, 0.9), true)
+		if has_escort_goal:
+			draw_arc(center + escort_goal * scale_value, 7.0, 0.0, TAU, 20, Color(0.3, 1.0, 0.4, 0.95), 2.0)
+		for escort_node in tracked_escort:
+			_draw_escort_widget(escort_node, center, scale_value)
+
+
+	## Familiar no minimapa: losango grande com contorno e pulso (e o objetivo
+	## do modo, nao pode se perder no fundo do mapa).
+	## Uso: dentro de _draw, depois dos crates.
+	func _draw_escort_widget(member: Variant, center: Vector2, scale_value: float) -> void:
+		var member_body := member as Node3D
+		if member_body == null or not is_instance_valid(member_body):
+			return
+		var escort_point := (center + Vector2(member_body.global_position.x, member_body.global_position.z) * scale_value).clamp(Vector2.ONE * 8.0, size - Vector2.ONE * 8.0)
+		var tint := Color.WHITE
+		var tint_value: Variant = member_body.get("tint")
+		if tint_value is Color:
+			tint = tint_value
+		var is_alive := not bool(member_body.get("is_eliminated")) and not bool(member_body.get("escaped"))
+		if not is_alive:
+			draw_arc(escort_point, 5.0, 0.0, TAU, 12, Color(0.5, 0.5, 0.5, 0.8), 1.5)
+			return
+		var pulse := 0.6 + 0.4 * absf(sin(Time.get_ticks_msec() / 260.0))
+		draw_arc(escort_point, 9.0, 0.0, TAU, 20, Color(1.0, 1.0, 1.0, 0.35 + 0.35 * pulse), 2.0)
+		var diamond := PackedVector2Array([
+			escort_point + Vector2(0.0, -8.0),
+			escort_point + Vector2(8.0, 0.0),
+			escort_point + Vector2(0.0, 8.0),
+			escort_point + Vector2(-8.0, 0.0),
+		])
+		draw_colored_polygon(diamond, Color(0.02, 0.02, 0.02, 0.95))
+		var inner := PackedVector2Array([
+			escort_point + Vector2(0.0, -6.0),
+			escort_point + Vector2(6.0, 0.0),
+			escort_point + Vector2(0.0, 6.0),
+			escort_point + Vector2(-6.0, 0.0),
+		])
+		draw_colored_polygon(inner, tint)
 
 
 
@@ -246,7 +288,38 @@ func _update_minimaps() -> void:
 		minimaps[index].tracked_crates = all_crates
 		minimaps[index].tracked_loot = all_loot
 		minimaps[index].city_layout = _minimap_layout
+		# Modo escolta: familiares sempre no mapa, alem do anel do ponto B.
+		minimaps[index].tracked_escort = _living_escort_members()
+		var director := get_tree().get_first_node_in_group("escort_director")
+		var escort_goal := Vector2.ZERO
+		var has_goal := false
+		if director is Node3D:
+			var goal_point := (director as Node3D).get("point_b") as Vector3
+			escort_goal = Vector2(goal_point.x, goal_point.z)
+			has_goal = true
+		minimaps[index].has_escort_goal = has_goal
+		minimaps[index].escort_goal = escort_goal
 		minimaps[index].queue_redraw()
+
+
+## Familiares que ainda importam no mapa: vivos e ainda nao escaparam.
+## Uso: minimap.tracked_escort = _living_escort_members()
+func _living_escort_members() -> Array:
+	var result: Array = []
+	for node in get_tree().get_nodes_in_group("escort_human"):
+		if node == null or not is_instance_valid(node):
+			continue
+		if bool(node.get("is_eliminated")) or bool(node.get("escaped")):
+			continue
+		result.append(node)
+	if result.size() != _escort_tracked_last:
+		_escort_tracked_last = result.size()
+		print(JSON.stringify({"event": "minimap_escort_count", "count": result.size()}))
+	return result
+
+
+## Ultimo tamanho impresso, so para nao repetir o diagnostico a 12 Hz.
+var _escort_tracked_last := -1
 
 
 ## Quem o minimapa pode mostrar: no mata-mata SO os companheiros do proprio

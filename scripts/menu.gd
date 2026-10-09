@@ -34,6 +34,10 @@ var capture_player := -1
 var capture_action := ""
 var capture_button: Button
 var selected_mode := "local"
+## Modo de jogo escolhido no submenu: "pvp", "survival" ou "escort".
+var selected_game_mode := "survival"
+## Painel de modos (construido em codigo; ver _build_mode_panel).
+var mode_panel: VBoxContainer
 var server_refresh_elapsed := 0.0
 var editing_server_address := ""
 var editing_server_port := -1
@@ -65,9 +69,11 @@ func _ready() -> void:
 	get_viewport().size_changed.connect(_layout_menu)
 	Input.joy_connection_changed.connect(_on_joypad_connection_changed)
 	server_address_row.visible = false
-	selection.visible = true
+	_build_mode_panel()
+	selection.visible = false
 	setup.visible = false
 	settings.visible = false
+	mode_panel.visible = true
 	_configure_settings()
 	_update_network_mode_ui()
 	_refresh_servers()
@@ -107,6 +113,7 @@ func _input(event: InputEvent) -> void:
 
 func _show_setup(player_count: int) -> void:
 	selection.visible = false
+	mode_panel.visible = false
 	setup.visible = true
 	settings.visible = false
 	setup_title.text = "CONFIGURAR JOGADOR" if selected_mode == "server" else "CONFIGURAR %d JOGADOR%s" % [player_count, "" if player_count == 1 else "ES"]
@@ -122,6 +129,74 @@ func _show_setup(player_count: int) -> void:
 	start_button.text = "INICIAR PARTIDA" if selected_mode == "local" else "ENTRAR NA SALA"
 	start_button.disabled = false
 	_layout_menu()
+
+
+## Submenu de modos (modo primeiro, depois "como jogar"). Construido em codigo
+## para nao mexer no .tscn do menu so por causa de tres botoes.
+## Uso: _build_mode_panel() no _ready
+func _build_mode_panel() -> void:
+	mode_panel = VBoxContainer.new()
+	mode_panel.name = "Modes"
+	mode_panel.add_theme_constant_override("separation", 14)
+	var title := Label.new()
+	title.text = "ESCOLHA O MODO"
+	title.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	mode_panel.add_child(title)
+	mode_panel.add_child(_make_mode_button("PVP — ate 4 locais vs 4 bots", "pvp"))
+	mode_panel.add_child(_make_mode_button("SOBREVIVENCIA — ondas de zumbis", "survival"))
+	mode_panel.add_child(_make_mode_button("ESCOLTA — leve a familia ate a safehouse", "escort"))
+	menu_panel.add_child(mode_panel)
+	# Trocar de modo depois de ja ter escolhido "como jogar": o voltar do setup
+	# volta para a selecao, e o da selecao volta para os modos.
+	var back := Button.new()
+	back.name = "BackToModes"
+	back.text = "VOLTAR AOS MODOS"
+	back.custom_minimum_size = Vector2(0.0, 36.0)
+	back.pressed.connect(_on_back_to_modes_pressed)
+	selection.add_child(back)
+
+
+func _make_mode_button(label: String, game_mode: String) -> Button:
+	var button := Button.new()
+	button.text = label
+	button.custom_minimum_size = Vector2(360.0, 44.0)
+	button.pressed.connect(_on_mode_chosen.bind(game_mode))
+	return button
+
+
+func _on_mode_chosen(game_mode: String) -> void:
+	selected_game_mode = game_mode
+	mode_panel.visible = false
+	selection.visible = true
+	_layout_menu()
+
+
+func _on_back_to_modes_pressed() -> void:
+	setup.visible = false
+	settings.visible = false
+	selection.visible = false
+	mode_panel.visible = true
+	_layout_menu()
+
+
+## Flags do modo para o servidor filho (Hospedar partida) ou para reativar o
+## modo offline. Vazio = sobrevivencia (padrao do jogo).
+func _mode_server_arguments() -> PackedStringArray:
+	if selected_game_mode == "pvp":
+		return PackedStringArray(["--pvp", "--pvp-bots=4"])
+	if selected_game_mode == "escort":
+		return PackedStringArray(["--escort"])
+	return PackedStringArray()
+
+
+## Liga o modo escolhido na partida offline, ja que o menu nao passa flags.
+func _activate_local_mode() -> void:
+	if selected_game_mode == "pvp":
+		NetworkSession.activate_local_pvp_mode(4)
+	elif selected_game_mode == "escort":
+		NetworkSession.activate_local_escort_mode()
+	else:
+		NetworkSession.activate_local_survival_mode()
 
 
 func _configure_settings() -> void:
@@ -262,7 +337,11 @@ func _start_game() -> void:
 		return
 	GameConfig.configure_local_players(player_configs)
 	if selected_mode == "local":
+		# Modo escolhido no submenu (PvP/Sobrevivencia/Escolta). leave_session()
+		# RE-RESETA o modo pelos argumentos da linha de comando, entao a
+		# ativacao vem DEPOIS dele.
 		NetworkSession.leave_session()
+		_activate_local_mode()
 		get_tree().change_scene_to_file("res://scenes/main.tscn")
 		return
 	if selected_mode == "host":
@@ -294,7 +373,7 @@ func _start_game() -> void:
 ## Sobe o servidor filho e entra nele; amigos usam o IP mostrado no menu.
 func _start_hosted_game() -> void:
 	start_button.disabled = true
-	var error := NetworkSession.local_host.launch(NetworkSession.DEFAULT_PORT)
+	var error := NetworkSession.local_host.launch(NetworkSession.DEFAULT_PORT, _mode_server_arguments())
 	if error != OK:
 		start_button.disabled = false
 		message.text = "Nao foi possivel iniciar o servidor local: %s" % error_string(error)

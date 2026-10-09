@@ -13,6 +13,11 @@ const LOT_FEASIBILITY: GDScript = preload("res://scripts/procedural/generators/l
 const ROAD_LINES := [-72.0, -24.0, 24.0, 72.0]
 const ROAD_ANCHORS := [-96.0, -72.0, -24.0, 24.0, 72.0, 96.0]
 const ROAD_BEND_LIMIT := 0.9
+const ESCORT_ROUTE_SCRIPT: GDScript = preload("res://scripts/escort_route.gd")
+## Arquetipos de 1 andar (porta externa + interior) para os lotes dos checkpoints
+## da escolta: a familia entra e espera o E. Variar entre casa e comercio deixa a
+## parada com cara de mapa em vez de casinhas repetidas.
+const CHECKPOINT_ARCHETYPES: Array[String] = ["house", "grocery", "store", "house", "grocery", "store"]
 const BLOCK_SIZE := Vector2(42.0, 42.0)
 const LOT_SIZE := Vector2(19.0, 19.0)
 ## Um beco atravessa cada quadra, abrindo rotas curtas e quebrando a leitura de
@@ -23,10 +28,13 @@ const BUILDABLE_HALF_X := 21.0
 const BUILDABLE_HALF_Z := 20.5
 
 
-static func generate_world(world_seed: int, survival_mode: bool = false, pvp_mode: bool = false):
+## `escort_mode`: modo escolta. A cidade continua a 3x3 inteira (o zig-zag da
+## rota atravessa o mapa todo), mas o lote do meio da fileira leste fica
+## reservado para a safehouse de chegada, no lugar do lote central.
+static func generate_world(world_seed: int, survival_mode: bool = false, pvp_mode: bool = false, escort_mode: bool = false):
 	var city = CITY_BLUEPRINT.new(world_seed)
 	_generate_roads(city, world_seed)
-	_generate_blocks(city, world_seed, survival_mode, pvp_mode)
+	_generate_blocks(city, world_seed, survival_mode, pvp_mode, escort_mode)
 	return city
 
 
@@ -52,7 +60,7 @@ static func _add_curved_road(city, axis_position: float, vertical: bool, width: 
 		city.add_road(ROAD_BLUEPRINT.new(road_type, midpoint, finish, width))
 
 
-static func _generate_blocks(city, world_seed: int, survival_mode: bool, pvp_mode: bool = false) -> void:
+static func _generate_blocks(city, world_seed: int, survival_mode: bool, pvp_mode: bool = false, escort_mode: bool = false) -> void:
 	var block_index := 0
 	for x_index in 3:
 		for z_index in 3:
@@ -61,7 +69,7 @@ static func _generate_blocks(city, world_seed: int, survival_mode: bool, pvp_mod
 			var block = BLOCK_BLUEPRINT.new("Block_%02d" % block_index, district, center, BLOCK_SIZE)
 			var layout := _block_layout(world_seed + block_index * 313, block_index)
 			_add_alley(city, block, layout)
-			_generate_lots(block, world_seed + block_index * 97, survival_mode, pvp_mode, city.roads, layout)
+			_generate_lots(block, world_seed + block_index * 97, survival_mode, pvp_mode, city.roads, layout, escort_mode)
 			city.add_block(block)
 			block_index += 1
 
@@ -98,24 +106,47 @@ static func _add_alley(city, block, layout: Dictionary) -> void:
 	))
 
 
-static func _generate_lots(block, block_seed: int, survival_mode: bool, pvp_mode: bool, roads: Array, layout: Dictionary) -> void:
+## Lote reservado (sem predio procedural) para a safehouse de chegada: centro no
+## survival e cantos opostos no PVP; na escolta, so o lote da safehouse final
+## (ponta leste). Os lotes dos checkpoints da espiral NAO sao reservados: viram
+## predios normais (casa/mercearia) e a familia usa a porta deles como parada.
+## Uso: reserved = _is_reserved_lot(block, x_index, z_index, pvp_mode, escort_mode)
+static func _is_reserved_lot(block, x_index: int, z_index: int, pvp_mode: bool, escort_mode: bool) -> bool:
+	var block_x: float = float(block.position.x)
+	var block_z: float = float(block.position.y)
+	if escort_mode:
+		var center := Vector2(block_x, block_z) + Vector2(-10.5 + float(x_index) * 21.0, -10.5 + float(z_index) * 21.0)
+		return center.distance_to(ESCORT_ROUTE_SCRIPT.SAFEHOUSE_LOT) < 0.5
+	if pvp_mode:
+		var base_a := is_equal_approx(block_x, -48.0) and is_equal_approx(block_z, -48.0) and x_index == 0 and z_index == 0
+		var base_b := is_equal_approx(block_x, 48.0) and is_equal_approx(block_z, 48.0) and x_index == 1 and z_index == 1
+		return base_a or base_b
+	return is_zero_approx(block_x) and is_zero_approx(block_z) and x_index == 0 and z_index == 1
+
+
+## Indice do checkpoint da escolta cujo lote regular e este (0..5), ou -1. O
+## diretor acha a porta do predio desse lote para a familia parar. Uso interno.
+static func _checkpoint_lot_index(block, x_index: int, z_index: int) -> int:
+	var center: Vector2 = block.position + Vector2(-10.5 + float(x_index) * 21.0, -10.5 + float(z_index) * 21.0)
+	var lot_centers: Array = ESCORT_ROUTE_SCRIPT.checkpoint_lot_centers()
+	for index in lot_centers.size():
+		if center.distance_to(lot_centers[index]) < 0.5:
+			return index
+	return -1
+
+
+static func _generate_lots(block, block_seed: int, survival_mode: bool, pvp_mode: bool, roads: Array, layout: Dictionary, escort_mode: bool = false) -> void:
 	var lot_index := 0
 	for x_index in 2:
 		for z_index in 2:
-			var is_safehouse_lot := is_zero_approx(block.position.x) and is_zero_approx(block.position.y) and x_index == 0 and z_index == 1
-			# PVP: as duas casas ficam nos cantos opostos do mapa (lote sudoeste
-			# do bloco -48/-48 e lote nordeste do bloco 48/48), entao esses lotes
-			# nascem vazios.
-			var is_pvp_safehouse_lot := pvp_mode and (
-				(is_equal_approx(block.position.x, -48.0) and is_equal_approx(block.position.y, -48.0) and x_index == 0 and z_index == 0)
-				or (is_equal_approx(block.position.x, 48.0) and is_equal_approx(block.position.y, 48.0) and x_index == 1 and z_index == 1)
-			)
-			var reserved_lot := is_safehouse_lot or is_pvp_safehouse_lot
+			var reserved_lot := _is_reserved_lot(block, x_index, z_index, pvp_mode, escort_mode)
+			var checkpoint_index := _checkpoint_lot_index(block, x_index, z_index) if escort_mode else -1
 			var lot_position := _lot_position(block, layout, x_index, z_index)
 			var lot_size := _lot_size(block, layout, x_index, z_index)
-			if reserved_lot:
-				# Main e PVP constroem as safehouses em coordenadas fixas; esse lote
-				# precisa continuar batendo com elas apesar do layout irregular ao redor.
+			if reserved_lot or checkpoint_index >= 0:
+				# Lote na grade regular: a safehouse e construida em coordenada
+				# fixa e os lotes de checkpoint tem que bater com
+				# EscortRoute.checkpoint_lot_centers apesar do layout irregular.
 				lot_position = block.position + Vector2(-10.5 + float(x_index) * 21.0, -10.5 + float(z_index) * 21.0)
 				lot_size = LOT_SIZE
 			var lot_seed := block_seed + lot_index * 31
@@ -132,6 +163,10 @@ static func _generate_lots(block, block_seed: int, survival_mode: bool, pvp_mode
 			var pick_rng := RandomNumberGenerator.new()
 			pick_rng.seed = lot_seed
 			var archetype: String = LOT_FEASIBILITY.choose_archetype(features, pick_rng)
+			if checkpoint_index >= 0:
+				# Parada da escolta: garante um predio de 1 andar com porta externa
+				# (apartamento nao tem saida simples no terreo para o civil entrar).
+				archetype = CHECKPOINT_ARCHETYPES[checkpoint_index % CHECKPOINT_ARCHETYPES.size()]
 			var lot = LOT_BLUEPRINT.new("%s_Lot_%d" % [block.id, lot_index], lot_seed, block.district, lot_position, lot_size)
 			lot.building_rotation_y = _lot_rotation(layout, x_index, z_index)
 			if not reserved_lot and not archetype.is_empty():

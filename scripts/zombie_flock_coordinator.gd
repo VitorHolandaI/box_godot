@@ -142,6 +142,14 @@ static func get_living_players(tree: SceneTree) -> Array:
 		var player := node as CharacterBody3D
 		if player != null and is_instance_valid(player) and not bool(player.get("is_eliminated")) and int(player.get("health")) > 0:
 			players.append(player)
+	# Modo escolta: familiares entram com o mesmo contrato do jogador, mas so
+	# depois que a missao comeca (targetable).
+	for node in tree.get_nodes_in_group("escort_human"):
+		var member := node as CharacterBody3D
+		if member == null or not is_instance_valid(member) or not bool(member.get("targetable")):
+			continue
+		if not bool(member.get("is_eliminated")) and int(member.get("health")) > 0 and not bool(member.get("escaped")):
+			players.append(member)
 	return players
 
 
@@ -220,6 +228,17 @@ func _update_cached_players(delta: float) -> void:
 		var p := node as CharacterBody3D
 		if p != null and not bool(p.get("is_eliminated")) and int(p.get("health")) > 0:
 			_cached_players.append(p)
+	# Modo escolta: familiares tem o mesmo contrato do jogador para a horda
+	# (health/is_eliminated/extras), mas so viram alvo depois que a missao
+	# comeca (targetable). Escapou do ponto B, esquece como alvo.
+	for node in get_tree().get_nodes_in_group("escort_human"):
+		if node == null or not is_instance_valid(node) or node.is_queued_for_deletion():
+			continue
+		var member := node as CharacterBody3D
+		if member == null or not bool(member.get("targetable")):
+			continue
+		if not bool(member.get("is_eliminated")) and int(member.get("health")) > 0 and not bool(member.get("escaped")):
+			_cached_players.append(member)
 
 
 func _update_flock_clusters() -> void:

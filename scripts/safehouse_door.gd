@@ -92,15 +92,43 @@ func is_open_requested() -> bool:
 	return open_requested
 
 
+## Quem a porta automatica reconhece como "alguem chegando": o jogador (regra
+## original) e o civil da escolta — sem o civil o familiar batia na folha
+## fechada e nunca entrava na base.
+const ACTOR_GROUPS: Array[StringName] = [&"player", &"escort_human"]
+
+
 func _has_nearby_living_actor() -> bool:
 	for body in detection_area.get_overlapping_bodies():
 		if not is_instance_valid(body) or body.is_queued_for_deletion():
 			continue
-		if not body.is_in_group("player"):
+		if not _body_is_known_actor(body):
+			continue
+		# Civil PARADO nao abre a porta: na escolta ele espera dentro da casinha
+		# e, com a porta aberta, a horda entraria. Andando (entrando/saindo) ele
+		# abre normalmente.
+		if body.is_in_group("escort_human") and not bool(body.get("walking")):
 			continue
 		if bool(body.get("is_eliminated")) or int(body.get("health")) <= 0:
 			continue
-		if opens_for_team(owner_team, int(body.get("pvp_team"))):
+		if opens_for_team(owner_team, _actor_team(body)):
+			return true
+	return false
+
+
+## Time do corpo, com -1 para quem nao tem `pvp_team` (o civil da escolta):
+## `int(body.get("pvp_team"))` com o valor ausente estourava
+## "Invalid call. Nonexistent 'int' constructor" a cada tick da Area3D.
+func _actor_team(body: Node) -> int:
+	var team: Variant = body.get("pvp_team")
+	if team is int or team is float:
+		return int(team)
+	return -1
+
+
+func _body_is_known_actor(body: Node) -> bool:
+	for actor_group in ACTOR_GROUPS:
+		if body.is_in_group(actor_group):
 			return true
 	return false
 

@@ -6,6 +6,7 @@ const SOLID_VENUE_SCENE := preload("res://scenes/solid_venue.tscn")
 const BuildingAssembler: GDScript = preload("res://scripts/building_assembler_3d.gd")
 const SafehouseBuilder: GDScript = preload("res://scripts/safehouse_builder.gd")
 const PROCEDURAL_CITY_GENERATOR: GDScript = preload("res://scripts/procedural/generators/city_generator.gd")
+const ESCORT_ROUTE_SCRIPT := preload("res://scripts/escort_route.gd")
 const PROCEDURAL_CITY_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/city_assembler.gd")
 const STREET_LIGHT_ASSEMBLER: GDScript = preload("res://scripts/procedural/assemblers/street_light_assembler.gd")
 const SAFEHOUSE_LOT_AREA := Rect2(-17.5, 3.5, 14.0, 14.0)
@@ -59,8 +60,30 @@ const WRECK_MASS := 450.0
 const DRIVABLE_CAR_SCENE: PackedScene = preload("res://scenes/drivable_car.tscn")
 ## So nasce 1 carro dirigivel no mapa (o jipe militar). Fica no meio de uma rua
 ## larga, longe dos pontos dos carros abandonados (car_spots) para nao empilhar.
-const DRIVABLE_CAR_SPOTS := [
+const DRIVABLE_CAR_SPOTS: Array[Vector3] = [
 	Vector3(-24.0, 0.4, 6.0),
+]
+## Carro dirigivel no modo escolta: a vaga padrao fica em cima da rota. Esta
+## fica na rua oeste, no trecho que a serpentina NAO anda, a 24 m de onde o grupo
+## nasce: o jogador acha o carro logo de cara e o civil nunca esbarra nele.
+const ESCORT_DRIVABLE_CAR_SPOTS: Array[Vector3] = [
+	Vector3(-72.0, 0.4, -48.0),
+]
+## Vagas dos carros abandonados da rua. Fora do modo escolta valem todas; nele,
+## `car_spots_for_escort` tira as que ficam no corredor da familia.
+const ABANDONED_CAR_SPOTS: Array[Vector3] = [
+	Vector3(-24.0, 0.12, -30.0),
+	Vector3(-24.0, 0.12, 18.0),
+	Vector3(24.0, 0.12, -15.0),
+	Vector3(24.0, 0.12, 42.0),
+	Vector3(-48.0, 0.12, -8.0),
+	Vector3(48.0, 0.12, 10.0),
+	Vector3(-18.0, 0.12, 24.0),
+	Vector3(32.0, 0.12, -24.0),
+	Vector3(-36.0, 0.12, -48.0),
+	Vector3(15.0, 0.12, 48.0),
+	Vector3(-60.0, 0.12, 24.0),
+	Vector3(60.0, 0.12, -24.0),
 ]
 ## Carro de base do mata-mata: fica no quintal, ao LADO dos pontos de
 ## nascimento (os bots nascem espalhados ate 2,1 m do centro), para nao cair em
@@ -169,7 +192,7 @@ func _build_procedural_city() -> void:
 	_create_materials()
 	_hide_legacy_center_roads()
 	_create_procedural_safehouse()
-	var city = await _generate_blueprint_async(NetworkSession.world_seed, NetworkSession.survival_mode, NetworkSession.pvp_mode)
+	var city = await _generate_blueprint_async(NetworkSession.world_seed, NetworkSession.survival_mode, NetworkSession.pvp_mode, NetworkSession.escort_mode)
 	minimap_layout = build_minimap_layout(city)
 	PROCEDURAL_CITY_ASSEMBLER.assemble_roads(city, self)
 	var safehouse_area: Array[Rect2] = [SAFEHOUSE_LOT_AREA]
@@ -195,10 +218,10 @@ func _build_procedural_city() -> void:
 
 ## Roda generate_world na WorkerThreadPool: a geracao e dado puro (blueprints
 ## RefCounted, RNG) sem tocar a arvore de cena.
-## Uso: var city = await _generate_blueprint_async(seed, survival)
-func _generate_blueprint_async(world_seed: int, survival_mode: bool, pvp_mode: bool = false) -> Variant:
+## Uso: var city = await _generate_blueprint_async(seed, survival, pvp, escort)
+func _generate_blueprint_async(world_seed: int, survival_mode: bool, pvp_mode: bool = false, escort_mode: bool = false) -> Variant:
 	var slot := {"city": null}
-	var task_id := WorkerThreadPool.add_task(func() -> void: slot["city"] = PROCEDURAL_CITY_GENERATOR.generate_world(world_seed, survival_mode, pvp_mode))
+	var task_id := WorkerThreadPool.add_task(func() -> void: slot["city"] = PROCEDURAL_CITY_GENERATOR.generate_world(world_seed, survival_mode, pvp_mode, escort_mode))
 	while slot["city"] == null:
 		await get_tree().process_frame
 	WorkerThreadPool.wait_for_task_completion(task_id)
@@ -231,6 +254,14 @@ func _create_procedural_safehouse() -> void:
 	# meio do mapa ela virava so mais uma cobertura no caminho, com uma terceira
 	# porta que nenhum time defende.
 	if not NetworkSession.pvp_mode:
+		# Escolta: safehouse na PONTA LESTE (a familia nasce no canto sudoeste e
+		# a serpentina termina do lado de la), de porta virada para a rua de
+		# cima (z=+24). Pelo sul a rua mais perto fica a 25 m e a aproximacao
+		# cruzaria os lotes vizinhos; pelo norte a porta da na calcada.
+		if NetworkSession.escort_mode:
+			var lot: Vector2 = ESCORT_ROUTE_SCRIPT.SAFEHOUSE_LOT
+			_build_safehouse("CentralSafehouse", Vector3(lot.x, 0.12, lot.y), PI)
+			return
 		_build_safehouse("CentralSafehouse", Vector3(-10.5, 0.12, 10.5))
 		return
 	for index in PVP_SAFEHOUSE_NAMES.size():
@@ -342,12 +373,13 @@ func _create_streetlights(rng: RandomNumberGenerator) -> void:
 ## rua, mas depois de a cidade existir, para o carro cair no asfalto.
 ## Uso: interno de _build_procedural_city
 func _create_drivable_cars(rng: RandomNumberGenerator) -> void:
-	for index in DRIVABLE_CAR_SPOTS.size():
+	var spots := ESCORT_DRIVABLE_CAR_SPOTS if NetworkSession.escort_mode else DRIVABLE_CAR_SPOTS
+	for index in spots.size():
 		var car := DRIVABLE_CAR_SCENE.instantiate() as VehicleBody3D
 		if car == null:
 			continue
 		car.name = "DrivableCar%d" % index
-		car.position = DRIVABLE_CAR_SPOTS[index]
+		car.position = spots[index]
 		car.rotation.y = rng.randf_range(0.0, TAU)
 		add_child(car)
 
@@ -379,6 +411,19 @@ func _create_pvp_team_cars() -> void:
 		car.call("paint_team_color", TdmMatch.color_for_team(index))
 
 
+## Vagas que sobram no modo escolta: sai quem fica dentro do corredor que a
+## familia anda. O resto do mapa continua com carro (e o que o jogador dirige),
+## mas nenhum plantado na rota, onde o civil encosta e para de progredir.
+## Uso: for spot in CityGenerator.car_spots_for_escort(ABANDONED_CAR_SPOTS): ...
+static func car_spots_for_escort(spots: Array) -> Array[Vector3]:
+	var kept: Array[Vector3] = []
+	for spot in spots:
+		if ESCORT_ROUTE_SCRIPT.distance_to_street_spine(spot) < ESCORT_ROUTE_SCRIPT.CAR_CLEARANCE:
+			continue
+		kept.append(spot)
+	return kept
+
+
 func _create_abandoned_cars(rng: RandomNumberGenerator) -> void:
 	var vehicle_configs: Array[Dictionary] = [
 		{"path": "res://assets/models/city/car_police.gltf", "scale": 5.0, "size": Vector3(2.1, 1.8, 4.7)},
@@ -390,20 +435,7 @@ func _create_abandoned_cars(rng: RandomNumberGenerator) -> void:
 		{"path": "res://assets/models/modular_urban/truck-grey-cargo.glb", "scale": 2.8, "size": Vector3(2.4, 2.8, 4.6)},
 		{"path": "res://assets/models/modular_urban/truck-flat.glb", "scale": 2.8, "size": Vector3(2.4, 2.2, 4.6)},
 	]
-	var car_spots: Array[Vector3] = [
-		Vector3(-24.0, 0.12, -30.0),
-		Vector3(-24.0, 0.12, 18.0),
-		Vector3(24.0, 0.12, -15.0),
-		Vector3(24.0, 0.12, 42.0),
-		Vector3(-48.0, 0.12, -8.0),
-		Vector3(48.0, 0.12, 10.0),
-		Vector3(-18.0, 0.12, 24.0),
-		Vector3(32.0, 0.12, -24.0),
-		Vector3(-36.0, 0.12, -48.0),
-		Vector3(15.0, 0.12, 48.0),
-		Vector3(-60.0, 0.12, 24.0),
-		Vector3(60.0, 0.12, -24.0),
-	]
+	var car_spots := car_spots_for_escort(ABANDONED_CAR_SPOTS) if NetworkSession.escort_mode else ABANDONED_CAR_SPOTS
 	var wreck_material := PhysicsMaterial.new()
 	wreck_material.friction = 0.6
 	wreck_material.bounce = 0.05

@@ -15,6 +15,8 @@ const DRIVABLE_CAR_SCENE: PackedScene = preload("res://scenes/drivable_car.tscn"
 const MAX_FLOAT := 0.15
 ## Quadros de fisica ate a suspensao do jipe parar de oscilar.
 const SETTLE_FRAMES := 120
+## Teto de frames esperando a pose de rastejo aplicar (ver _crawler_gaps).
+const CRAWL_POSE_FRAMES := 60
 
 
 func run(test_root: Node) -> void:
@@ -98,9 +100,17 @@ func _crawler_gaps(test_root: Node, variant: int) -> Vector2:
 	await test_root.get_tree().process_frame
 	var standing := visible_bottom(zombie) - collision_bottom(zombie)
 	zombie.call("_apply_limb_loss_mask", ZombieLimbState.LEFT_LEG | ZombieLimbState.RIGHT_LEG)
-	await test_root.get_tree().process_frame
-	await test_root.get_tree().physics_frame
-	var crawling := visible_bottom(zombie) - collision_bottom(zombie)
+	# Espera a pose de rastejo APLICAR (nao so um frame): no full suite o frame
+	# de animacao chegava depois da medicao e acusava o bug antigo (0,22 m) numa
+	# pose que nunca foi aplicada. O bug de verdade permanece apos varios frames,
+	# entao esperar nao mascara nada — so tira a dependencia do timing.
+	var crawling := INF
+	for _frame in CRAWL_POSE_FRAMES:
+		await test_root.get_tree().process_frame
+		await test_root.get_tree().physics_frame
+		crawling = visible_bottom(zombie) - collision_bottom(zombie)
+		if bool(zombie.call("is_crawling")) and crawling <= MAX_FLOAT:
+			break
 	if not bool(zombie.call("is_crawling")):
 		crawling = INF
 	zombie.queue_free()

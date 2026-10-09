@@ -13,7 +13,7 @@ extends RefCounted
 
 const BUILD_INFO_SCRIPT := preload("res://scripts/build_info.gd")
 ## Hash da superficie de RPC; atualize junto com BuildInfo.GAME_BUILD.
-const RPC_SIGNATURE := "8514a39cfa1b2b54"
+const RPC_SIGNATURE := "1f2c7fa218e6d2eb"
 ## Hash dos arquivos que DEFINEM a geometria do mundo; idem.
 ##
 ## Por que existe: a cidade NAO viaja pela rede. O servidor manda so a seed
@@ -31,7 +31,19 @@ const RPC_SIGNATURE := "8514a39cfa1b2b54"
 ## comentario nao muda mapa: o diff desses arquivos foi 56 insercoes, todas as
 ## duas linhas de SPDX por arquivo, com zero linha de codigo adicionada ou
 ## removida. Bumpar aqui so quebraria a conexao com a VPS a troco de nada.
-const WORLD_SIGNATURE := "90d62cbe0538fc84"
+##
+## Ja de 7e45a1cce2869d9d para b75e356028724df8 o mundo mudou de verdade (modo
+## escolta, 2026-09-28): poste e carro voltaram ao mapa da escolta, o lote da
+## safehouse de chegada passou a sair do EscortRoute e a porta de rua do predio
+## procedural entrou no grupo `exterior_door`, e as vagas de carro que ficavam no
+## corredor da escolta sairam do mapa dela. Este e o caso que o GAME_BUILD existe
+## para pegar, e ele ja esta em 2026-10-09.1, fora do que a VPS roda.
+##
+## De 2aa925386c210ebf para ed265b4bf58fc6c9 (2026-10-09): os lotes dos
+## checkpoints da escolta deixaram de ser reservados e passaram a receber predio
+## procedural de 1 andar (`_checkpoint_lot_index` + CHECKPOINT_ARCHETYPES), entao
+## a familia para na porta desse predio em vez da casinha propria.
+const WORLD_SIGNATURE := "ed265b4bf58fc6c9"
 const WORLD_FILES := [
 	"res://scripts/city_generator.gd",
 	"res://scripts/safehouse_builder.gd",

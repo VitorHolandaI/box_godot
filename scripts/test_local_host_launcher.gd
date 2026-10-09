@@ -12,10 +12,25 @@ const LOCAL_HOST_LAUNCHER_SCRIPT := preload("res://scripts/local_host_launcher.g
 func run(test_root: Node) -> void:
 	_test_exported_server_arguments(test_root)
 	_test_editor_server_arguments(test_root)
+	_test_mode_arguments_are_forwarded(test_root)
 	_test_idle_exit_argument(test_root)
 	_test_idle_exit_clock(test_root)
 	_test_lan_address_filter(test_root)
 	_test_stop_without_server(test_root)
+
+
+## O modo escolhido no submenu vai como flag para o servidor filho.
+func _test_mode_arguments_are_forwarded(test_root: Node) -> void:
+	print("Testando flags de modo no servidor hospedado...")
+	var arguments: PackedStringArray = LOCAL_HOST_LAUNCHER_SCRIPT.build_server_arguments(27015, 42, false, "/projeto", PackedStringArray(["--pvp", "--pvp-bots=4"]))
+	if not arguments.has("--pvp") or not arguments.has("--pvp-bots=4"):
+		_fail(test_root, "Flags do modo PvP deveriam chegar ao servidor; veio %s." % arguments)
+		return
+	var survival: PackedStringArray = LOCAL_HOST_LAUNCHER_SCRIPT.build_server_arguments(27015, 42, false, "/projeto")
+	if survival.has("--pvp") or survival.has("--escort"):
+		_fail(test_root, "Sobrevivencia nao deveria mandar flag de modo; veio %s." % survival)
+		return
+	print("PASS: Flags de modo do servidor hospedado validadas.")
 
 
 func _test_exported_server_arguments(test_root: Node) -> void:

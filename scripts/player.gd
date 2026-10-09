@@ -129,6 +129,9 @@ var last_attacker: Node = null
 const PVP_START_PISTOL_MAG := 12
 const PVP_START_PISTOL_RESERVE := 240
 var infinite_ammo := false
+## Modo teste (escolta/`--infinite-lives`): VIDA infinita — a barra 0-100 nunca
+## cai e as vidas nunca sao gastas. Ver _take_damage.
+var infinite_lives := false
 
 @onready var model: Node3D = $Model
 @onready var head: Node3D = $Model/Head
@@ -226,6 +229,10 @@ var knife_pressed := false
 var pistol_pressed := false
 var reload_pressed := false
 var interact_pressed := false
+## Pedido de interacao que SOBREVIVE ao tick de fisica (interact_pressed e
+## limpo no fim do mesmo tick). Quem consome chama consume_interact_request();
+## criado para o EscortDirector, que roda no _process e perdia o E.
+var interact_requested := false
 var shotgun_pressed := false
 var uzi_pressed := false
 var magnum_pressed := false
@@ -518,6 +525,8 @@ func apply_network_input(state: Dictionary) -> void:
 	pistol_pressed = _latched_button(state, "pistol", pistol_pressed)
 	reload_pressed = _latched_button(state, "reload", reload_pressed)
 	interact_pressed = _latched_button(state, "interact", interact_pressed)
+	if interact_pressed:
+		interact_requested = true
 	shotgun_pressed = _latched_button(state, "shotgun", shotgun_pressed)
 	uzi_pressed = _latched_button(state, "uzi", uzi_pressed)
 	magnum_pressed = _latched_button(state, "magnum", magnum_pressed)
@@ -1533,13 +1542,20 @@ func take_damage(amount: int, attack_direction: Vector3 = Vector3.ZERO, _damage_
 		return
 	if is_instance_valid(source) and source != self:
 		last_attacker = source
-	health = maxi(health - amount, 0)
+	# Vida infinita (modo teste): a barra 0-100 nunca cai — nao adianta bater,
+	# ele nao morre nem gasta vida. Ver EscortDirector.TEST_INVULNERABLE.
+	if not infinite_lives:
+		health = maxi(health - amount, 0)
 	hit_reaction_time = 0.35
 	hit_direction = attack_direction.normalized()
 	velocity += hit_direction * 4.5 + Vector3.UP * 1.2
 	if health == 0:
 		if NetworkSession.pvp_mode:
 			_pvp_die()
+			return
+		if infinite_lives:
+			# Vidas infinitas: respawn direto, sem gastar vida nem cair.
+			respawn()
 			return
 		lives -= 1
 		lives_changed.emit(lives)
@@ -1778,6 +1794,8 @@ func get_lives_text() -> String:
 		return "Time %s | %d/%d%s" % [TdmMatch.name_for_team(pvp_team), pvp_kills, pvp_deaths, shield]
 	if is_downed:
 		return "CAIDO | segure Interagir perto para reanimar"
+	if infinite_lives:
+		return "Vidas: infinitas"
 	if is_eliminated or lives <= 0:
 		return "Vidas: [ELIMINADO]"
 	return "Vidas: %s (%d/%d)" % ["❤".repeat(lives), lives, MAX_LIVES]
@@ -1906,6 +1924,8 @@ func _poll_input() -> void:
 	pistol_pressed = Input.is_action_just_pressed(input_action_prefix + "pistol")
 	reload_pressed = Input.is_action_just_pressed(input_action_prefix + "reload")
 	interact_pressed = Input.is_action_just_pressed(input_action_prefix + "interact")
+	if interact_pressed:
+		interact_requested = true
 	shotgun_pressed = Input.is_action_just_pressed(input_action_prefix + "shotgun")
 	uzi_pressed = Input.is_action_just_pressed(input_action_prefix + "uzi")
 	magnum_pressed = Input.is_action_just_pressed(input_action_prefix + "magnum")
@@ -1944,6 +1964,15 @@ func _network_button_just_pressed(action: String, pressed: bool) -> bool:
 	var was_pressed := bool(remote_buttons.get(action, false))
 	remote_buttons[action] = pressed
 	return pressed and not was_pressed
+
+
+## Consome o pedido de interacao latente (EscortDirector e afins). Devolve true
+## uma unica vez por E apertado.
+## Uso: if player.consume_interact_request(): ...
+func consume_interact_request() -> bool:
+	var requested := interact_requested
+	interact_requested = false
+	return requested
 
 
 func _clear_transient_input() -> void:

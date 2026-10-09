@@ -84,6 +84,8 @@ func _create_hollow_building(dimensions: Vector3) -> void:
 	var door = DESTRUCTIBLE_DOOR_SCRIPT.new()
 	door.name = "BuildingDoor"
 	door.configure(Vector3(door_w, door_h, thickness), _cutout_material(Color(0.24, 0.12, 0.055), 0.88))
+	# Unica porta do venue e a da fachada; conta como entrada pela rua.
+	door.add_to_group("exterior_door")
 	door.position = Vector3(0.0, 0.0, -half_z)
 	add_child(door)
 
