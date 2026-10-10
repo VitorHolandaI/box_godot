@@ -705,12 +705,12 @@ func _check_group_status() -> void:
 	# checar derrota primeiro marcaria a partida como perdida.
 	if _all_escaped():
 		finished_victory = true
-		status_text = "A familia chegou a salvo. Escolta concluida!"
+		status_text = "VITORIA! A familia chegou a salvo."
 		escort_finished.emit(true)
 		return
 	if _all_eliminated():
 		finished_defeat = true
-		status_text = "A familia inteira morreu. Escolta falhou."
+		status_text = "DERROTA! A familia inteira morreu."
 		escort_finished.emit(false)
 		return
 	if waiting_at_checkpoint:

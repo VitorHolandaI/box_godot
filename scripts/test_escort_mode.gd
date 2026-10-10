@@ -162,6 +162,8 @@ func _test_member_walks_facing_the_route(test_root: Node) -> void:
 
 func _test_director_declares_victory_when_all_escape(test_root: Node) -> void:
 	var director := _new_director(test_root)
+	var emitted: Array[bool] = []
+	director.escort_finished.connect(func(victory: bool) -> void: emitted.append(victory))
 	director.begin_mission()
 	for member in director.members:
 		member.global_position = director.point_b
@@ -170,11 +172,15 @@ func _test_director_declares_victory_when_all_escape(test_root: Node) -> void:
 		_fail(test_root, "trio no ponto B deveria declarar vitoria")
 	if director.finished_defeat:
 		_fail(test_root, "vitoria nao deveria abrir derrota")
+	if emitted != [true]:
+		_fail(test_root, "vitoria deveria emitir escort_finished(true); veio %s" % emitted)
 	director.free()
 
 
 func _test_director_declares_defeat_when_all_fall(test_root: Node) -> void:
 	var director := _new_director(test_root)
+	var emitted: Array[bool] = []
+	director.escort_finished.connect(func(victory: bool) -> void: emitted.append(victory))
 	director.begin_mission()
 	for member in director.members:
 		# A familia nasce imortal no modo teste (EscortDirector.TEST_INVULNERABLE);
@@ -187,6 +193,8 @@ func _test_director_declares_defeat_when_all_fall(test_root: Node) -> void:
 		_fail(test_root, "familia inteira morta deveria declarar derrota")
 	if director.living_count() != 0:
 		_fail(test_root, "apos a derrota ninguem deveria restar vivo, restaram %d" % director.living_count())
+	if emitted != [false]:
+		_fail(test_root, "derrota deveria emitir escort_finished(false); veio %s" % emitted)
 	director.free()
 
 

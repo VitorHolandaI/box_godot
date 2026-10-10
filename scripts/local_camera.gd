@@ -38,6 +38,7 @@ func _exit_tree() -> void:
 
 
 func _process(delta: float) -> void:
+	_follow_escort_if_requested()
 	if not is_instance_valid(target):
 		return
 	inside_check_elapsed -= delta
@@ -68,6 +69,21 @@ func _process(delta: float) -> void:
 	var blend := minf(delta * CAMERA_SMOOTH_SPEED, 1.0)
 	global_position = global_position.lerp(desired_position, blend)
 	quaternion = quaternion.slerp(desired_transform.basis.get_rotation_quaternion(), blend)
+
+
+## Dev (--escort-cam): segue o familiar vivo em vez do jogador, para inspecionar
+## a rota pelos olhos da camera. Inerte fora do modo escolta. Uso: interno.
+func _follow_escort_if_requested() -> void:
+	if not NetworkSession.escort_mode or not ("--escort-cam" in OS.get_cmdline_user_args()):
+		return
+	for node in get_tree().get_nodes_in_group("escort_human"):
+		var member := node as Node3D
+		if member == null or not is_instance_valid(member):
+			continue
+		if bool(member.get("is_eliminated")) or bool(member.get("escaped")):
+			continue
+		target = member
+		return
 
 
 ## Verdadeiro quando o alvo (jogador) esta dirigindo um carro; nesse caso a

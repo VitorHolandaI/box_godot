@@ -456,6 +456,7 @@ func _finish_city_setup() -> void:
 		escort_director = ESCORT_DIRECTOR_SCRIPT.new()
 		add_child(escort_director)
 		escort_director.start(get_tree(), self, NetworkSession.world_seed)
+		escort_director.escort_finished.connect(_on_escort_finished)
 	if _initial_loot_spawned:
 		return
 	# Cidade pronta: agora as ancoras internas existem, entao o primeiro
@@ -499,6 +500,25 @@ func _apply_escort_spawn_profile() -> void:
 	var profile: Dictionary = escort_director.spawn_profile()
 	zombie_spawn_schedule.target = int(profile["cap"])
 	zombie_spawn_schedule.interval = float(profile["interval"])
+
+
+## Tempo que o resultado da escolta fica na tela antes de voltar ao menu.
+const ESCORT_MENU_DELAY := 6.0
+
+
+## Escolta terminou: destaca o resultado (o texto sai do proprio diretor no HUD)
+## e devolve ao menu. So no lado autoritativo: no cliente a volta vem do
+## _on_server_lost quando o host sai. Uso: EscortDirector.escort_finished.
+func _on_escort_finished(_victory: bool) -> void:
+	if NetworkSession.is_client():
+		return
+	get_tree().create_timer(ESCORT_MENU_DELAY).timeout.connect(_return_to_menu_after_escort)
+
+
+## Uso: timeout agendado em _on_escort_finished.
+func _return_to_menu_after_escort() -> void:
+	if is_inside_tree() and get_tree() != null:
+		get_tree().change_scene_to_file("res://scenes/menu.tscn")
 
 
 ## Ritmo de replicacao do estado da escolta (posicao/vida dos familiares).
