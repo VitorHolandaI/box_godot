@@ -84,6 +84,27 @@ services:
       - "${GAME_SERVER_PORT:-27015}:${GAME_SERVER_PORT:-27015}/udp"
       - "${GAME_SERVER_DISCOVERY_PORT:-27016}:${GAME_SERVER_DISCOVERY_PORT:-27016}/udp"
 
+  # Escolta (experimental): a familia atravessa a cidade em serpentina, para nos
+  # checkpoints (com o mercador de armas) e termina na safehouse. A horda cresce
+  # por trecho. Ver scripts/escort_director.gd.
+  escort:
+    <<: *server-base
+    profiles: ["escort"]
+    container_name: box-godot-escort
+    command:
+      - "--server"
+      - "--server-port=${GAME_SERVER_PORT:-27015}"
+      - "${ESCORT_TEST_MODE:---production}"
+      - "--procedural-city"
+      - "--escort"
+      - "--car-bot=0"
+      - "--server-name=${ESCORT_NAME:-}"
+    environment:
+      GAME_SERVER_WORLD_SEED: "${ESCORT_WORLD_SEED:-}"
+    ports:
+      - "${GAME_SERVER_PORT:-27015}:${GAME_SERVER_PORT:-27015}/udp"
+      - "${GAME_SERVER_DISCOVERY_PORT:-27016}:${GAME_SERVER_DISCOVERY_PORT:-27016}/udp"
+
   # Classico: zumbis sem a progressao de ondas do survival (--classic-mode).
   classic:
     <<: *server-base

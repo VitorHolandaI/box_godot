@@ -1279,6 +1279,10 @@ func _spawn_network_player(peer_id: int, slot: int, key: String) -> void:
 	player.is_local_controller = peer_id == NetworkSession.local_peer_id()
 	player.position = _get_player_spawn_position(network_players.size())
 	player.set_color_index(network_players.size())
+	# Modo teste da escolta: vidas infinitas tambem no jogador de rede (o offline
+	# ja ganha em _spawn_offline_player). Sem isto o cliente cai no primeiro
+	# bolsao de zumbi e fica "CAIDO".
+	player.infinite_lives = NetworkSession.escort_mode or ("--infinite-lives" in OS.get_cmdline_user_args())
 
 	if peer_id == NetworkSession.local_peer_id() and slot < GameConfig.player_input_configs.size():
 		var config: Dictionary = GameConfig.player_input_configs[slot]
