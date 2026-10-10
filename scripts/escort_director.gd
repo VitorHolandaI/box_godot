@@ -15,6 +15,7 @@ const FAMILY_MEMBER_SCRIPT := preload("res://scripts/escort_family_member.gd")
 const ESCORT_ROUTE_SCRIPT := preload("res://scripts/escort_route.gd")
 const SPAWN_PROFILE_SCRIPT := preload("res://scripts/escort_spawn_profile.gd")
 const SPAWN_LOCATOR_SCRIPT := preload("res://scripts/zombie_spawn_locator.gd")
+const MERCHANT_SCRIPT := preload("res://scripts/escort_merchant.gd")
 
 ## Variacoes da familia: nome, cor da blusa (tambem a cor no minimapa), escala
 ## do modelo (crianca menor) e tom de pele. O seed sorteia 3 sem repetir, entao
@@ -120,6 +121,9 @@ var waiting_at_checkpoint := false
 ## Geometria da parada de cada checkpoint: porta do predio do lote (ou um
 ## fallback sintetico se o lote veio vazio). Ver _place_shelters.
 var _shelter_sites: Array[Dictionary] = []
+## Onde cada mercador foi posto (x/z/yaw); vai no estado para o cliente montar os
+## mercadores dele, senao a loja nao abre (o diretor so roda no servidor).
+var merchant_spots: Array[Dictionary] = []
 
 
 func _ready() -> void:
@@ -132,6 +136,7 @@ func start(tree: SceneTree, root: Node, world_seed: int) -> void:
 	point_a = _clamp_to_map(ESCORT_START)
 	_pick_safehouse_door_points(tree, root)
 	_place_shelters()
+	_place_merchants(root)
 	family_roles = _pick_roles(world_seed)
 	_spawn_family(root)
 	_rebuild_waiting_text()
@@ -361,6 +366,29 @@ func _place_shelters() -> void:
 	print(JSON.stringify({"event": "escort_shelters_placed", "count": _shelter_sites.size()}))
 
 
+## Poe um mercador de preto dentro de cada casa de checkpoint, 1,3 m ao lado da
+## parada (o vao e estreito). Persiste a missao toda; a loja (EscortShopMenu)
+## abre por proximidade. Uso: start.
+func _place_merchants(root: Node) -> void:
+	for index in _shelter_sites.size():
+		var site: Dictionary = _shelter_sites[index]
+		if site.is_empty():
+			continue
+		var direction: Vector3 = site["door_direction"]
+		var lateral := Vector3(-direction.z, 0.0, direction.x)
+		var spot: Vector3 = site["inside"] + lateral * 1.3
+		var yaw := float(site.get("yaw", 0.0))
+		var merchant := MERCHANT_SCRIPT.new_merchant(root, "EscortMerchant%d" % (index + 1))
+		merchant.global_position = Vector3(spot.x, point_a.y, spot.z)
+		merchant.rotation.y = yaw
+		merchant_spots.append({"x": spot.x, "z": spot.z, "yaw": yaw})
+		print(JSON.stringify({
+			"event": "escort_merchant",
+			"index": index + 1,
+			"position": [snappedf(spot.x, 0.1), snappedf(spot.z, 0.1)],
+		}))
+
+
 ## Porta da rua do predio do lote, com a parada derivada dela: o approach fica
 ## na calcada em frente e o inside logo porta adentro.
 ## Devolve {} se o lote nao tem porta externa. Uso: interno de _place_shelters.
@@ -573,6 +601,7 @@ func state_for_network() -> Dictionary:
 	return {
 		"points": {"a_x": point_a.x, "a_z": point_a.z, "b_x": point_b.x, "b_z": point_b.z},
 		"family": family_states,
+		"merchants": merchant_spots,
 		"status": status_text,
 		"started": mission_started,
 		"victory": finished_victory,
@@ -726,7 +755,9 @@ func _check_group_status() -> void:
 ## vivos chegam na esquina, a zona segura liga e ela para.
 func _update_checkpoints(tree: SceneTree) -> void:
 	if waiting_at_checkpoint:
-		if _autostart_enabled() or _player_pressed_interact_near_family(tree):
+		# --escort-hold (dev) segura cada checkpoint: o autostart inicia a missao
+		# mas a familia espera o E, para inspecionar a parada + mercador.
+		if _player_pressed_interact_near_family(tree) or (_autostart_enabled() and not _hold_enabled()):
 			_release_checkpoint()
 		return
 	if next_checkpoint >= checkpoint_indices.size():
@@ -738,6 +769,12 @@ func _update_checkpoints(tree: SceneTree) -> void:
 ## Flag de dev: --escort-autostart (ver tick). Uso: interno de tick/checkpoints.
 func _autostart_enabled() -> bool:
 	return "--escort-autostart" in OS.get_cmdline_user_args()
+
+
+## Dev (--escort-hold): espera o E mesmo com autostart ligado, para inspecionar
+## as paradas. Uso: interno de _update_checkpoints.
+func _hold_enabled() -> bool:
+	return "--escort-hold" in OS.get_cmdline_user_args()
 
 
 func _activate_checkpoint(tree: SceneTree) -> void:

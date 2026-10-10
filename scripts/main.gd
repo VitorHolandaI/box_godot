@@ -17,6 +17,10 @@ const SUPPLY_NETWORK_STATE_SCRIPT := preload("res://scripts/supply_network_state
 const AIRDROP_CONTROLLER_SCRIPT := preload("res://scripts/airdrop_controller.gd")
 const AIRDROP_PLANE_SCRIPT := preload("res://scripts/airdrop_plane.gd")
 const ESCORT_DIRECTOR_SCRIPT := preload("res://scripts/escort_director.gd")
+const ESCORT_ECONOMY_SCRIPT := preload("res://scripts/escort_economy.gd")
+const ESCORT_SHOP_SCRIPT := preload("res://scripts/escort_shop.gd")
+const ESCORT_SHOP_MENU_SCRIPT := preload("res://scripts/escort_shop_menu.gd")
+const ESCORT_MERCHANT_SCRIPT := preload("res://scripts/escort_merchant.gd")
 const CORPSE_CLEANUP_POLICY_SCRIPT := preload("res://scripts/corpse_cleanup_policy.gd")
 const ZOMBIE_SNAPSHOT_CODEC_SCRIPT := preload("res://scripts/zombie_snapshot_codec.gd")
 const LOAD_TEST_OPTIONS_SCRIPT := preload("res://scripts/load_test_options.gd")
@@ -135,6 +139,9 @@ var escort_proxies: Dictionary = {}
 var last_loadout_message := ""
 ## Menu de arma do cliente (tecla B), criado quando o jogador local existe.
 var loadout_menu: LoadoutMenu = null
+var escort_shop_menu: EscortShopMenu = null
+## Cliente: mercadores replicados ja criados (o diretor so roda no servidor).
+var escort_merchants_spawned := false
 var loot_rng := RandomNumberGenerator.new()
 ## Jogadores na sala no frame anterior: a sala reinicia na TRANSICAO para vazia.
 var _previous_player_count := 0
@@ -419,6 +426,7 @@ func _tick_escort(delta: float) -> void:
 		_tick_classic_spawns(delta)
 	if escort_director == null:
 		return
+	_open_escort_shop_when_ready()
 	escort_director.tick(delta, get_tree())
 	escort_state_text = escort_director.hud_text()
 	escort_state_elapsed += delta
@@ -502,6 +510,50 @@ func _apply_escort_spawn_profile() -> void:
 	zombie_spawn_schedule.interval = float(profile["interval"])
 
 
+## Loja do mercador: criada so depois que o jogador local existe (o menu se liga
+## a ele). Uso: _tick_escort.
+func _open_escort_shop_when_ready() -> void:
+	if escort_shop_menu != null or local_players.is_empty():
+		return
+	escort_shop_menu = ESCORT_SHOP_MENU_SCRIPT.new()
+	add_child(escort_shop_menu)
+	escort_shop_menu.setup(local_players[0], Callable(self, "buy_escort_weapon"))
+
+
+## Compra no mercador. Offline/local por enquanto; o caminho de rede entra junto
+## do saldo replicado. Devolve a mensagem da loja ("" no sucesso).
+## Uso: Callable passado ao EscortShopMenu.
+func buy_escort_weapon(kind: int) -> String:
+	if NetworkSession.is_client():
+		# Cliente: pede ao servidor; a resposta chega em _escort_shop_result.
+		_request_escort_buy.rpc_id(NetworkSession.SERVER_ID, kind)
+		return ""
+	if local_players.is_empty() or not is_instance_valid(local_players[0]):
+		return "Sem jogador para comprar."
+	return ESCORT_SHOP_SCRIPT.purchase(local_players[0], kind)
+
+
+## Servidor: compra pedida por um cliente, validada no corpo autoritativo dele.
+## Uso: EscortShopMenu (cliente) -> RPC.
+@rpc("any_peer", "call_remote", "reliable")
+func _request_escort_buy(kind: int) -> void:
+	if not NetworkSession.is_server():
+		return
+	var sender := multiplayer.get_remote_sender_id()
+	var player = network_players.get(_player_key(sender, 0))
+	var message := "Sem jogador para comprar."
+	if player != null and is_instance_valid(player):
+		message = ESCORT_SHOP_SCRIPT.purchase(player, kind)
+	_escort_shop_result.rpc_id(sender, message)
+
+
+## Cliente: resposta da compra ("" no sucesso) para a loja mostrar.
+@rpc("authority", "call_remote", "reliable")
+func _escort_shop_result(message: String) -> void:
+	if escort_shop_menu != null:
+		escort_shop_menu.show_result(message)
+
+
 ## Tempo que o resultado da escolta fica na tela antes de voltar ao menu.
 const ESCORT_MENU_DELAY := 6.0
 
@@ -533,7 +585,20 @@ func _refresh_escort_broadcast() -> void:
 		return
 	var state: Dictionary = escort_director.state_for_network()
 	for peer_id in NetworkSession.loaded_peers:
-		_escort_state.rpc_id(int(peer_id), state)
+		# O saldo e POR peer (cada um ve o seu), entao clona o estado e injeta.
+		var peer_state: Dictionary = state.duplicate()
+		peer_state["wallets"] = _peer_wallets(int(peer_id))
+		_escort_state.rpc_id(int(peer_id), peer_state)
+
+
+## Saldo (por slot) dos jogadores de um peer; vai no estado para o cliente pintar
+## o proprio HUD. Uso: interno de _refresh_escort_broadcast.
+func _peer_wallets(peer_id: int) -> Array:
+	var wallets: Array = []
+	for slot in int(NetworkSession.peer_slots.get(peer_id, 0)):
+		var player = network_players.get(_player_key(peer_id, slot))
+		wallets.append(int(player.get("money")) if player != null and is_instance_valid(player) else 0)
+	return wallets
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -541,8 +606,33 @@ func _escort_state(state: Dictionary) -> void:
 	if not NetworkSession.is_client():
 		return
 	escort_state_text = String(state.get("status", ""))
+	_spawn_client_merchants(state.get("merchants", []))
+	_apply_client_wallets(state.get("wallets", []))
+	_open_escort_shop_when_ready()
 	for family_state in state.get("family", []):
 		_apply_escort_ghost(family_state)
+
+
+## Cliente: monta os mercadores uma vez, a partir das posicoes do servidor (o
+## diretor nao roda no cliente, entao sem isto a loja nunca abriria).
+## Uso: interno de _escort_state.
+func _spawn_client_merchants(spots: Array) -> void:
+	if escort_merchants_spawned or spots.is_empty():
+		return
+	escort_merchants_spawned = true
+	for index in spots.size():
+		var spot: Dictionary = spots[index]
+		var merchant := ESCORT_MERCHANT_SCRIPT.new_merchant(self, "EscortMerchant%d" % (index + 1))
+		merchant.global_position = Vector3(float(spot.get("x", 0.0)), 1.0, float(spot.get("z", 0.0)))
+		merchant.rotation.y = float(spot.get("yaw", 0.0))
+
+
+## Cliente: aplica o saldo replicado (por slot) no HUD local. Uso: interno.
+func _apply_client_wallets(wallets: Array) -> void:
+	for slot in wallets.size():
+		if slot >= local_players.size() or not is_instance_valid(local_players[slot]):
+			continue
+		(local_players[slot] as Node).set("money", int(wallets[slot]))
 
 
 ## Fantasma do familiar (cliente): corpo sem simulacao, guiado pelo estado.
@@ -1643,10 +1733,23 @@ func _on_zombie_stranded(zombie: Node) -> void:
 	print(JSON.stringify({"event": "zombie_relocated", "zombie": String(zombie.name), "position": [snappedf(new_position.x, 0.1), snappedf(new_position.z, 0.1)]}))
 
 
-func _on_zombie_died(_killer: Node, zombie: Node3D) -> void:
+func _on_zombie_died(killer: Node, zombie: Node3D) -> void:
 	if NetworkSession.survival_mode:
 		survival_wave_controller.register_death()
+	if NetworkSession.escort_mode:
+		_award_escort_kill(killer, zombie)
 	_drop_kill_ammo(zombie)
+
+
+## Escolta: so o abate do JOGADOR rende saldo; o do familiar nao conta. O credito
+## e autoritativo (servidor/offline); o cliente recebe o saldo no estado da
+## escolta. Uso: interno de _on_zombie_died.
+func _award_escort_kill(killer: Node, zombie: Node3D) -> void:
+	if NetworkSession.is_client() or killer == null or not is_instance_valid(killer):
+		return
+	if not killer.is_in_group("player") or not killer.has_method("add_money"):
+		return
+	killer.add_money(ESCORT_ECONOMY_SCRIPT.reward_for_variant(int(zombie.get("zombie_type"))))
 
 
 ## Zumbi abatido solta de vez em quando municao de qualquer classe e, mais raro,

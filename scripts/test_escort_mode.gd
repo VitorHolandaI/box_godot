@@ -9,6 +9,8 @@ extends RefCounted
 const ESCORT_MEMBER_SCRIPT := preload("res://scripts/escort_family_member.gd")
 const ESCORT_DIRECTOR_SCRIPT := preload("res://scripts/escort_director.gd")
 const ESCORT_SPAWN_PROFILE_SCRIPT := preload("res://scripts/escort_spawn_profile.gd")
+const ESCORT_ECONOMY_SCRIPT := preload("res://scripts/escort_economy.gd")
+const ESCORT_SHOP_SCRIPT := preload("res://scripts/escort_shop.gd")
 const FLOCK_COORDINATOR_SCRIPT := preload("res://scripts/zombie_flock_coordinator.gd")
 const PROCEDURAL_CITY_GENERATOR := preload("res://scripts/procedural/generators/city_generator.gd")
 const BUILDING_ASSEMBLER := preload("res://scripts/procedural/assemblers/building_assembler.gd")
@@ -53,6 +55,9 @@ func run(test_root: Node) -> void:
 	_test_checkpoint_shuts_the_door_and_the_exit_reopens_it(test_root)
 	_test_family_enters_the_house_head_on(test_root)
 	_test_no_car_parked_on_the_escort_route(test_root)
+	_test_escort_economy_rewards_variants(test_root)
+	_test_player_money_add_and_spend(test_root)
+	_test_escort_shop_purchase(test_root)
 	_test_family_threads_the_doorway_in_single_file(test_root)
 
 
@@ -785,3 +790,52 @@ func _spawn_interacting_player(parent: Node, near: Vector3) -> CharacterBody3D:
 	player.position = near + Vector3(1.0, 0.0, 1.0)
 	parent.add_child(player)
 	return player
+
+
+## Economia: tanque rende mais que fraco e variante desconhecida paga o piso.
+func _test_escort_economy_rewards_variants(test_root: Node) -> void:
+	var weak := ESCORT_ECONOMY_SCRIPT.reward_for_variant(ZombieMutator.Type.WALKER)
+	var tank := ESCORT_ECONOMY_SCRIPT.reward_for_variant(ZombieMutator.Type.BRUTE)
+	var unknown := ESCORT_ECONOMY_SCRIPT.reward_for_variant(-123)
+	if weak <= 0 or tank <= weak:
+		_fail(test_root, "tanque deveria render mais que fraco; fraco=%d tanque=%d" % [weak, tank])
+	if unknown != ESCORT_ECONOMY_SCRIPT.DEFAULT_REWARD:
+		_fail(test_root, "variante desconhecida deveria pagar o piso %d; veio %d" % [ESCORT_ECONOMY_SCRIPT.DEFAULT_REWARD, unknown])
+
+
+## Saldo do jogador: credita, gasta e recusa quando falta grana.
+func _test_player_money_add_and_spend(test_root: Node) -> void:
+	var player := _spawn_interacting_player(test_root, Vector3.ZERO)
+	var added: int = player.call("add_money", 50)
+	if added != 50 or int(player.get("money")) != 50:
+		_fail(test_root, "add_money(50) deveria deixar 50; veio %d" % added)
+	if not bool(player.call("spend_money", 30)) or int(player.get("money")) != 20:
+		_fail(test_root, "spend_money(30) deveria deixar 20; veio %d" % int(player.get("money")))
+	if bool(player.call("spend_money", 1000)):
+		_fail(test_root, "spend_money sem saldo deveria falhar")
+	player.free()
+
+
+## Loja: recusa sem saldo, entrega e desconta com saldo, recusa arma repetida.
+func _test_escort_shop_purchase(test_root: Node) -> void:
+	var player := _spawn_interacting_player(test_root, Vector3.ZERO)
+	var kind := WeaponStats.Kind.UZI
+	var price := ESCORT_SHOP_SCRIPT.price_of(kind)
+	if price <= 0:
+		_fail(test_root, "uzi deveria ter preco no catalogo")
+		player.free()
+		return
+	if String(ESCORT_SHOP_SCRIPT.purchase(player, kind)).is_empty():
+		_fail(test_root, "compra sem saldo deveria falhar")
+	var address: int = player.call("add_money", price)
+	if address != price:
+		_fail(test_root, "add_money deveria creditar %d; veio %d" % [price, address])
+	if not String(ESCORT_SHOP_SCRIPT.purchase(player, kind)).is_empty():
+		_fail(test_root, "compra com saldo deveria passar")
+	if int(player.get("money")) != 0:
+		_fail(test_root, "compra deveria zerar o saldo; sobrou %d" % int(player.get("money")))
+	if not bool(player.call("has_crate_weapon", kind)):
+		_fail(test_root, "compra deveria entregar a arma")
+	if String(ESCORT_SHOP_SCRIPT.purchase(player, kind)).is_empty():
+		_fail(test_root, "comprar a mesma arma de novo deveria recusar")
+	player.free()

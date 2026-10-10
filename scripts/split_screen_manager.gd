@@ -386,7 +386,12 @@ func _update_hud_text() -> void:
 				"\n" + vehicle_line if not vehicle_line.is_empty() else "",
 			]
 			continue
-		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\n%s\nZumbis: %d | Abates: %d\n%s\n%s%s" % [
+		# Escolta: saldo do mercador na linha abaixo das armas. Vazio nos demais
+		# modos para nao mexer no HUD deles.
+		var money_line := ""
+		if NetworkSession.escort_mode and player.has_method("get_money_text"):
+			money_line = "\n" + String(player.call("get_money_text"))
+		hud_labels[index].text = "P%d | %s\n%s\nVida: %d/%d\n%s\n%s | %s\n%s%s\nZumbis: %d | Abates: %d\n%s\n%s%s" % [
 			index + 1,
 			player.input_device_name,
 			player.get_lives_text(),
@@ -396,6 +401,7 @@ func _update_hud_text() -> void:
 			player.get_weapon_name(),
 			player.get_ammo_text(),
 			player.get_weapon_slots_text(),
+			money_line,
 			alive_zombies,
 			player.zombie_kills,
 			player.get_sonar_text(),

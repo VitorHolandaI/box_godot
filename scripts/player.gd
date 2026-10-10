@@ -270,6 +270,8 @@ var remote_buttons: Dictionary = {}
 var remote_input_age := 0.0
 var color_index := -1
 var zombie_kills := 0
+## Saldo da escolta: ganho por abate e gasto no mercador (ver EscortEconomy).
+var money := 0
 
 
 func _ready() -> void:
@@ -1483,6 +1485,28 @@ func register_zombie_kill() -> void:
 	if NetworkSession.is_client():
 		return
 	zombie_kills += 1
+
+
+## Credita o saldo da escolta. Devolve o novo total. Uso: player.add_money(5)
+func add_money(amount: int) -> int:
+	if amount <= 0:
+		return money
+	money += amount
+	return money
+
+
+## Gasta o saldo se houver; devolve false quando falta grana.
+## Uso: if player.spend_money(EscortShopMenu.price_of(kind)): dar_arma()
+func spend_money(amount: int) -> bool:
+	if amount <= 0 or money < amount:
+		return false
+	money -= amount
+	return true
+
+
+## Linha de HUD do saldo. Uso: split_screen_manager no modo escolta.
+func get_money_text() -> String:
+	return "Dinheiro: $%d" % money
 
 
 ## Adiciona municao a reserva do jogador ate o limite do modo.

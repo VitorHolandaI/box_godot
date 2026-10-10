@@ -13,7 +13,7 @@ extends RefCounted
 
 const BUILD_INFO_SCRIPT := preload("res://scripts/build_info.gd")
 ## Hash da superficie de RPC; atualize junto com BuildInfo.GAME_BUILD.
-const RPC_SIGNATURE := "1f2c7fa218e6d2eb"
+const RPC_SIGNATURE := "c9d081319d4f62d4"
 ## Hash dos arquivos que DEFINEM a geometria do mundo; idem.
 ##
 ## Por que existe: a cidade NAO viaja pela rede. O servidor manda so a seed
