@@ -559,6 +559,10 @@ func living_count() -> int:
 ## A horda so pinga enquanto a familia anda: parada (antes do E ou no checkpoint)
 ## nenhum zumbi novo nasce. Uso: main._tick_escort antes de _tick_classic_spawns.
 func allows_spawns() -> bool:
+	# Depois do fim (vitoria/derrota) a horda para de nascer, senao o servidor
+	# fica repondo ate o teto para sempre com a missao ja encerrada.
+	if finished_victory or finished_defeat:
+		return false
 	return mission_started and not waiting_at_checkpoint
 
 

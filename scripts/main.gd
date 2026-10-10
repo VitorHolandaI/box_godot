@@ -562,7 +562,10 @@ const ESCORT_MENU_DELAY := 6.0
 ## e devolve ao menu. So no lado autoritativo: no cliente a volta vem do
 ## _on_server_lost quando o host sai. Uso: EscortDirector.escort_finished.
 func _on_escort_finished(_victory: bool) -> void:
-	if NetworkSession.is_client():
+	# So a partida OFFLINE volta sozinha ao menu. Num servidor (dedicado ou o
+	# filho do "Hospedar partida") trocar de cena derruba os clientes e deixa
+	# "Node not found: Main" no log; num cliente a volta vem do _on_server_lost.
+	if not NetworkSession.is_offline():
 		return
 	get_tree().create_timer(ESCORT_MENU_DELAY).timeout.connect(_return_to_menu_after_escort)
 
