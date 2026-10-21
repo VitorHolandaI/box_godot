@@ -11,6 +11,7 @@ const INDOOR_OFFSET := Vector3(0.0, 19.0, 9.0)
 const INTERIOR_FOCUS_PARAMETER := &"interior_focus_position"
 const INSIDE_CHECK_INTERVAL := 0.15
 const CAMERA_SMOOTH_SPEED := 7.0
+const BASE_FOV := 72.0
 
 var target: Node3D
 var camera_offset := OUTDOOR_OFFSET
@@ -24,11 +25,16 @@ static var interior_focus_owner: Camera3D = null
 
 func _ready() -> void:
 	rotation_degrees = Vector3(-48, 0, 0)
-	fov = 72.0
+	apply_fov()
 	# Vista isometrica usa o recorte para ver dentro dos predios.
 	RenderingServer.global_shader_parameter_set(&"cutout_enabled", true)
 	if not is_instance_valid(interior_focus_owner):
 		interior_focus_owner = self
+
+
+## FOV-base da camera isometrica com o ajuste das configuracoes.
+func apply_fov() -> void:
+	fov = GameConfig.camera_fov(BASE_FOV)
 
 
 func _exit_tree() -> void:

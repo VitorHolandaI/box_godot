@@ -16,8 +16,8 @@ extends CanvasLayer
 ##   add_child(menu)
 ##   menu.setup(player, Callable(self, "choose_loadout_local"), Callable(self, "pvp_status_text"))
 
-const PANEL_SIZE := Vector2(380.0, 520.0)
-const ROW_HEIGHT := 26
+const PANEL_SIZE := Vector2(480.0, 640.0)
+const ROW_HEIGHT := 36
 
 var _panel: PanelContainer
 var _team_label: Label
@@ -47,30 +47,38 @@ func _ready() -> void:
 	_panel = PanelContainer.new()
 	_panel.visible = false
 	_panel.custom_minimum_size = PANEL_SIZE
+	_panel.theme = MenuTheme.build_theme()
 	_panel.set_anchors_preset(Control.PRESET_CENTER)
 	_panel.position = Vector2(-PANEL_SIZE.x * 0.5, -PANEL_SIZE.y * 0.5)
 	add_child(_panel)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 12)
+		margin.add_theme_constant_override("margin_" + side, 24)
 	_panel.add_child(margin)
 	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
 	margin.add_child(column)
-	var title := Label.new()
-	title.text = "ESCOLHER ARMA"
-	column.add_child(title)
-	_team_label = Label.new()
+	column.add_child(MenuTheme.title_label("ESCOLHER ARMA", 26))
+	_team_label = MenuTheme.muted_label("")
 	column.add_child(_team_label)
-	_score_label = Label.new()
+	_score_label = MenuTheme.muted_label("")
 	column.add_child(_score_label)
+	column.add_child(MenuTheme.section_label("ARSENAL"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(scroll)
 	_rows = VBoxContainer.new()
-	column.add_child(_rows)
+	_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_rows.add_theme_constant_override("separation", 6)
+	scroll.add_child(_rows)
 	_status_label = Label.new()
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_status_label.add_theme_color_override("font_color", MenuTheme.WARNING)
 	column.add_child(_status_label)
-	var hint := Label.new()
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "B fecha | na sua base a troca vale na hora, fora dela vale no proximo respawn"
+	var hint := MenuTheme.muted_label("B fecha | na sua base a troca vale na hora, fora dela vale no proximo respawn")
+	hint.add_theme_font_size_override("font_size", 13)
 	column.add_child(hint)
 	# Aviso de invulnerabilidade: fica na tela mesmo com o menu fechado, para o
 	# jogador saber que esta protegido e que o primeiro tiro cancela.
@@ -80,6 +88,7 @@ func _ready() -> void:
 	_banner.position = Vector2(-220.0, 60.0)
 	_banner.custom_minimum_size = Vector2(440.0, 0.0)
 	_banner.add_theme_font_size_override("font_size", 22)
+	_banner.add_theme_color_override("font_color", MenuTheme.ACCENT)
 	_banner.visible = false
 	add_child(_banner)
 
@@ -151,11 +160,24 @@ func refresh() -> void:
 	_score_label.text = state_text
 	for kind in _buttons:
 		var button := _buttons[kind] as Button
-		button.text = "%s%s" % [WeaponStats.stats_for(int(kind)).get("label", kind), "  (equipada)" if int(kind) == chosen else ""]
+		var equipped := int(kind) == chosen
+		button.text = "%s%s" % [WeaponStats.stats_for(int(kind)).get("label", kind), "  (equipada)" if equipped else ""]
+		_style_equipped(button, equipped)
 	_status_label.text = ""
 	if _status_provider.is_valid():
 		var answer: Variant = _status_provider.call()
 		_status_label.text = String(answer) if answer != null else ""
+
+
+## Arma equipada ganha o destaque primario; as outras voltam ao estilo padrao do
+## tema, sem acumular overrides entre refreshes.
+func _style_equipped(button: Button, equipped: bool) -> void:
+	for state in ["normal", "hover", "pressed", "focus"]:
+		button.remove_theme_stylebox_override(state)
+	for color in ["font_color", "font_hover_color", "font_pressed_color"]:
+		button.remove_theme_color_override(color)
+	if equipped:
+		MenuTheme.style_primary(button)
 
 
 ## Placar do mata-mata publicado pela cena de jogo, ou vazio quando a cena atual

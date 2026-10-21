@@ -37,8 +37,16 @@ const REWARD_BY_VARIANT: Dictionary = {
 }
 ## Variante sem entrada na tabela (nova, ou tipo invalido) paga o piso.
 const DEFAULT_REWARD := 5
+## Bonus por segurar cada uma das 3 paradas da escolta (checkpoint). Pago a
+## todos os jogadores quando a familia chega e para no abrigo.
+const CHECKPOINT_REWARD := 25
 
 
 ## Quanto a variante rende. Piso para tipo desconhecido. Uso: reward_for_variant(ZombieMutator.Type.BRUTE)
 static func reward_for_variant(variant: int) -> int:
 	return int(REWARD_BY_VARIANT.get(variant, DEFAULT_REWARD))
+
+
+## Bonus de uma parada concluida. Uso: checkpoint_reward()
+static func checkpoint_reward() -> int:
+	return CHECKPOINT_REWARD

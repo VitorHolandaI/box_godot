@@ -22,6 +22,9 @@ func run(test_root: Node) -> void:
 	_test_binding_change_updates_input_map(test_root)
 	await _test_escape_menu_opens_settings(test_root)
 	await _test_device_rebuild_keeps_the_emitter_alive(test_root)
+	_test_graphics_labels_and_validation(test_root)
+	_test_graphics_setters_roundtrip(test_root)
+	_test_camera_fov_offset(test_root)
 
 
 func _test_official_server_seed(test_root: Node) -> void:
@@ -298,3 +301,76 @@ func _test_device_rebuild_keeps_the_emitter_alive(test_root: Node) -> void:
 func _fail(test_root: Node, message: String) -> void:
 	push_error("FALHA: " + message)
 	test_root.set_meta("unit_test_failed", true)
+
+
+## Rotulos das opcoes e rejeicao de valores fora da faixa (sem salvar nada).
+func _test_graphics_labels_and_validation(test_root: Node) -> void:
+	print("Testando rotulos e validacao das opcoes graficas...")
+	var labels_ok := GameConfig.quality_label(GameConfig.GraphicsQuality.ULTRA) == "Ultra" \
+		and GameConfig.window_mode_label(GameConfig.WindowMode.FULLSCREEN) == "Tela cheia" \
+		and GameConfig.fps_label(0) == "Ilimitado" \
+		and GameConfig.render_scale_label(0.65) == "65%"
+	var rejects := GameConfig.set_render_scale(0.0) == ERR_INVALID_PARAMETER \
+		and GameConfig.set_fov(200) == ERR_INVALID_PARAMETER \
+		and GameConfig.set_master_volume(2.0) == ERR_INVALID_PARAMETER \
+		and GameConfig.set_max_fps(5) == ERR_INVALID_PARAMETER \
+		and GameConfig.set_window_mode(99) == ERR_INVALID_PARAMETER \
+		and GameConfig.set_quality(99) == ERR_INVALID_PARAMETER
+	if not labels_ok or not rejects:
+		_fail(test_root, "Graficos: rotulos=%s rejeita=%s." % [labels_ok, rejects])
+		return
+	print("PASS: Rotulos e validacao das opcoes graficas.")
+
+
+## Aplica valores validos, confere que persistem em settings.cfg e restaura.
+func _test_graphics_setters_roundtrip(test_root: Node) -> void:
+	print("Testando ida-e-volta das configuracoes graficas...")
+	var saved_quality: int = int(GameConfig.graphics_quality)
+	var saved_fps: int = GameConfig.graphics_max_fps
+	var saved_scale: float = GameConfig.graphics_render_scale
+	var saved_fov: int = GameConfig.graphics_fov
+	var saved_volume: float = GameConfig.audio_master_volume
+	var ok := GameConfig.set_quality(GameConfig.GraphicsQuality.ULTRA) == OK
+	ok = ok and GameConfig.set_max_fps(120) == OK
+	ok = ok and GameConfig.set_render_scale(0.65) == OK
+	ok = ok and GameConfig.set_fov(85) == OK
+	ok = ok and GameConfig.set_master_volume(0.5) == OK
+	var config := ConfigFile.new()
+	var load_error := config.load(GameConfig.SETTINGS_PATH)
+	var persisted := load_error == OK \
+		and int(config.get_value("graphics", "quality", -1)) == GameConfig.GraphicsQuality.ULTRA \
+		and int(config.get_value("graphics", "max_fps", -1)) == 120 \
+		and is_equal_approx(float(config.get_value("graphics", "render_scale", -1.0)), 0.65) \
+		and int(config.get_value("graphics", "fov", -1)) == 85 \
+		and is_equal_approx(float(config.get_value("audio", "master_volume", -1.0)), 0.5)
+	var in_memory := int(GameConfig.graphics_quality) == GameConfig.GraphicsQuality.ULTRA \
+		and GameConfig.graphics_max_fps == 120 \
+		and GameConfig.graphics_fov == 85
+	GameConfig.set_quality(saved_quality)
+	GameConfig.set_max_fps(saved_fps)
+	GameConfig.set_render_scale(saved_scale)
+	GameConfig.set_fov(saved_fov)
+	GameConfig.set_master_volume(saved_volume)
+	if not ok or not persisted or not in_memory:
+		_fail(test_root, "Graficos: ok=%s persistido=%s memoria=%s." % [ok, persisted, in_memory])
+		return
+	print("PASS: Configuracoes graficas aplicam e persistem.")
+
+
+## O FOV-base de cada camera preserva a diferenca (isometrica 72, FPS 78).
+func _test_camera_fov_offset(test_root: Node) -> void:
+	print("Testando o FOV-base por camera...")
+	var saved: int = GameConfig.graphics_fov
+	GameConfig.graphics_fov = 72
+	var iso := GameConfig.camera_fov(72.0)
+	var fps := GameConfig.camera_fov(78.0)
+	GameConfig.graphics_fov = 80
+	var iso_wide := GameConfig.camera_fov(72.0)
+	var fps_wide := GameConfig.camera_fov(78.0)
+	GameConfig.graphics_fov = saved
+	var keeps_gap := is_equal_approx(iso, 72.0) and is_equal_approx(fps, 78.0) \
+		and is_equal_approx(iso_wide, 80.0) and is_equal_approx(fps_wide, 86.0)
+	if not keeps_gap:
+		_fail(test_root, "FOV: iso=%s fps=%s iso80=%s fps80=%s." % [iso, fps, iso_wide, fps_wide])
+		return
+	print("PASS: FOV-base mantem a diferenca entre isometrica e primeira pessoa.")

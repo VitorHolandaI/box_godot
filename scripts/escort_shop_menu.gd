@@ -11,8 +11,8 @@ extends CanvasLayer
 ##   add_child(menu)
 ##   menu.setup(player, Callable(self, "buy_escort_weapon"))
 
-const PANEL_SIZE := Vector2(420.0, 540.0)
-const ROW_HEIGHT := 30
+const PANEL_SIZE := Vector2(480.0, 620.0)
+const ROW_HEIGHT := 36
 
 var _panel: PanelContainer
 var _money_label: Label
@@ -37,29 +37,40 @@ func _ready() -> void:
 	_panel = PanelContainer.new()
 	_panel.visible = false
 	_panel.custom_minimum_size = PANEL_SIZE
+	_panel.theme = MenuTheme.build_theme()
 	_panel.set_anchors_preset(Control.PRESET_CENTER)
 	_panel.position = Vector2(-PANEL_SIZE.x * 0.5, -PANEL_SIZE.y * 0.5)
 	add_child(_panel)
 	var margin := MarginContainer.new()
 	for side in ["left", "right", "top", "bottom"]:
-		margin.add_theme_constant_override("margin_" + side, 12)
+		margin.add_theme_constant_override("margin_" + side, 24)
 	_panel.add_child(margin)
 	var column := VBoxContainer.new()
+	column.add_theme_constant_override("separation", 10)
 	margin.add_child(column)
-	var title := Label.new()
-	title.text = "MERCADOR — COMPRAR ARMA"
-	column.add_child(title)
+	column.add_child(MenuTheme.title_label("MERCADOR", 26))
 	_money_label = Label.new()
+	_money_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_money_label.add_theme_font_size_override("font_size", 18)
+	_money_label.add_theme_color_override("font_color", MenuTheme.ACCENT)
 	column.add_child(_money_label)
+	column.add_child(MenuTheme.section_label("ARMAS A VENDA"))
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	column.add_child(scroll)
 	_rows = VBoxContainer.new()
-	column.add_child(_rows)
+	_rows.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_rows.add_theme_constant_override("separation", 6)
+	scroll.add_child(_rows)
 	_status_label = Label.new()
 	_status_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_status_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_status_label.custom_minimum_size = Vector2(0.0, 40.0)
+	_status_label.add_theme_color_override("font_color", MenuTheme.WARNING)
 	column.add_child(_status_label)
-	var hint := Label.new()
-	hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	hint.text = "Chegue perto do mercador (dentro da casa do checkpoint) e aperte B. B fecha."
+	var hint := MenuTheme.muted_label("Chegue perto do mercador na calcada do checkpoint e aperte B. B fecha.")
+	hint.add_theme_font_size_override("font_size", 13)
 	column.add_child(hint)
 
 

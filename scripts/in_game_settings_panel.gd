@@ -22,11 +22,6 @@ var _capture_button: Button = null
 var _message: Label
 ## O rebuild recria o Label, entao o aviso da ultima acao mora aqui.
 var _message_text := "Clique numa acao e aperte a tecla ou botao novo."
-var _resolution: OptionButton
-var _quality: OptionButton
-var _fullscreen: CheckButton
-var _mouse_aim: CheckButton
-var _first_person: CheckButton
 var _button_styles: Dictionary = {}
 
 
@@ -103,8 +98,7 @@ func _build() -> void:
 	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	content.add_theme_constant_override("separation", 8)
 	scroll.add_child(content)
-	_build_graphics(content)
-	_build_gameplay(content)
+	_build_settings(content)
 	for slot in GameConfig.player_input_configs.size():
 		_build_player_bindings(content, slot)
 	_message = Label.new()
@@ -127,73 +121,13 @@ func _style_buttons(node: Node) -> void:
 			(button as Button).add_theme_stylebox_override(String(state), _button_styles[state])
 
 
-func _build_graphics(content: VBoxContainer) -> void:
-	content.add_child(_title_label("GRAFICOS", 20))
-	var grid := GridContainer.new()
-	grid.columns = 2
-	content.add_child(grid)
-	_resolution = OptionButton.new()
-	_resolution.name = "Resolution"
-	for resolution in GameConfig.SUPPORTED_RESOLUTIONS:
-		_resolution.add_item("%d x %d" % [resolution.x, resolution.y])
-		if resolution == GameConfig.graphics_resolution:
-			_resolution.select(_resolution.item_count - 1)
-	_quality = OptionButton.new()
-	_quality.name = "Quality"
-	for label in ["Baixo", "Medio", "Alto"]:
-		_quality.add_item(label)
-	_quality.select(int(GameConfig.graphics_quality))
-	_fullscreen = CheckButton.new()
-	_fullscreen.name = "Fullscreen"
-	_fullscreen.button_pressed = GameConfig.graphics_fullscreen
-	for pair in [["Resolucao", _resolution], ["Qualidade", _quality], ["Tela cheia", _fullscreen]]:
-		var label := Label.new()
-		label.text = pair[0]
-		label.custom_minimum_size = Vector2(200.0, 32.0)
-		grid.add_child(label)
-		grid.add_child(pair[1])
-	var apply := Button.new()
-	apply.name = "ApplyGraphics"
-	apply.text = "APLICAR GRAFICOS"
-	apply.pressed.connect(_apply_graphics)
-	content.add_child(apply)
-
-
-## Jogabilidade: mira pelo cursor e primeira pessoa. Aplicam na hora nos
-## jogadores locais e ficam salvos em settings.cfg.
-func _build_gameplay(content: VBoxContainer) -> void:
-	content.add_child(_title_label("JOGABILIDADE", 20))
-	var grid := GridContainer.new()
-	grid.columns = 2
-	grid.add_theme_constant_override("h_separation", 8)
-	content.add_child(grid)
-	_mouse_aim = CheckButton.new()
-	_mouse_aim.name = "MouseAim"
-	_mouse_aim.button_pressed = GameConfig.mouse_aim_enabled
-	_first_person = CheckButton.new()
-	_first_person.name = "FirstPerson"
-	_first_person.button_pressed = GameConfig.first_person_enabled
-	for pair in [["Mira pelo mouse", _mouse_aim], ["Primeira pessoa (FPS)", _first_person]]:
-		var label := Label.new()
-		label.text = pair[0]
-		label.custom_minimum_size = Vector2(200.0, 32.0)
-		grid.add_child(label)
-		grid.add_child(pair[1])
-	_mouse_aim.toggled.connect(_apply_gameplay)
-	_first_person.toggled.connect(_apply_gameplay)
-
-
-## Salva e aplica mira/FPS na hora nos jogadores locais. Uso: toggled dos check.
-func _apply_gameplay(_pressed: bool = false) -> void:
-	GameConfig.set_mouse_aim(_mouse_aim.button_pressed)
-	GameConfig.set_first_person(_first_person.button_pressed)
-	for node in get_tree().get_nodes_in_group("player"):
-		if node.get("is_local_controller") != true:
-			continue
-		node.set("mouse_aim", _mouse_aim.button_pressed)
-		node.call("set_first_person", _first_person.button_pressed)
-	if _message != null:
-		_message.text = "Mira e camera atualizadas."
+## Graficos, audio e jogabilidade vem da tela compartilhada do menu; aqui so
+## entram tambem as teclas dos jogadores locais.
+func _build_settings(content: VBoxContainer) -> void:
+	var settings := MenuSettingsScreen.new()
+	settings.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	settings.changed.connect(func(text: String) -> void: _message_text = text)
+	content.add_child(settings)
 
 
 func _build_player_bindings(content: VBoxContainer, slot: int) -> void:
@@ -276,15 +210,6 @@ func _end_capture(text: String) -> void:
 	_capture_button = null
 	if _message != null and not text.is_empty():
 		_message.text = text
-
-
-func _apply_graphics() -> void:
-	var index := _resolution.selected
-	if index < 0 or index >= GameConfig.SUPPORTED_RESOLUTIONS.size():
-		_message.text = "Resolucao selecionada invalida."
-		return
-	var error := GameConfig.apply_graphics_settings(GameConfig.SUPPORTED_RESOLUTIONS[index], _quality.selected, _fullscreen.button_pressed)
-	_message.text = "Graficos aplicados e salvos." if error == OK else "Falha ao salvar graficos: %s" % error_string(error)
 
 
 func _title_label(text: String, font_size: int) -> Label:

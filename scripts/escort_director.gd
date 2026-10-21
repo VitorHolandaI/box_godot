@@ -34,6 +34,9 @@ const MAP_HALF_EXTENT := 96.0
 const MAP_MARGIN := 10.0
 ## Distancia em que o E de um jogador vale como "quero comecar a escolta".
 const START_INTERACT_RADIUS := 4.5
+## Deslocamento lateral do mercador a partir da porta (na calcada), para nao
+## ficar no meio do vao da familia.
+const MERCHANT_DOOR_SIDE_OFFSET := 1.7
 ## Raio de "chegou" no ponto B (o minimapa/marcador usa o mesmo centro).
 const ARRIVAL_RADIUS := 2.5
 ## Quanto a frente da porta da safehouse e o ponto de chegada: a familia tem de
@@ -91,6 +94,8 @@ const GROUND_SEARCH_STEP := 3.0
 const GROUND_SEARCH_RINGS := 4
 
 signal escort_finished(victory: bool)
+## Familia chegou e segurou uma parada (checkpoint). index e 0-based.
+signal checkpoint_reached(index: int)
 
 var status_text := "A familia espera: aproxime-se e aperte E para comecar a escolta."
 var members: Array[EscortFamilyMember] = []
@@ -366,17 +371,26 @@ func _place_shelters() -> void:
 	print(JSON.stringify({"event": "escort_shelters_placed", "count": _shelter_sites.size()}))
 
 
-## Poe um mercador de preto dentro de cada casa de checkpoint, 1,3 m ao lado da
-## parada (o vao e estreito). Persiste a missao toda; a loja (EscortShopMenu)
-## abre por proximidade. Uso: start.
+## Onde o mercador fica: na calcada em frente a porta (`approach`), deslocado de
+## lado para nao tapar o vao. Pura: da para testar sem cena.
+## Uso: var pos := EscortDirector.merchant_spot(site)
+static func merchant_spot(site: Dictionary) -> Vector3:
+	var direction: Vector3 = site["door_direction"]
+	var lateral := Vector3(-direction.z, 0.0, direction.x)
+	var approach: Vector3 = site["approach"]
+	return approach + lateral * MERCHANT_DOOR_SIDE_OFFSET
+
+
+## Poe um mercador de preto na calcada, ao lado da porta de cada checkpoint
+## (1,7 m de lado, para nao tapar o vao). Fica visivel de fora, entao o jogador
+## compra sem precisar entrar no abrigo. Persiste a missao toda; a loja
+## (EscortShopMenu) abre por proximidade. Uso: start.
 func _place_merchants(root: Node) -> void:
 	for index in _shelter_sites.size():
 		var site: Dictionary = _shelter_sites[index]
 		if site.is_empty():
 			continue
-		var direction: Vector3 = site["door_direction"]
-		var lateral := Vector3(-direction.z, 0.0, direction.x)
-		var spot: Vector3 = site["inside"] + lateral * 1.3
+		var spot := merchant_spot(site)
 		var yaw := float(site.get("yaw", 0.0))
 		var merchant := MERCHANT_SCRIPT.new_merchant(root, "EscortMerchant%d" % (index + 1))
 		merchant.global_position = Vector3(spot.x, point_a.y, spot.z)
@@ -799,6 +813,8 @@ func _activate_checkpoint(tree: SceneTree) -> void:
 		"zombies_inside_cleared": inside_cleared,
 		"door_shut": door_shut,
 	}))
+	# Pagamento da parada: main credita o saldo dos jogadores ao ouvir isto.
+	checkpoint_reached.emit(next_checkpoint)
 
 
 ## Porta de verdade da parada de um checkpoint (o lote pode nao ter tido uma e

@@ -51,6 +51,7 @@ func run(test_root: Node) -> void:
 	_test_checkpoint_houses_are_spread_out(test_root)
 	_test_route_only_leaves_the_street_at_the_houses(test_root)
 	_test_shelter_points_follow_the_door_normal(test_root)
+	_test_merchant_stays_at_the_door(test_root)
 	_test_shelter_takes_the_exterior_door(test_root)
 	_test_checkpoint_shuts_the_door_and_the_exit_reopens_it(test_root)
 	_test_family_enters_the_house_head_on(test_root)
@@ -614,6 +615,23 @@ func _test_shelter_points_follow_the_door_normal(test_root: Node) -> void:
 		_fail(test_root, "normal ao contrario deveria ser virada para a esquina, veio %s" % flipped["approach"])
 
 
+## O mercador fica na calcada em frente a porta, deslocado de lado: visivel e
+## alcancavel de fora. Regressao de "mercador dentro da casa".
+func _test_merchant_stays_at_the_door(test_root: Node) -> void:
+	var door := Vector3(0.0, 1.0, 0.0)
+	var corner := Vector3(0.0, 1.0, 24.0)
+	var site := ESCORT_DIRECTOR_SCRIPT.shelter_points(door, Vector3.BACK, corner)
+	var spot := ESCORT_DIRECTOR_SCRIPT.merchant_spot(site)
+	var approach: Vector3 = site["approach"]
+	var outward: Vector3 = site["door_direction"]
+	var lateral := Vector3(-outward.z, 0.0, outward.x)
+	var in_front := (spot - door).dot(outward) > 0.0
+	var beside_door := absf((spot - approach).dot(lateral)) > 1.0
+	var not_blocking := absf((spot - approach).dot(outward)) < 0.01
+	if not in_front or not beside_door or not not_blocking:
+		_fail(test_root, "mercador deveria ficar na calcada ao lado da porta; spot=%s approach=%s" % [spot, approach])
+
+
 ## A parada usa a porta DA RUA. O predio procedural cria porta destrutivel para
 ## todo vao da planta, inclusive quarto e estoque, e a porta interna fica mais
 ## perto do centro do lote: sem filtrar, a familia era mandada para dentro de um
@@ -801,6 +819,8 @@ func _test_escort_economy_rewards_variants(test_root: Node) -> void:
 		_fail(test_root, "tanque deveria render mais que fraco; fraco=%d tanque=%d" % [weak, tank])
 	if unknown != ESCORT_ECONOMY_SCRIPT.DEFAULT_REWARD:
 		_fail(test_root, "variante desconhecida deveria pagar o piso %d; veio %d" % [ESCORT_ECONOMY_SCRIPT.DEFAULT_REWARD, unknown])
+	if ESCORT_ECONOMY_SCRIPT.checkpoint_reward() <= 0:
+		_fail(test_root, "bonus de checkpoint deveria ser positivo; veio %d" % ESCORT_ECONOMY_SCRIPT.checkpoint_reward())
 
 
 ## Saldo do jogador: credita, gasta e recusa quando falta grana.

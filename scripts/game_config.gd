@@ -14,14 +14,28 @@ const SUPPORTED_RESOLUTIONS: Array[Vector2i] = [
 	Vector2i(1600, 900),
 	Vector2i(1920, 1080),
 ]
+## 0 = ilimitado. Limites comuns de monitor para o jogador escolher.
+const FPS_OPTIONS: Array[int] = [0, 30, 60, 90, 120, 144, 240]
+## Escala de renderizacao 3D: menos pixels renderizados, mais desempenho.
+const RENDER_SCALE_OPTIONS: Array[float] = [0.5, 0.65, 0.8, 1.0]
+const FOV_MIN := 60
+const FOV_MAX := 100
 
-enum GraphicsQuality { LOW, MEDIUM, HIGH }
+enum GraphicsQuality { LOW, MEDIUM, HIGH, ULTRA }
+enum WindowMode { WINDOWED, FULLSCREEN, EXCLUSIVE }
 
 var local_player_count := 1
 var player_input_configs: Array[Dictionary] = []
 var graphics_resolution := Vector2i(1280, 720)
 var graphics_quality := GraphicsQuality.HIGH
-var graphics_fullscreen := false
+var graphics_window_mode := WindowMode.WINDOWED
+var graphics_vsync := true
+var graphics_max_fps := 60
+var graphics_render_scale := 1.0
+var graphics_shadows := true
+var graphics_fog := true
+var graphics_fov := 72
+var audio_master_volume := 1.0
 var saved_servers: Array[Dictionary] = []
 var official_server_seeded := false
 ## Mira pelo cursor do mouse (isometrica) e cameras em primeira pessoa. O menu
@@ -53,8 +67,8 @@ func set_menu_open(tree: SceneTree, open: bool) -> void:
 
 
 func _ready() -> void:
-	Engine.max_fps = 60
 	_load_graphics_settings()
+	Engine.max_fps = graphics_max_fps
 	var cli_args: Array[String] = []
 	cli_args.append_array(OS.get_cmdline_user_args())
 	cli_args.append_array(OS.get_cmdline_args())
@@ -67,7 +81,10 @@ func _ready() -> void:
 			graphics_quality = GraphicsQuality.MEDIUM
 		elif argument == "--quality=high":
 			graphics_quality = GraphicsQuality.HIGH
+		elif argument == "--quality=ultra":
+			graphics_quality = GraphicsQuality.ULTRA
 	_apply_window_settings()
+	_apply_audio_settings()
 	Input.joy_connection_changed.connect(_on_joy_connection_changed)
 
 
@@ -79,18 +96,171 @@ func _on_joy_connection_changed(device_id: int, connected: bool) -> void:
 	release_unplugged_joypad(device_id)
 
 
-func apply_graphics_settings(resolution: Vector2i, quality: int, fullscreen: bool) -> Error:
+## Aplica e salva cada opcao na hora (a UI nao precisa de botao "Aplicar").
+## Toda validacao cita o valor recebido e o formato esperado.
+
+func set_resolution(resolution: Vector2i) -> Error:
 	if resolution not in SUPPORTED_RESOLUTIONS:
 		push_error("Resolucao invalida %s; esperado um valor de %s." % [resolution, SUPPORTED_RESOLUTIONS])
 		return ERR_INVALID_PARAMETER
-	if quality < GraphicsQuality.LOW or quality > GraphicsQuality.HIGH:
-		push_error("Qualidade invalida %d; esperado valor entre %d e %d." % [quality, GraphicsQuality.LOW, GraphicsQuality.HIGH])
-		return ERR_INVALID_PARAMETER
 	graphics_resolution = resolution
-	graphics_quality = quality as GraphicsQuality
-	graphics_fullscreen = fullscreen
 	_apply_window_settings()
 	return _save_graphics_settings()
+
+
+func set_window_mode(mode: int) -> Error:
+	if mode < WindowMode.WINDOWED or mode > WindowMode.EXCLUSIVE:
+		push_error("Modo de janela invalido %d; esperado entre %d e %d." % [mode, WindowMode.WINDOWED, WindowMode.EXCLUSIVE])
+		return ERR_INVALID_PARAMETER
+	graphics_window_mode = mode as WindowMode
+	_apply_window_settings()
+	return _save_graphics_settings()
+
+
+func set_vsync(enabled: bool) -> Error:
+	graphics_vsync = enabled
+	_apply_window_settings()
+	return _save_graphics_settings()
+
+
+func set_max_fps(value: int) -> Error:
+	if value != 0 and value < 15:
+		push_error("Limite de FPS invalido %d; esperado 0 (ilimitado) ou >= 15." % value)
+		return ERR_INVALID_PARAMETER
+	graphics_max_fps = value
+	_apply_window_settings()
+	return _save_graphics_settings()
+
+
+func set_render_scale(scale: float) -> Error:
+	if scale <= 0.0 or scale > 1.0:
+		push_error("Escala de render invalida %f; esperado um valor em (0, 1]." % scale)
+		return ERR_INVALID_PARAMETER
+	graphics_render_scale = scale
+	apply_render_scale_to_viewports(get_tree())
+	return _save_graphics_settings()
+
+
+func set_quality(quality: int) -> Error:
+	if quality < GraphicsQuality.LOW or quality > GraphicsQuality.ULTRA:
+		push_error("Qualidade invalida %d; esperado entre %d e %d." % [quality, GraphicsQuality.LOW, GraphicsQuality.ULTRA])
+		return ERR_INVALID_PARAMETER
+	graphics_quality = quality as GraphicsQuality
+	return _save_graphics_settings()
+
+
+func set_shadows(enabled: bool) -> Error:
+	graphics_shadows = enabled
+	apply_live_environment()
+	return _save_graphics_settings()
+
+
+func set_fog(enabled: bool) -> Error:
+	graphics_fog = enabled
+	apply_live_environment()
+	return _save_graphics_settings()
+
+
+func set_fov(degrees: int) -> Error:
+	if degrees < FOV_MIN or degrees > FOV_MAX:
+		push_error("FOV invalido %d; esperado entre %d e %d." % [degrees, FOV_MIN, FOV_MAX])
+		return ERR_INVALID_PARAMETER
+	graphics_fov = degrees
+	apply_live_fov()
+	return _save_graphics_settings()
+
+
+func set_master_volume(volume: float) -> Error:
+	if volume < 0.0 or volume > 1.0:
+		push_error("Volume invalido %f; esperado um valor entre 0 e 1." % volume)
+		return ERR_INVALID_PARAMETER
+	audio_master_volume = volume
+	_apply_audio_settings()
+	return _save_graphics_settings()
+
+
+## Aplica o FOV escolhido sobre um FOV-base de camera (isometrica 72, FPS 78),
+## preservando a diferenca entre as duas. Uso: camera.fov = GameConfig.camera_fov(78.0)
+func camera_fov(base_default: float) -> float:
+	return clampf(float(graphics_fov) + (base_default - 72.0), 30.0, 120.0)
+
+
+## Copia sombras e nevoa para o mundo. Chamado por main.gd no inicio da partida.
+func apply_environment_settings(environment: Environment, sun: DirectionalLight3D) -> void:
+	if environment != null:
+		environment.fog_enabled = graphics_fog
+	if sun != null:
+		sun.shadow_enabled = graphics_shadows
+
+
+## Copia MSAA e escala de render para um SubViewport de jogador.
+func apply_viewport_settings(viewport: SubViewport) -> void:
+	viewport.msaa_3d = get_msaa_3d()
+	viewport.scaling_3d_scale = graphics_render_scale
+
+
+## Reaplica a escala de render nos SubViewports ja existentes (mudanca em partida).
+func apply_render_scale_to_viewports(tree: SceneTree) -> void:
+	if tree == null:
+		return
+	for node in tree.get_root().find_children("*", "SubViewport", true, false):
+		(node as SubViewport).scaling_3d_scale = graphics_render_scale
+
+
+## Reaplica sombras e nevoa no mundo atual (mudanca em partida).
+func apply_live_environment() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	var environments := tree.get_root().find_children("*", "WorldEnvironment", true, false)
+	var suns := tree.get_root().find_children("*", "DirectionalLight3D", true, false)
+	var environment: Environment = null
+	if not environments.is_empty():
+		environment = (environments[0] as WorldEnvironment).environment
+	var sun: DirectionalLight3D = null
+	if not suns.is_empty():
+		sun = suns[0] as DirectionalLight3D
+	apply_environment_settings(environment, sun)
+
+
+## Reaplica o FOV nas cameras atuais (as cameras expoem apply_fov()).
+func apply_live_fov() -> void:
+	var tree := get_tree()
+	if tree == null:
+		return
+	for node in tree.get_root().find_children("*", "Camera3D", true, false):
+		if node.has_method("apply_fov"):
+			node.call("apply_fov")
+
+
+static func quality_label(quality: int) -> String:
+	match quality:
+		GraphicsQuality.LOW:
+			return "Baixo"
+		GraphicsQuality.MEDIUM:
+			return "Medio"
+		GraphicsQuality.HIGH:
+			return "Alto"
+		_:
+			return "Ultra"
+
+
+static func window_mode_label(mode: int) -> String:
+	match mode:
+		WindowMode.FULLSCREEN:
+			return "Tela cheia"
+		WindowMode.EXCLUSIVE:
+			return "Tela cheia exclusiva"
+		_:
+			return "Janela"
+
+
+static func fps_label(value: int) -> String:
+	return "Ilimitado" if value <= 0 else "%d FPS" % value
+
+
+static func render_scale_label(scale: float) -> String:
+	return "%d%%" % int(roundf(scale * 100.0))
 
 
 func get_saved_servers() -> Array[Dictionary]:
@@ -144,23 +314,31 @@ func remove_saved_server(address: String, port: int) -> Error:
 
 
 func get_msaa_3d() -> int:
-	if graphics_quality == GraphicsQuality.LOW:
-		return Viewport.MSAA_DISABLED
-	if graphics_quality == GraphicsQuality.MEDIUM:
-		return Viewport.MSAA_2X
-	return Viewport.MSAA_4X
+	match graphics_quality:
+		GraphicsQuality.LOW:
+			return Viewport.MSAA_DISABLED
+		GraphicsQuality.MEDIUM:
+			return Viewport.MSAA_2X
+		GraphicsQuality.HIGH:
+			return Viewport.MSAA_4X
+		_:
+			return Viewport.MSAA_8X
 
 
 func get_forest_tree_count() -> int:
-	if graphics_quality == GraphicsQuality.LOW:
-		return 500
-	if graphics_quality == GraphicsQuality.MEDIUM:
-		return 1000
-	return 1600
+	match graphics_quality:
+		GraphicsQuality.LOW:
+			return 500
+		GraphicsQuality.MEDIUM:
+			return 1000
+		GraphicsQuality.HIGH:
+			return 1600
+		_:
+			return 2200
 
 
 func uses_world_shadows() -> bool:
-	return graphics_quality != GraphicsQuality.LOW
+	return graphics_shadows
 
 
 func _load_graphics_settings() -> bool:
@@ -178,9 +356,21 @@ func _load_graphics_settings() -> bool:
 	graphics_quality = clampi(
 		int(config.get_value("graphics", "quality", graphics_quality)),
 		GraphicsQuality.LOW,
-		GraphicsQuality.HIGH
+		GraphicsQuality.ULTRA
 	) as GraphicsQuality
-	graphics_fullscreen = bool(config.get_value("graphics", "fullscreen", graphics_fullscreen))
+	# Migracao: settings antigos so tinham "fullscreen" (bool).
+	var saved_window_mode: Variant = config.get_value("graphics", "window_mode", -1)
+	if saved_window_mode is int and int(saved_window_mode) >= 0:
+		graphics_window_mode = clampi(int(saved_window_mode), WindowMode.WINDOWED, WindowMode.EXCLUSIVE) as WindowMode
+	elif bool(config.get_value("graphics", "fullscreen", false)):
+		graphics_window_mode = WindowMode.FULLSCREEN
+	graphics_vsync = bool(config.get_value("graphics", "vsync", graphics_vsync))
+	graphics_max_fps = maxi(int(config.get_value("graphics", "max_fps", graphics_max_fps)), 0)
+	graphics_render_scale = clampf(float(config.get_value("graphics", "render_scale", graphics_render_scale)), 0.5, 1.0)
+	graphics_shadows = bool(config.get_value("graphics", "shadows", graphics_shadows))
+	graphics_fog = bool(config.get_value("graphics", "fog", graphics_fog))
+	graphics_fov = clampi(int(config.get_value("graphics", "fov", graphics_fov)), FOV_MIN, FOV_MAX)
+	audio_master_volume = clampf(float(config.get_value("audio", "master_volume", audio_master_volume)), 0.0, 1.0)
 	mouse_aim_enabled = bool(config.get_value("gameplay", "mouse_aim", mouse_aim_enabled))
 	first_person_enabled = bool(config.get_value("gameplay", "first_person", first_person_enabled))
 	var configured_servers: Variant = config.get_value("network", "saved_servers", [])
@@ -204,7 +394,14 @@ func _save_graphics_settings() -> Error:
 		return load_error
 	config.set_value("graphics", "resolution", graphics_resolution)
 	config.set_value("graphics", "quality", int(graphics_quality))
-	config.set_value("graphics", "fullscreen", graphics_fullscreen)
+	config.set_value("graphics", "window_mode", int(graphics_window_mode))
+	config.set_value("graphics", "vsync", graphics_vsync)
+	config.set_value("graphics", "max_fps", graphics_max_fps)
+	config.set_value("graphics", "render_scale", graphics_render_scale)
+	config.set_value("graphics", "shadows", graphics_shadows)
+	config.set_value("graphics", "fog", graphics_fog)
+	config.set_value("graphics", "fov", graphics_fov)
+	config.set_value("audio", "master_volume", audio_master_volume)
 	var error := config.save(SETTINGS_PATH)
 	if error != OK:
 		push_error("Nao foi possivel salvar %s: %s." % [SETTINGS_PATH, error_string(error)])
@@ -253,13 +450,27 @@ func _save_network_settings() -> Error:
 
 
 func _apply_window_settings() -> void:
+	Engine.max_fps = graphics_max_fps
 	if DisplayServer.get_name() == "headless":
 		return
-	if graphics_fullscreen:
-		DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+	match graphics_window_mode:
+		WindowMode.FULLSCREEN:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_FULLSCREEN)
+		WindowMode.EXCLUSIVE:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN)
+		_:
+			DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
+			DisplayServer.window_set_size(graphics_resolution)
+	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if graphics_vsync else DisplayServer.VSYNC_DISABLED)
+
+
+func _apply_audio_settings() -> void:
+	var master_bus := AudioServer.get_bus_index("Master")
+	if master_bus < 0:
 		return
-	DisplayServer.window_set_mode(DisplayServer.WINDOW_MODE_WINDOWED)
-	DisplayServer.window_set_size(graphics_resolution)
+	var volume := clampf(audio_master_volume, 0.0, 1.0)
+	AudioServer.set_bus_mute(master_bus, volume <= 0.001)
+	AudioServer.set_bus_volume_db(master_bus, linear_to_db(maxf(volume, 0.001)))
 
 
 func configure_local_players(configs: Array[Dictionary]) -> void:

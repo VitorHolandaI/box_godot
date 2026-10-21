@@ -21,6 +21,7 @@ const EYE_HEIGHT := 1.5
 ## Godot (`0xFFFFF`, layers 1..20), senao TODAS as cameras deixam de renderizar
 ## a cabeca. Layer 20 = bit 19; usar 20 aqui vira layer 21 e some pra todos.
 const HEAD_RENDER_LAYER := 19
+const BASE_FOV := 78.0
 
 var target: Node3D
 ## Layers originais das malhas da cabeca, para restaurar ao sair.
@@ -28,11 +29,16 @@ var _head_original_layers: Dictionary = {}
 
 
 func _ready() -> void:
-	fov = 78.0
+	apply_fov()
 	near = 0.05
 	cull_mask &= ~(1 << HEAD_RENDER_LAYER)
 	# Dentro do predio a camera nao pode cortar parede/teto.
 	RenderingServer.global_shader_parameter_set(&"cutout_enabled", false)
+
+
+## FOV-base da primeira pessoa com o ajuste das configuracoes.
+func apply_fov() -> void:
+	fov = GameConfig.camera_fov(BASE_FOV)
 
 
 func _process(_delta: float) -> void:

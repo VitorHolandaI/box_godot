@@ -209,7 +209,8 @@ func _add_world_helpers() -> void:
 		add_child(SHOT_CAPTURE_SCRIPT.new())
 	if not NetworkSession.bot_name.is_empty():
 		DisplayServer.window_set_title("Box Godot - %s" % NetworkSession.bot_name)
-	sun.shadow_enabled = GameConfig.uses_world_shadows()
+	# Sombras e nevoa vem das configuracoes; o FOV fica nas cameras.
+	GameConfig.apply_environment_settings($Environment.environment, sun)
 
 
 ## Partida local: os jogadores da tela dividida e, se pedido, o campo de armas
@@ -465,6 +466,7 @@ func _finish_city_setup() -> void:
 		add_child(escort_director)
 		escort_director.start(get_tree(), self, NetworkSession.world_seed)
 		escort_director.escort_finished.connect(_on_escort_finished)
+		escort_director.checkpoint_reached.connect(_on_escort_checkpoint_reached)
 	if _initial_loot_spawned:
 		return
 	# Cidade pronta: agora as ancoras internas existem, entao o primeiro
@@ -1757,6 +1759,21 @@ func _award_escort_kill(killer: Node, zombie: Node3D) -> void:
 	if not killer.is_in_group("player") or not killer.has_method("add_money"):
 		return
 	killer.add_money(ESCORT_ECONOMY_SCRIPT.reward_for_variant(int(zombie.get("zombie_type"))))
+
+
+## Escolta: bonus por parada concluida, pago a todos os jogadores. Autoritativo
+## (servidor/offline); o cliente recebe o saldo no estado da escolta.
+## Uso: ligado a EscortDirector.checkpoint_reached.
+func _on_escort_checkpoint_reached(index: int) -> void:
+	if NetworkSession.is_client():
+		return
+	var reward := ESCORT_ECONOMY_SCRIPT.checkpoint_reward()
+	var credited := 0
+	for node in get_tree().get_nodes_in_group("player"):
+		if node.has_method("add_money"):
+			node.add_money(reward)
+			credited += 1
+	print(JSON.stringify({"event": "escort_checkpoint_reward", "index": index + 1, "reward": reward, "players": credited}))
 
 
 ## Zumbi abatido solta de vez em quando municao de qualquer classe e, mais raro,
