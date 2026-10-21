@@ -19,13 +19,14 @@ const MODE_DESCRIPTIONS := {
 	"survival": "Aguente ondas cada vez maiores de zumbis. Sobreviva o maximo que puder.",
 }
 const PANEL_SIZES := {
-	"main": Vector2(680, 560),
+	"main": Vector2(760, 600),
 	"modes": Vector2(780, 620),
 	"multiplayer": Vector2(640, 500),
 	"players": Vector2(640, 560),
 	"browser": Vector2(880, 660),
 	"setup": Vector2(1080, 680),
 	"settings": Vector2(900, 680),
+	"paint": Vector2(780, 640),
 }
 const HOST_JOIN_MAX_ATTEMPTS := 20
 const HOST_JOIN_RETRY_SECONDS := 1.0
@@ -47,6 +48,7 @@ var _players_subtitle: Label
 var _host_join_attempts := 0
 var _join_address := ""
 var _join_port := -1
+var _paint_pickers: Dictionary = {}
 
 
 func _ready() -> void:
@@ -75,6 +77,7 @@ func _build_screens() -> void:
 	_screens["browser"] = _build_browser()
 	_screens["setup"] = _build_setup()
 	_screens["settings"] = _build_settings()
+	_screens["paint"] = _build_paint()
 	for screen in _screens.values():
 		_content.add_child(screen)
 		(screen as Control).visible = false
@@ -101,11 +104,14 @@ func _build_main() -> VBoxContainer:
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
+	var paint := _button("APARENCIA", func() -> void: _show("paint"))
+	paint.custom_minimum_size = Vector2(200.0, 46.0)
 	var settings := _button("CONFIGURACOES", func() -> void: _show("settings"))
-	settings.custom_minimum_size = Vector2(220.0, 46.0)
+	settings.custom_minimum_size = Vector2(240.0, 46.0)
 	var quit := _button("SAIR", _on_quit)
 	MenuTheme.style_danger(quit)
-	quit.custom_minimum_size = Vector2(160.0, 46.0)
+	quit.custom_minimum_size = Vector2(150.0, 46.0)
+	row.add_child(paint)
 	row.add_child(settings)
 	row.add_child(quit)
 	screen.add_child(row)
@@ -196,6 +202,100 @@ func _build_settings() -> VBoxContainer:
 	screen.add_child(scroll)
 	screen.add_child(_back_button("VOLTAR", func() -> void: _show("main")))
 	return screen
+
+
+## Pintura do personagem (pele/camisa/calca/botas), salva no PC do jogador.
+func _build_paint() -> VBoxContainer:
+	var screen := _screen(false)
+	var scroll := ScrollContainer.new()
+	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	screen.add_child(scroll)
+	var content := VBoxContainer.new()
+	content.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	content.add_theme_constant_override("separation", 10)
+	scroll.add_child(content)
+	content.add_child(MenuTheme.title_label("APARENCIA", 30))
+	content.add_child(MenuTheme.muted_label("Pinte o seu personagem. As cores ficam salvas neste PC."))
+	PlayerPaint.load_config()
+	content.add_child(MenuTheme.section_label("PRESETS"))
+	var presets := HFlowContainer.new()
+	presets.add_theme_constant_override("h_separation", 8)
+	presets.add_theme_constant_override("v_separation", 8)
+	content.add_child(presets)
+	for index in PlayerPaint.PRESETS.size():
+		var preset_button := _button(PlayerPaint.preset_name(index), _on_paint_preset.bind(index))
+		preset_button.custom_minimum_size = Vector2(160.0, 38.0)
+		presets.add_child(preset_button)
+	content.add_child(MenuTheme.section_label("CORES"))
+	var grid := GridContainer.new()
+	grid.columns = 2
+	grid.add_theme_constant_override("h_separation", 18)
+	grid.add_theme_constant_override("v_separation", 10)
+	content.add_child(grid)
+	_add_paint_row(grid, "Pele", "skin", PlayerPaint.skin)
+	_add_paint_row(grid, "Camisa", "shirt", PlayerPaint.shirt)
+	_add_paint_row(grid, "Calca", "pants", PlayerPaint.pants)
+	_add_paint_row(grid, "Botas", "boots", PlayerPaint.boots)
+	var actions := HBoxContainer.new()
+	actions.alignment = BoxContainer.ALIGNMENT_CENTER
+	actions.add_theme_constant_override("separation", 12)
+	actions.add_child(_button("RESTAURAR PADRAO", _on_paint_reset))
+	actions.add_child(_button("VOLTAR", func() -> void: _show("main")))
+	screen.add_child(actions)
+	return screen
+
+
+func _add_paint_row(grid: GridContainer, text: String, key: String, color: Color) -> void:
+	var label := Label.new()
+	label.text = text
+	label.custom_minimum_size = Vector2(160.0, 40.0)
+	label.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	grid.add_child(label)
+	var picker := ColorPickerButton.new()
+	picker.color = color
+	picker.edit_alpha = false
+	picker.custom_minimum_size = Vector2(240.0, 40.0)
+	picker.color_changed.connect(_on_paint_color.bind(key))
+	grid.add_child(picker)
+	_paint_pickers[key] = picker
+
+
+func _on_paint_color(color: Color, key: String) -> void:
+	match key:
+		"skin":
+			PlayerPaint.skin = color
+		"shirt":
+			PlayerPaint.shirt = color
+		"pants":
+			PlayerPaint.pants = color
+		"boots":
+			PlayerPaint.boots = color
+	PlayerPaint.save_config()
+
+
+func _on_paint_reset() -> void:
+	PlayerPaint.reset_defaults()
+	for key in _paint_pickers:
+		(_paint_pickers[key] as ColorPickerButton).color = _paint_value(String(key))
+
+
+func _on_paint_preset(index: int) -> void:
+	PlayerPaint.apply_preset(index)
+	for key in _paint_pickers:
+		(_paint_pickers[key] as ColorPickerButton).color = _paint_value(String(key))
+
+
+func _paint_value(key: String) -> Color:
+	match key:
+		"skin":
+			return PlayerPaint.skin
+		"shirt":
+			return PlayerPaint.shirt
+		"pants":
+			return PlayerPaint.pants
+		_:
+			return PlayerPaint.boots
 
 
 ## --- widgets ---

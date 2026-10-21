@@ -717,6 +717,8 @@ static func _quick_mat(color: Color, roughness: float, emission: Color = Color(0
 	var mat := StandardMaterial3D.new()
 	mat.albedo_color = color
 	mat.roughness = roughness
+	mat.vertex_color_use_as_albedo = true
+	mat.cull_mode = BaseMaterial3D.CULL_DISABLED
 	if emission.a > 0.0:
 		mat.emission_enabled = true
 		mat.emission = emission

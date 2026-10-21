@@ -285,6 +285,8 @@ func _ready() -> void:
 	first_person = GameConfig.first_person_enabled
 	camera_yaw = rotation.y
 	snapshot_buffer.reset(float(Time.get_ticks_msec()), global_position, rotation.y)
+	VoxelCharacterBuilder.apply_to_model($Model)
+	PlayerPaint.apply_to_model($Model)
 	_apply_player_color()
 	_build_crate_weapon_models()
 	_update_weapon_models()
@@ -2424,17 +2426,24 @@ func set_color_index(index: int) -> void:
 
 
 func _apply_player_color() -> void:
+	PlayerPaint.load_config()
 	var colors := [Color(0.2, 0.3, 0.13), Color(0.28, 0.22, 0.11), Color(0.12, 0.25, 0.28), Color(0.3, 0.12, 0.1)]
 	var active_index := color_index if color_index >= 0 else local_slot
 	var uniform_material := StandardMaterial3D.new()
 	# Soldado do esquadrao SWAT usa uniforme escuro proprio, igual nos dois
 	# lados (o cliente nao ve o resto da configuracao do bot do servidor).
 	uniform_material.albedo_color = SWAT_UNIFORM_COLOR if is_swat_bot else colors[posmod(active_index, colors.size())]
+	# Slots 1..3 mantem a cor da vaga (co-op local); o slot 0 usa a pintura
+	# salva no PC do jogador.
+	if not is_swat_bot and active_index == 0:
+		uniform_material.albedo_color = PlayerPaint.shirt
 	if not is_swat_bot and pvp_team >= 0:
 		# Mata-mata: a cor e do TIME, nao da vaga. Com uma cor por jogador nao
 		# dava para saber quem era inimigo no meio do tiroteio.
 		uniform_material.albedo_color = TdmMatch.color_for_team(pvp_team)
 	uniform_material.roughness = 0.8
+	uniform_material.vertex_color_use_as_albedo = true
+	uniform_material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	$Model/Torso.material_override = uniform_material
 	$Model/LeftArm/Mesh.material_override = uniform_material
 	$Model/RightArm/Mesh.material_override = uniform_material

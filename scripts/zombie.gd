@@ -247,6 +247,7 @@ var _tick_in_melee_range := false
 
 func _ready() -> void:
 	add_to_group("zombies")
+	VoxelCharacterBuilder.apply_to_model(model)
 	_configure_variant()
 	natural_limb_loss_mask = _natural_limb_loss_mask()
 	health = max_health

@@ -192,6 +192,7 @@ static func _make_civilian_model(tint: Color, model_scale: float) -> Node3D:
 	template.remove_child(model)
 	template.free()
 	model.name = "Model"
+	VoxelCharacterBuilder.apply_to_model(model)
 	_strip_military_kit(model)
 	_paint_civilian(model, tint)
 	# No player.tscn a Pistol nasce `visible = false` (o PlayerCharacter liga ao
@@ -240,6 +241,8 @@ static func _paint_civilian(model: Node3D, tint: Color) -> void:
 static func _flat_material(color: Color) -> StandardMaterial3D:
 	var material := StandardMaterial3D.new()
 	material.albedo_color = color
+	material.vertex_color_use_as_albedo = true
+	material.cull_mode = BaseMaterial3D.CULL_DISABLED
 	return material
 
 

@@ -39,7 +39,7 @@ void fragment() {
 	}
 	float edge = 1.0 - smoothstep(0.0, EDGE_WIDTH, survive - dissolve_amount);
 	edge *= step(0.001, dissolve_amount);
-	ALBEDO = mix(albedo_color.rgb, ASH_COLOR, edge);
+	ALBEDO = mix(albedo_color.rgb * COLOR.rgb, ASH_COLOR, edge);
 	EMISSION = EMBER_COLOR * edge * 0.6;
 	ROUGHNESS = roughness_value;
 }

@@ -25,6 +25,7 @@ func run(test_root: Node) -> void:
 	_test_graphics_labels_and_validation(test_root)
 	_test_graphics_setters_roundtrip(test_root)
 	_test_camera_fov_offset(test_root)
+	_test_player_paint_presets(test_root)
 
 
 func _test_official_server_seed(test_root: Node) -> void:
@@ -374,3 +375,33 @@ func _test_camera_fov_offset(test_root: Node) -> void:
 		_fail(test_root, "FOV: iso=%s fps=%s iso80=%s fps80=%s." % [iso, fps, iso_wide, fps_wide])
 		return
 	print("PASS: FOV-base mantem a diferenca entre isometrica e primeira pessoa.")
+
+
+## Presets prontos (Rambo, Pos-apocaliptico...) aplicam e salvam no PC.
+func _test_player_paint_presets(test_root: Node) -> void:
+	print("Testando presets de pintura do jogador...")
+	PlayerPaint.load_config()
+	var saved_skin := PlayerPaint.skin
+	var saved_shirt := PlayerPaint.shirt
+	var saved_pants := PlayerPaint.pants
+	var saved_boots := PlayerPaint.boots
+	var applied := PlayerPaint.apply_preset(0) == OK
+	var named := PlayerPaint.preset_name(0) == "Rambo"
+	var colors_ok := PlayerPaint.skin.is_equal_approx(PlayerPaint.PRESETS[0]["skin"] as Color) \
+		and PlayerPaint.shirt.is_equal_approx(PlayerPaint.PRESETS[0]["shirt"] as Color)
+	var rejected := PlayerPaint.apply_preset(-1) == ERR_INVALID_PARAMETER
+	var many_presets := PlayerPaint.PRESETS.size() >= 8
+	var presets_valid := true
+	for preset in PlayerPaint.PRESETS:
+		for key in ["skin", "shirt", "pants", "boots"]:
+			if not (preset.get(key) is Color):
+				presets_valid = false
+	PlayerPaint.skin = saved_skin
+	PlayerPaint.shirt = saved_shirt
+	PlayerPaint.pants = saved_pants
+	PlayerPaint.boots = saved_boots
+	PlayerPaint.save_config()
+	if not applied or not named or not colors_ok or not rejected or not many_presets or not presets_valid:
+		_fail(test_root, "Presets: aplicou=%s nome=%s cores=%s rejeita=%s varios=%s validos=%s." % [applied, named, colors_ok, rejected, many_presets, presets_valid])
+		return
+	print("PASS: Presets de pintura aplicam e rejeitam indice invalido.")
